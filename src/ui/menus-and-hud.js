@@ -336,9 +336,21 @@ function pickUpgrade(offerIndex) {
     state.itemsOwned[key] = (state.itemsOwned[key] || 0) + 1;
   } else {
     state.tomeLevels[key]++;
+    state.tomeFlashType = key;
+    state.tomeFlashTimer = 2.4;
     if (key === 'hp') {
       state.maxHp += 20;
       state.player.hp += 20;
+    }
+    const tomeColors = { hp: 0xff2840, spd: 0x45ff88, dmg: 0xff8818, mag: 0x38f0ff };
+    if (state.player && typeof spawnWaveRingEffect === 'function') {
+      spawnWaveRingEffect(
+        state.player.x,
+        state.player.y + 0.1,
+        state.player.z,
+        2.6,
+        tomeColors[key] || 0xffffff
+      );
     }
   }
 

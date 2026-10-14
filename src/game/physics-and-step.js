@@ -437,6 +437,8 @@ function updateGameStep(dt) {
       player.vy = 17;
       player.doubleJumpsUsed = 0;
       playSound('bounce');
+      spawnWaveRingEffect(pad.x, pad.y + 0.15, pad.z, 2.4, 0x38ffe8);
+      spawnSparkBurst(pad.x, pad.y + 0.25, pad.z, 18, 'xp');
     }
   }
 

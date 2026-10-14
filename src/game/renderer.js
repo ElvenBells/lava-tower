@@ -512,7 +512,8 @@ function renderGameFrame(dt) {
           enemy.y + baseStats.radius * 2 * eliteScale + 1.4,
           enemy.z
         );
-        marker.scale.setScalar(2 + Math.sin(time * 6) * 0.25);
+        marker.material.rotation = time * 1.2;
+        marker.scale.setScalar(2.15 + Math.sin(time * 6.5 + ei) * 0.32);
       }
     }
   }
@@ -521,7 +522,9 @@ function renderGameFrame(dt) {
     eliteMarkerSprites[q].visible = false;
   }
 
-  // Детализированные 3D-модели лута: Кристаллы опыта (type 0), Сердца жизни (type 1), Золотые медальоны (type 2)
+  // Детализированные 3D-модели лута по мудборду 8:
+  // Кристаллы опыта (октаэдр + кометный след при притяжении), Кристалл здоровья (пульсирует как сердце),
+  // Золотая монета (октаэдр с быстрым вращением и вихрем)
   let xpPickupCount = 0;
   let healPickupCount = 0;
   let goldPickupCount = 0;
@@ -529,22 +532,36 @@ function renderGameFrame(dt) {
     const pk = state.pickups[i];
     const bobY = pk.y + Math.sin(time * 3.2 + pk.phase) * 0.14;
     _pickupDummyObj.position.set(pk.x, bobY, pk.z);
-    _pickupDummyObj.rotation.set(0, time * 2.4 + pk.phase, 0);
 
     if (pk.type === 0 && xpPickupCount < MAX_PICKUPS) {
-      const size = pk.value >= 5 ? 1.45 : 0.85 + Math.min(0.45, pk.value * 0.08);
+      const size = pk.value >= 5 ? 1.42 : 0.88 + Math.min(0.42, pk.value * 0.08);
+      if (pk.isMagnetized) {
+        // При полёте к герою кристалл наклоняется вперёд и оставляет бирюзовый шлейф искр (кадр 2 мудборда 8)
+        const toHeroYaw = Math.atan2(player.x - pk.x, player.z - pk.z);
+        _pickupDummyObj.rotation.set(0.45, toHeroYaw, time * 8);
+        if (Math.random() < 0.35) {
+          spawnSparkBurst(pk.x, pk.y, pk.z, 1, 'xp');
+        }
+      } else {
+        _pickupDummyObj.rotation.set(Math.sin(time * 2.2 + pk.phase) * 0.12, time * 2.2 + pk.phase, 0);
+      }
       _pickupDummyObj.scale.setScalar(size);
       _pickupDummyObj.updateMatrix();
       pickupInstancedMesh.setMatrixAt(xpPickupCount, _pickupDummyObj.matrix);
       pickupInstancedMesh.setColorAt(xpPickupCount, PICKUP_COLORS[pk.value >= 5 ? 3 : 0]);
       xpPickupCount++;
     } else if (pk.type === 1 && healPickupCount < 120) {
-      const pulse = 1.2 + Math.sin(time * 6 + pk.phase) * 0.12;
+      // Пульсация рубинового кристалла «как сердце» (кадр 4 мудборда 8)
+      const heartBeat = Math.pow(Math.max(0, Math.sin(time * 5.5 + pk.phase)), 3);
+      const pulse = 1.12 + heartBeat * 0.24;
+      _pickupDummyObj.rotation.set(0, time * 1.4 + pk.phase, 0);
       _pickupDummyObj.scale.setScalar(pulse);
       _pickupDummyObj.updateMatrix();
       healPickupInstancedMesh.setMatrixAt(healPickupCount++, _pickupDummyObj.matrix);
     } else if (pk.type === 2 && goldPickupCount < 200) {
-      _pickupDummyObj.scale.setScalar(0.95);
+      // Быстрое вращение золотого октаэдра (кадр 6 мудборда 8)
+      _pickupDummyObj.rotation.set(0.14 * Math.sin(time * 4 + pk.phase), time * 6.8 + pk.phase, 0);
+      _pickupDummyObj.scale.setScalar(0.98);
       _pickupDummyObj.updateMatrix();
       goldPickupInstancedMesh.setMatrixAt(goldPickupCount++, _pickupDummyObj.matrix);
     }
@@ -562,7 +579,8 @@ function renderGameFrame(dt) {
   for (let i = 0; i < chests.length; i++) {
     const chest = chests[i];
     if (!chest.isOpen) {
-      chest.group.rotation.y = time * 0.8;
+      chest.group.rotation.y = time * 0.65;
+      chest.group.position.y = chest.y + 0.68 + Math.sin(time * 2.2 + i) * 0.07;
     }
   }
 
@@ -586,13 +604,15 @@ function renderGameFrame(dt) {
     } else {
       if (fireCount >= 250) continue;
       _projectileDummyObj.position.set(proj.x, proj.y, proj.z);
-      _projectileDummyObj.rotation.set(0, flyYaw, spinRoll);
+      _projectileDummyObj.rotation.set(0, flyYaw, 0);
       _projectileDummyObj.scale.setScalar(pulseScale);
       _projectileDummyObj.updateMatrix();
       playerFireballInstancedMesh.setMatrixAt(fireCount, _projectileDummyObj.matrix);
 
-      // Обсидиановая корка вращается в противофазе вокруг огненного ядра
-      _projectileDummyObj.rotation.set(0, flyYaw, -spinRoll * 0.75);
+      // Потрескавшаяся лавовая корка вращается вокруг своей оси и «дышит» в полёте (мудборд 1)
+      const crustBreath = pulseScale * (1.03 + Math.cos(time * 18 + proj.z) * 0.05);
+      _projectileDummyObj.rotation.set(spinRoll * 0.55, flyYaw + spinRoll * 0.7, -spinRoll * 0.45);
+      _projectileDummyObj.scale.setScalar(crustBreath);
       _projectileDummyObj.updateMatrix();
       playerFireballCrustInstancedMesh.setMatrixAt(fireCount, _projectileDummyObj.matrix);
       fireCount++;
@@ -629,6 +649,32 @@ function renderGameFrame(dt) {
     orbitalBladeCoreInstancedMesh.setMatrixAt(bladeCount, _projectileDummyObj.matrix);
     orbitalBladeTrailInstancedMesh.setMatrixAt(bladeCount, _projectileDummyObj.matrix);
     bladeCount++;
+  }
+
+  // Синхронизация «Магической нити» (r = 2.8 м) и сферической «Орбитальной защиты» (мудборд 1)
+  if (typeof orbitalDefenseGroup !== 'undefined') {
+    const bladeLv = (state.weaponLevels && state.weaponLevels.blade) | 0;
+    orbitalDefenseGroup.visible = bladeCount > 0;
+    if (bladeCount > 0) {
+      orbitalDefenseGroup.position.set(player.x, player.y + 1.0, player.z);
+      orbitalThreadMat.color.copy(orbitalBladeTrailMat.color);
+      orbitalThreadMat.opacity = 0.34 + 0.12 * Math.sin(time * 6);
+      primaryOrbitThreadRing.rotation.z = state.bladeOrbitAngle || 0;
+      secondaryOrbitThreadRing.material.color.copy(orbitalBladeTrailMat.color);
+
+      // Сферические вихревые дуги «Орбитальной защиты» усиливаются с ростом уровня клинков
+      const cageOpacity = bladeLv >= 3 ? Math.min(0.42, (bladeLv - 2) * 0.07) : 0;
+      for (let c = 0; c < orbitalCageRings.length; c++) {
+        const cRing = orbitalCageRings[c];
+        cRing.visible = cageOpacity > 0.01 && c < bladeLv - 1;
+        if (cRing.visible) {
+          cRing.material.color.copy(orbitalBladeTrailMat.color);
+          cRing.material.opacity = cageOpacity * (0.75 + 0.25 * Math.sin(time * 8 + c));
+          cRing.rotation.x += dt * (2.2 + c * 0.5) * (c % 2 ? 1 : -1);
+          cRing.rotation.y += dt * (3.1 - c * 0.4);
+        }
+      }
+    }
   }
 
   playerFireballInstancedMesh.count = fireCount;
@@ -838,7 +884,10 @@ function renderGameFrame(dt) {
 
     const inventorySummary = [
       ...Object.entries(state.weaponLevels).map(([k, v]) => WEAPONS[k].name + ' ' + v),
-      ...Object.entries(state.itemsOwned).map(([k, v]) => ITEMS[k].name + ' ×' + v)
+      ...Object.entries(state.itemsOwned).map(([k, v]) => ITEMS[k].name + ' ×' + v),
+      ...Object.entries(state.tomeLevels || {})
+        .filter(([, v]) => v > 0)
+        .map(([k, v]) => TOMES[k].name + ' ×' + v)
     ].join(', ');
 
     DOM_CACHE.statsText.innerHTML =

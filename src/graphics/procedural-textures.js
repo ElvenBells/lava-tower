@@ -1472,3 +1472,288 @@ const BACKGROUND_TEXTURES = {
   void: createRichSkyTexture('void')
 };
 scene.background = BACKGROUND_TEXTURES.ash;
+
+
+/* ---------- 5. Специальные текстуры по референсам-мудбордам (оружие, экипировка, объекты карты) ---------- */
+
+// Потрескавшаяся лавовая корка (для Огненных шаров, Угольного сапога и Сундука с замком из магмы)
+TEXTURES.crackedLavaCrust = createProceduralTexture((ctx, size) => {
+  ctx.fillStyle = '#1b0b0e';
+  ctx.fillRect(0, 0, size, size);
+
+  // Базальтовые полигональные плитки корки
+  const seeds = [];
+  const gridN = 6;
+  for (let gx = 0; gx < gridN; gx++) {
+    for (let gy = 0; gy < gridN; gy++) {
+      seeds.push([
+        ((gx + 0.2 + Math.random() * 0.6) / gridN) * size,
+        ((gy + 0.2 + Math.random() * 0.6) / gridN) * size
+      ]);
+    }
+  }
+
+  // Рисуем сеть раскалённых трещин между центрами ячеек
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const cracks = generateCrackNetwork(size, 10, 7, 48, 48);
+  for (const c of cracks) {
+    drawSeamlessCrack(ctx, size, c.pts, c.main ? 12 : 7, 'rgba(255,65,0,0.85)', '#ff3800', 14);
+    drawSeamlessCrack(ctx, size, c.pts, c.main ? 6 : 3.5, '#ff9e18', '#ff7700', 8);
+    drawSeamlessCrack(ctx, size, c.pts, c.main ? 2.4 : 1.4, '#fff6b8');
+  }
+
+  // Тёмные шероховатые острова остывшей лавовой корки поверх
+  for (const [sx, sy] of seeds) {
+    const r = 14 + Math.random() * 14;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.random() * Math.PI);
+    ctx.fillStyle = Math.random() < 0.5 ? '#231114' : '#2f1618';
+    ctx.strokeStyle = '#ff7a12';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    const sides = 6;
+    for (let k = 0; k < sides; k++) {
+      const a = (k / sides) * Math.PI * 2;
+      const rad = r * (0.72 + Math.random() * 0.35);
+      if (k === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}, 256, 1, 1);
+
+// Внутренние морозные трещины для Ледяной подошвы и морозного следа
+TEXTURES.iceSoleCrack = createProceduralTexture((ctx, size) => {
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 8, size / 2, size / 2, size * 0.65);
+  grad.addColorStop(0, '#bfefff');
+  grad.addColorStop(0.5, '#6fc8f8');
+  grad.addColorStop(1, '#2b78b8');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.shadowColor = '#78e4ff';
+  ctx.shadowBlur = 10;
+  for (let i = 0; i < 14; i++) {
+    const baseA = (i / 14) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+    let x = cx;
+    let y = cy;
+    ctx.lineWidth = i % 2 === 0 ? 3.2 : 1.8;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let s = 1; s <= 5; s++) {
+      const dist = (s / 5) * (size * 0.48);
+      const a = baseA + (Math.random() - 0.5) * 0.35;
+      x = cx + Math.cos(a) * dist;
+      y = cy + Math.sin(a) * dist;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}, 256, 1, 1);
+
+// Рунный кинетический круг для Прыжковой площадки (Пада)
+TEXTURES.runicJumpPad = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  const cx = 256;
+  const cy = 256;
+
+  const bg = ctx.createRadialGradient(cx, cy, 10, cx, cy, 248);
+  bg.addColorStop(0, 'rgba(210,255,250,0.98)');
+  bg.addColorStop(0.35, 'rgba(40,245,215,0.85)');
+  bg.addColorStop(0.78, 'rgba(12,135,130,0.75)');
+  bg.addColorStop(1, 'rgba(8,35,42,0)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.strokeStyle = '#e8fffb';
+  ctx.shadowColor = '#20ffe0';
+  ctx.shadowBlur = 12;
+
+  for (const r of [64, 118, 168, 212, 236]) {
+    ctx.lineWidth = r === 168 || r === 212 ? 4.5 : 2.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Вписанный восьмиугольник и звезда кинетического импульса
+  ctx.lineWidth = 3;
+  for (let offset = 0; offset < 2; offset++) {
+    ctx.beginPath();
+    for (let k = 0; k <= 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + (offset * Math.PI) / 4;
+      const px = cx + Math.cos(a) * 166;
+      const py = cy + Math.sin(a) * 166;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  // Псевдо-руны во внешнем кольце [172..208]
+  ctx.lineWidth = 2.6;
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    ctx.save();
+    ctx.translate(cx + Math.cos(a) * 190, cy + Math.sin(a) * 190);
+    ctx.rotate(a + Math.PI / 2);
+    ctx.beginPath();
+    ctx.moveTo(0, -10);
+    ctx.lineTo(0, 10);
+    ctx.moveTo(-6, -4);
+    ctx.lineTo(6, 4);
+    if (i % 2 === 0) {
+      ctx.moveTo(-6, 6);
+      ctx.lineTo(6, -6);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  return new THREE.CanvasTexture(texCanvas);
+})();
+
+// Концентрические кинетические кольца и радиальные линии для Ударной волны
+TEXTURES.shockwaveRunes = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  const cx = 256;
+  const cy = 256;
+  ctx.clearRect(0, 0, 512, 512);
+
+  ctx.strokeStyle = 'rgba(215,248,255,0.92)';
+  ctx.shadowColor = '#58d8ff';
+  ctx.shadowBlur = 14;
+
+  for (const [r, lw] of [
+    [68, 2.5],
+    [128, 3.5],
+    [186, 4.2],
+    [238, 6.0]
+  ]) {
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.lineWidth = 2.2;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * 48, cy + Math.sin(a) * 48);
+    ctx.lineTo(cx + Math.cos(a) * 242, cy + Math.sin(a) * 242);
+    ctx.stroke();
+  }
+
+  return new THREE.CanvasTexture(texCanvas);
+})();
+
+// Каменный кратер с раскалёнными лавовыми швами для Угольного сапога
+TEXTURES.coalCraterDecal = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  const cx = 256;
+  const cy = 256;
+  ctx.clearRect(0, 0, 512, 512);
+
+  const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, 245);
+  glow.addColorStop(0, 'rgba(255,230,120,0.95)');
+  glow.addColorStop(0.35, 'rgba(255,105,15,0.75)');
+  glow.addColorStop(0.82, 'rgba(180,28,0,0.45)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 248, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Концентрические и радиальные трещины каменной кладки
+  ctx.strokeStyle = '#fff0a0';
+  ctx.shadowColor = '#ff5500';
+  ctx.shadowBlur = 12;
+  for (const r of [62, 124, 188, 232]) {
+    ctx.lineWidth = r === 232 ? 6 : 3.5;
+    ctx.beginPath();
+    for (let s = 0; s <= 24; s++) {
+      const a = (s / 24) * Math.PI * 2;
+      const jr = r + Math.sin(s * 3.7 + r) * 6;
+      const px = cx + Math.cos(a) * jr;
+      const py = cy + Math.sin(a) * jr;
+      if (s === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+
+  ctx.lineWidth = 3.2;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * 18, cy + Math.sin(a) * 18);
+    ctx.lineTo(cx + Math.cos(a + 0.08) * 124, cy + Math.sin(a + 0.08) * 124);
+    ctx.lineTo(cx + Math.cos(a - 0.05) * 232, cy + Math.sin(a - 0.05) * 232);
+    ctx.stroke();
+  }
+
+  return new THREE.CanvasTexture(texCanvas);
+})();
+
+// Зубчатый светящийся ореол для маркеров элитных мобов (Бронированный / Стремительный / Взрывной)
+TEXTURES.eliteHalo = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 256;
+  const ctx = texCanvas.getContext('2d');
+  const cx = 128;
+  const cy = 128;
+  ctx.clearRect(0, 0, 256, 256);
+
+  // Мягкое внешнее свечение кольца
+  const radGrad = ctx.createRadialGradient(cx, cy, 42, cx, cy, 120);
+  radGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  radGrad.addColorStop(0.55, 'rgba(255,255,255,0.85)');
+  radGrad.addColorStop(0.78, 'rgba(255,255,255,0.35)');
+  radGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = radGrad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 120, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Основное яркое кольцо + 12 острых лучей-шипов наружу (как на мудборде)
+  ctx.strokeStyle = '#ffffff';
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#ffffff';
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 68, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const spikes = 12;
+  for (let i = 0; i < spikes; i++) {
+    const a = (i / spikes) * Math.PI * 2;
+    const isMajor = i % 3 === 0;
+    const innerR = 66;
+    const outerR = isMajor ? 114 : 96;
+    const halfSpread = isMajor ? 0.12 : 0.08;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a - halfSpread) * innerR, cy + Math.sin(a - halfSpread) * innerR);
+    ctx.lineTo(cx + Math.cos(a) * outerR, cy + Math.sin(a) * outerR);
+    ctx.lineTo(cx + Math.cos(a + halfSpread) * innerR, cy + Math.sin(a + halfSpread) * innerR);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  return new THREE.CanvasTexture(texCanvas);
+})();

@@ -5,92 +5,251 @@
    3D-оформление окружения для Пепельной, Ледяной и Пустотной башен
    ========================================================================== */
 
-/* ---------- 1. Скульптурные геометрии интерактивных объектов ---------- */
+/* ---------- 1. Детализированные 3D-модели объектов на карте (Мудборды 6 и 8) ---------- */
 
+// 1A. ПРЫЖКОВАЯ ПЛОЩАДКА (ПАД) — Мудборд 6:
+// Низкий восьмигранно-цилиндрический каменный постамент с рунными клеймами по бокам,
+// светящимся бирюзовым магическим кругом сверху и восходящими потоками кинетической энергии
 const jumpPadGroup = new THREE.Group();
 scene.add(jumpPadGroup);
 
 const jumpPadGeo = (function buildJumpPadGeometry() {
   const parts = [];
-  const baseColor = new THREE.Color(0x2a3844);
-  const ringColor = new THREE.Color(0x45ffdc);
-  const coreColor = new THREE.Color(0xb8fff4);
+  const tempMat = new THREE.Matrix4();
+  const darkStone = new THREE.Color(0x1f2b34);
+  const rimStone = new THREE.Color(0x324654);
+  const cyanRune = new THREE.Color(0x45fff0);
 
+  // Нижнее каменное основание
   parts.push({
-    geo: new THREE.CylinderGeometry(1.32, 1.48, 0.22, 8),
-    matrix: computeTransformMatrix(0, -0.04, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: baseColor
+    geo: new THREE.CylinderGeometry(1.44, 1.56, 0.22, 16),
+    matrix: computeTransformMatrix(0, -0.05, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: darkStone
   });
-  parts.push({
-    geo: new THREE.CylinderGeometry(1.08, 1.15, 0.28, 12),
-    matrix: computeTransformMatrix(0, 0.04, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: ringColor
-  });
-  parts.push({
-    geo: new THREE.CylinderGeometry(0.65, 0.82, 0.34, 8),
-    matrix: computeTransformMatrix(0, 0.08, 0, 0, Math.PI / 8, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: coreColor
-  });
+  // 8 массивных скошенных каменных сегментов бортика вокруг диска
+  const segGeo = new THREE.BoxGeometry(0.82, 0.26, 0.24);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TWO_PI;
+    computeTransformMatrix(
+      Math.cos(a) * 1.28,
+      0.03,
+      Math.sin(a) * 1.28,
+      0,
+      -a + Math.PI / 2,
+      0,
+      1,
+      1,
+      1,
+      tempMat
+    );
+    parts.push({ geo: segGeo, matrix: tempMat.clone(), color: rimStone });
+  }
+  // 4 светящихся бирюзовых рунных клейма на боковых гранях цилиндра (как на мудборде 6)
+  const runePlaqueGeo = new THREE.BoxGeometry(0.28, 0.16, 0.06);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TWO_PI + Math.PI / 4;
+    computeTransformMatrix(
+      Math.cos(a) * 1.46,
+      0.01,
+      Math.sin(a) * 1.46,
+      0,
+      -a + Math.PI / 2,
+      0,
+      1,
+      1,
+      1,
+      tempMat
+    );
+    parts.push({ geo: runePlaqueGeo, matrix: tempMat.clone(), color: cyanRune });
+  }
   return mergeGeometryParts(parts);
 })();
 
 const jumpPadMat = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
-  emissive: 0x1d9f8a,
-  emissiveIntensity: 1.25,
-  roughness: 0.3,
+  emissive: 0x0e6b62,
+  emissiveIntensity: 0.95,
+  roughness: 0.42,
   metalness: 0.45
 });
 
+const jumpPadTopDiscGeo = new THREE.CircleGeometry(1.16, 32);
+jumpPadTopDiscGeo.rotateX(-Math.PI / 2);
+const jumpPadTopDiscMat = new THREE.MeshBasicMaterial({
+  map: TEXTURES.runicJumpPad,
+  color: 0x70fff4,
+  transparent: true,
+  opacity: 0.96,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+const jumpPadKineticPlumeGeo = new THREE.CylinderGeometry(0.92, 1.12, 1.35, 20, 1, true);
+jumpPadKineticPlumeGeo.translate(0, 0.68, 0);
+const jumpPadKineticPlumeMat = new THREE.MeshBasicMaterial({
+  color: 0x38ffe8,
+  transparent: true,
+  opacity: 0.24,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+function createJumpPadVisualInstance(x, floorY, z) {
+  const g = new THREE.Group();
+  g.position.set(x, floorY + 0.14, z);
+
+  const baseMesh = new THREE.Mesh(jumpPadGeo, jumpPadMat);
+  g.add(baseMesh);
+
+  const runeDisc = new THREE.Mesh(jumpPadTopDiscGeo, jumpPadTopDiscMat);
+  runeDisc.position.y = 0.16;
+  g.add(runeDisc);
+
+  const plume = new THREE.Mesh(jumpPadKineticPlumeGeo, jumpPadKineticPlumeMat);
+  plume.position.y = 0.15;
+  g.add(plume);
+
+  // Восходящее кинетическое кольцо энергии над площадкой
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.96, 0.024, 6, 28),
+    jumpPadKineticPlumeMat
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.45;
+  g.add(ring);
+
+  g.userData = { runeDisc, plume, ring };
+  return g;
+}
+
+// 1B. СУНДУК — Мудборд 8:
+// «Золотистый кубический ящик» из тёмного вулканического камня с раскалёнными трещинами лавы,
+// массивной золочёной оковкой граней и «Замком из магмы» спереди, окружённый золотым кольцом ауры
 const chestGroup = new THREE.Group();
 scene.add(chestGroup);
 
-const chestGeo = (function buildChestGeometry() {
-  const parts = [];
-  const woodColor = new THREE.Color(0x5a2d18);
-  const goldColor = new THREE.Color(0xffcf40);
-  const lockColor = new THREE.Color(0xfff0a0);
+const chestCubeCoreGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+const chestCubeCoreMat = new THREE.MeshStandardMaterial({
+  map: TEXTURES.crackedLavaCrust,
+  bumpMap: TEXTURES.crackedLavaCrust,
+  bumpScale: 0.12,
+  color: 0xffffff,
+  emissive: 0xff5a08,
+  emissiveMap: TEXTURES.crackedLavaCrust,
+  emissiveIntensity: 1.55,
+  roughness: 0.68,
+  metalness: 0.22
+});
 
+const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
+  const parts = [];
+  const tempMat = new THREE.Matrix4();
+  const goldTrim = new THREE.Color(0xffc842);
+  const bronzeDark = new THREE.Color(0xb87618);
+  const magmaBright = new THREE.Color(0xfff098);
+  const keyholeDark = new THREE.Color(0x160708);
+
+  // 12 золотистых рёбер куба
+  const edgeLen = 1.02;
+  const edgeThick = 0.095;
+  const edgeGeoY = new THREE.BoxGeometry(edgeThick, edgeLen, edgeThick);
+  const edgeGeoX = new THREE.BoxGeometry(edgeLen, edgeThick, edgeThick);
+  const edgeGeoZ = new THREE.BoxGeometry(edgeThick, edgeThick, edgeLen);
+
+  for (const sx of [-0.48, 0.48]) {
+    for (const sz of [-0.48, 0.48]) {
+      computeTransformMatrix(sx, 0, sz, 0, 0, 0, 1, 1, 1, tempMat);
+      parts.push({ geo: edgeGeoY, matrix: tempMat.clone(), color: goldTrim });
+    }
+  }
+  for (const sy of [-0.48, 0.48]) {
+    for (const sz of [-0.48, 0.48]) {
+      computeTransformMatrix(0, sy, sz, 0, 0, 0, 1, 1, 1, tempMat);
+      parts.push({ geo: edgeGeoX, matrix: tempMat.clone(), color: goldTrim });
+    }
+    for (const sx of [-0.48, 0.48]) {
+      computeTransformMatrix(sx, sy, 0, 0, 0, 0, 1, 1, 1, tempMat);
+      parts.push({ geo: edgeGeoZ, matrix: tempMat.clone(), color: goldTrim });
+    }
+  }
+
+  // 8 массивных кованых золотых наугольников на вершинах куба
+  const cornerGeo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+  for (const sx of [-0.47, 0.47]) {
+    for (const sy of [-0.47, 0.47]) {
+      for (const sz of [-0.47, 0.47]) {
+        computeTransformMatrix(sx, sy, sz, 0, 0, 0, 1, 1, 1, tempMat);
+        parts.push({ geo: cornerGeo, matrix: tempMat.clone(), color: bronzeDark });
+      }
+    }
+  }
+
+  // Перекрестные золотые полосы-оковки по граням и крышке (с V-образным замковым профилем, как на мудборде 8)
   parts.push({
-    geo: new THREE.BoxGeometry(1.26, 0.56, 0.86),
-    matrix: computeTransformMatrix(0, -0.16, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: woodColor
+    geo: new THREE.BoxGeometry(1.01, 0.11, 1.01),
+    matrix: computeTransformMatrix(0, 0.08, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: goldTrim
   });
   parts.push({
-    geo: new THREE.CylinderGeometry(0.43, 0.43, 1.24, 8, 1, false, 0, Math.PI),
-    matrix: computeTransformMatrix(0, 0.12, 0, 0, 0, Math.PI / 2, 1, 1, 1, new THREE.Matrix4()),
-    color: woodColor
+    geo: new THREE.BoxGeometry(0.12, 1.01, 1.01),
+    matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: bronzeDark
   });
-  for (const offsetX of [-0.46, 0, 0.46]) {
+
+  // «Замок из магмы» на передней грани (+Z) и задней грани (-Z)
+  for (const zSign of [-1, 1]) {
+    computeTransformMatrix(0, 0.02, zSign * 0.5, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
-      geo: new THREE.BoxGeometry(0.14, 0.88, 0.92),
-      matrix: computeTransformMatrix(offsetX, -0.02, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-      color: goldColor
+      geo: new THREE.BoxGeometry(0.32, 0.38, 0.08),
+      matrix: tempMat.clone(),
+      color: goldTrim
+    });
+    computeTransformMatrix(0, 0.02, zSign * 0.525, 0, 0, 0, 1, 1, 1, tempMat);
+    parts.push({
+      geo: new THREE.BoxGeometry(0.22, 0.28, 0.05),
+      matrix: tempMat.clone(),
+      color: magmaBright
+    });
+    // Тёмная замочная скважина по центру замка из магмы
+    computeTransformMatrix(0, 0.03, zSign * 0.55, 0, 0, 0, 1, 1, 1, tempMat);
+    parts.push({
+      geo: new THREE.BoxGeometry(0.065, 0.14, 0.03),
+      matrix: tempMat.clone(),
+      color: keyholeDark
     });
   }
-  parts.push({
-    geo: new THREE.BoxGeometry(0.26, 0.32, 0.96),
-    matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: lockColor
-  });
+
   return mergeGeometryParts(parts);
 })();
 
 const chestMat = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
-  emissive: 0x7a4200,
-  emissiveIntensity: 0.75,
-  roughness: 0.4,
-  metalness: 0.55
+  emissive: 0x985200,
+  emissiveIntensity: 0.85,
+  roughness: 0.25,
+  metalness: 0.82
 });
+
+const chestAuraRingGeo = new THREE.TorusGeometry(0.88, 0.03, 6, 32);
+chestAuraRingGeo.rotateX(Math.PI / 2);
+const chestAuraRingMat = new THREE.MeshBasicMaterial({
+  color: 0xffaa30,
+  transparent: true,
+  opacity: 0.72,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
 const chestGlowMat = new THREE.SpriteMaterial({
   map: TEXTURES.glowWarm,
+  color: 0xff9820,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
   transparent: true,
-  opacity: 0.7
+  opacity: 0.78
 });
 (function prewarmChestShader() {
   const dummyChest = new THREE.Mesh(chestGeo, chestMat);
@@ -98,58 +257,218 @@ const chestGlowMat = new THREE.SpriteMaterial({
   scene.add(dummyChest);
 })();
 
+// 1C. АЛТАРЬ ПАКТА — Мудборд 6:
+// «Шестигранный столб» фиолетового кристалла со светящимися вертикальными рунами на ступенчатом
+// каменном постаменте + парящий сверху «Лиловый ореол» и спиральные вихри энергии
 const altarGroup = new THREE.Group();
 scene.add(altarGroup);
 
-const altarGeo = (function buildAltarGeometry() {
+const altarPedestalGeo = (function buildAltarPedestalGeometry() {
   const parts = [];
-  const stoneColor = new THREE.Color(0x2d1846);
-  const trimColor = new THREE.Color(0x7a38c8);
-  const crystalColor = new THREE.Color(0xe098ff);
+  const tempMat = new THREE.Matrix4();
+  const darkStone = new THREE.Color(0x1b1228);
+  const midStone = new THREE.Color(0x2d1d42);
+  const runeTrim = new THREE.Color(0xa848ff);
 
+  // Двухступенчатый восьмигранный каменный пьедестал с рунным желобом
   parts.push({
-    geo: new THREE.CylinderGeometry(0.72, 0.92, 0.32, 6),
-    matrix: computeTransformMatrix(0, -0.58, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: stoneColor
+    geo: new THREE.CylinderGeometry(1.12, 1.28, 0.22, 8),
+    matrix: computeTransformMatrix(0, -0.64, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
+    color: darkStone
   });
   parts.push({
-    geo: new THREE.CylinderGeometry(0.42, 0.58, 0.95, 6),
-    matrix: computeTransformMatrix(0, -0.05, 0, 0, 0.5, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: trimColor
+    geo: new THREE.CylinderGeometry(0.82, 0.98, 0.26, 8),
+    matrix: computeTransformMatrix(0, -0.44, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
+    color: midStone
   });
+  // Светящееся рунное кольцо в основании столба
+  const ring = new THREE.TorusGeometry(0.68, 0.035, 6, 6);
+  ring.rotateX(Math.PI / 2);
   parts.push({
-    geo: new THREE.CylinderGeometry(0.68, 0.38, 0.28, 6),
-    matrix: computeTransformMatrix(0, 0.45, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
-    color: stoneColor
+    geo: ring,
+    matrix: computeTransformMatrix(0, -0.3, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: runeTrim
   });
+  // 4 каменных упора-контрфорса по углам пьедестала (как на мудборде 6)
+  const buttressGeo = new THREE.BoxGeometry(0.24, 0.34, 0.36);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TWO_PI + Math.PI / 4;
+    computeTransformMatrix(
+      Math.cos(a) * 0.78,
+      -0.38,
+      Math.sin(a) * 0.78,
+      0.28,
+      -a,
+      0,
+      1,
+      1,
+      1,
+      tempMat
+    );
+    parts.push({ geo: buttressGeo, matrix: tempMat.clone(), color: darkStone });
+  }
+  return mergeGeometryParts(parts);
+})();
+
+const altarGeo = (function buildHexagonalCrystalPillarGeometry() {
+  const parts = [];
+  const tempMat = new THREE.Matrix4();
+  const crystalBody = new THREE.Color(0xc868ff);
+  const crystalApex = new THREE.Color(0xf0b8ff);
+
+  // Высокий шестигранный кристаллический столб («Шестигранный столб»)
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.36, 0),
-    matrix: computeTransformMatrix(0, 0.95, 0, 0.2, 0.4, 0, 0.85, 1.45, 0.85, new THREE.Matrix4()),
-    color: crystalColor
+    geo: new THREE.CylinderGeometry(0.38, 0.42, 1.72, 6),
+    matrix: computeTransformMatrix(0, 0.52, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: crystalBody
+  });
+  // Шестигранная пирамидальная вершина столба
+  parts.push({
+    geo: new THREE.ConeGeometry(0.38, 0.56, 6),
+    matrix: computeTransformMatrix(0, 1.66, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: crystalApex
   });
   return mergeGeometryParts(parts);
 })();
 
-const altarMat = new THREE.MeshStandardMaterial({
+const altarPedestalMat = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
-  emissive: 0x581e96,
-  emissiveIntensity: 0.95,
-  roughness: 0.35,
-  metalness: 0.4
+  emissive: 0x3b1268,
+  emissiveIntensity: 0.75,
+  roughness: 0.65,
+  metalness: 0.3
 });
+
+const altarMat = new THREE.MeshStandardMaterial({
+  map: TOWER_WALL_TEXTURES.void.emissive,
+  color: 0xd880ff,
+  vertexColors: true,
+  emissive: 0xb038ff,
+  emissiveMap: TOWER_WALL_TEXTURES.void.emissive,
+  emissiveIntensity: 1.95,
+  roughness: 0.16,
+  metalness: 0.35,
+  transparent: true,
+  opacity: 0.94,
+  flatShading: true
+});
+
+const altarHaloGeo = new THREE.TorusGeometry(0.62, 0.038, 8, 32);
+altarHaloGeo.rotateX(Math.PI / 2);
+const altarHaloMat = new THREE.MeshBasicMaterial({
+  color: 0xe898ff,
+  transparent: true,
+  opacity: 0.88,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+const altarSwirlGeo = new THREE.TorusGeometry(0.68, 0.018, 6, 28);
 const altarGlowMat = new THREE.SpriteMaterial({
   map: TEXTURES.glowPurple,
+  color: 0xd878ff,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
   transparent: true,
-  opacity: 0.85
+  opacity: 0.88
 });
 (function prewarmAltarShader() {
   const dummyAltar = new THREE.Mesh(altarGeo, altarMat);
   dummyAltar.position.y = -80;
   scene.add(dummyAltar);
 })();
+
+// 1D. ПЕЧАТЬ (ВРАТА БОССА) — Мудборд 6:
+// Перекрещивающаяся паутина розово-красных энергетических лучей-цепей (0xff2a60) поперёк лестницы босса
+const bossGateSealGroup = new THREE.Group();
+scene.add(bossGateSealGroup);
+let bossGateVisualsByFloor = {};
+
+const bossGateBeamMat = new THREE.MeshBasicMaterial({
+  color: 0xff2a60,
+  transparent: true,
+  opacity: 0.92,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const bossGateCoreMat = new THREE.MeshBasicMaterial({
+  color: 0xffc8d8,
+  transparent: true,
+  opacity: 0.96,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const bossGateGlowMat = new THREE.SpriteMaterial({
+  map: TEXTURES.glowWhite,
+  color: 0xff2a60,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+function createBossGateSealVisual(stairSteps, floorY) {
+  const sealGroup = new THREE.Group();
+  if (!stairSteps || !stairSteps.length) return sealGroup;
+
+  // Размещаем энергетическую паутину Печати на входе и середине лестницы босса
+  const anchorIndices = [0, 2, 4];
+  for (const idx of anchorIndices) {
+    if (idx >= stairSteps.length) continue;
+    const [sx, sz, stepTopY] = stairSteps[idx];
+    const gateFrame = new THREE.Group();
+    gateFrame.position.set(sx, stepTopY + 2.2, sz);
+    // Поворачиваем плоскость печати поперёк марша лестницы (перпендикулярно радиусу башни)
+    gateFrame.rotation.y = Math.atan2(sx, sz) + Math.PI / 2;
+
+    // 8 перекрещивающихся багрово-розовых энергетических лучей (0xff2a60, как на мудборде 6)
+    const beamOffsets = [
+      [-1.8, -1.9, 1.8, 1.9],
+      [-1.8, 1.9, 1.8, -1.9],
+      [-1.9, -0.7, 1.9, 1.1],
+      [-1.9, 0.9, 1.9, -0.8],
+      [-0.9, -2.1, 1.1, 2.1],
+      [0.8, -2.1, -1.0, 2.1],
+      [-1.8, 0.1, 1.8, 0.2],
+      [-0.1, -2.0, 0.1, 2.0]
+    ];
+    for (const [x0, y0, x1, y1] of beamOffsets) {
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const ang = Math.atan2(dy, dx) - Math.PI / 2;
+      const cx = (x0 + x1) * 0.5;
+      const cy = (y0 + y1) * 0.5;
+
+      const outerBeam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.065, 0.065, len, 6),
+        bossGateBeamMat
+      );
+      outerBeam.position.set(cx, cy, 0);
+      outerBeam.rotation.z = ang;
+      gateFrame.add(outerBeam);
+
+      const innerCore = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.025, 0.025, len, 5),
+        bossGateCoreMat
+      );
+      innerCore.position.set(cx, cy, 0);
+      innerCore.rotation.z = ang;
+      gateFrame.add(innerCore);
+    }
+
+    // Центральный пылающий узел Печати
+    const nexusGlow = new THREE.Sprite(bossGateGlowMat);
+    nexusGlow.scale.setScalar(3.4);
+    gateFrame.add(nexusGlow);
+
+    sealGroup.add(gateFrame);
+  }
+
+  bossGateSealGroup.add(sealGroup);
+  return sealGroup;
+}
 
 const forkSpriteGroup = new THREE.Group();
 scene.add(forkSpriteGroup);
@@ -365,6 +684,17 @@ function openBossGate(floorIndex) {
   }
   if (towerInstancedMesh) {
     towerInstancedMesh.instanceMatrix.needsUpdate = true;
+  }
+  const sealVisual = bossGateVisualsByFloor[floorIndex];
+  if (sealVisual) {
+    sealVisual.traverse((child) => {
+      if (child.isSprite && typeof spawnSparkBurst === 'function') {
+        const wp = new THREE.Vector3();
+        child.getWorldPosition(wp);
+        spawnSparkBurst(wp.x, wp.y, wp.z, 24, 'fire');
+      }
+    });
+    sealVisual.visible = false;
   }
   bossGateBlockIndices[floorIndex] = [];
 }
@@ -1021,6 +1351,42 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 }
 
 function updateTowerDecorAnimations(time, dt, towerId) {
+  // Анимация Прыжковых площадок (вращение рунного круга и пульсация кинетического потока)
+  for (let i = 0; i < jumpPadGroup.children.length; i++) {
+    const padObj = jumpPadGroup.children[i];
+    const ud = padObj.userData;
+    if (ud && ud.runeDisc) {
+      ud.runeDisc.rotation.z = time * 0.85;
+      const lift = (time * 1.6 + i * 0.35) % 1.0;
+      ud.ring.position.y = 0.2 + lift * 1.15;
+      ud.ring.scale.setScalar(1.0 - lift * 0.25);
+      ud.plume.scale.y = 0.85 + Math.sin(time * 5 + i) * 0.18;
+    }
+  }
+
+  // Анимация Алтарей пакта («Вращается медленно, гипнотически» + парящий лиловый ореол)
+  for (let i = 0; i < altars.length; i++) {
+    const alt = altars[i];
+    if (!alt.isOpen && alt.group.visible && alt.group.userData) {
+      const ud = alt.group.userData;
+      if (ud.pillar) {
+        ud.pillar.rotation.y = time * 0.55;
+        ud.pillar.position.y = Math.sin(time * 2.2 + i) * 0.08;
+      }
+      if (ud.halo) {
+        ud.halo.position.y = 2.18 + Math.sin(time * 3.1 + i) * 0.06;
+        ud.halo.scale.setScalar(1 + Math.sin(time * 4.5) * 0.06);
+      }
+      if (ud.swirl1 && ud.swirl2) {
+        ud.swirl1.rotation.y = time * 1.8;
+        ud.swirl2.rotation.y = -time * 1.4;
+      }
+    }
+  }
+
+  // Пульсация багрово-розовой Печати (Врат босса, 0xff2a60)
+  bossGateBeamMat.opacity = 0.78 + Math.sin(time * 6.5) * 0.18;
+
   if (towerId === 'void' && activeVoidFloatingMesh && activeVoidFloatingData.length) {
     const dummy = _pickupDummyObj;
     for (let i = 0; i < activeVoidFloatingData.length; i++) {
@@ -1058,12 +1424,14 @@ function buildTower(seed) {
   chestGroup.clear();
   altarGroup.clear();
   forkSpriteGroup.clear();
+  bossGateSealGroup.clear();
 
   chests = [];
   altars = [];
   floorLayouts = [];
   forkMarkers = [];
   bossGateBlockIndices = {};
+  bossGateVisualsByFloor = {};
   jumpPads = [];
   blocks = [];
   blockGrid = new Array(GRID_FLOORS * GRID_DIM * GRID_DIM).fill(null);
@@ -1259,6 +1627,9 @@ function buildTower(seed) {
       }
     }
     stairPositionsByFloor[floor] = floorStairs;
+    if (floor % 4 === 3 && floor < 11) {
+      bossGateVisualsByFloor[floor] = createBossGateSealVisual(floorStairs, floorY);
+    }
 
     for (let i = 0; i < 2; i++) {
       const angle = seededRandom(seed, 'pad' + floor, i) * TWO_PI;
@@ -1270,9 +1641,7 @@ function buildTower(seed) {
         blocks.some((b) => b[5] === floorY && b[0] <= x && x < b[1] && b[2] <= z && z < b[3])
       ) {
         jumpPads.push({ x, z, y: floorY });
-        const padMesh = new THREE.Mesh(jumpPadGeo, jumpPadMat);
-        padMesh.position.set(x, floorY + 0.15, z);
-        jumpPadGroup.add(padMesh);
+        jumpPadGroup.add(createJumpPadVisualInstance(x, floorY, z));
       }
     }
   }
@@ -1308,12 +1677,15 @@ function buildTower(seed) {
         }
 
         const group = new THREE.Group();
-        const mesh = new THREE.Mesh(chestGeo, chestMat);
+        const coreCube = new THREE.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
+        const frameMesh = new THREE.Mesh(chestGeo, chestMat);
+        const auraRing = new THREE.Mesh(chestAuraRingGeo, chestAuraRingMat);
+        auraRing.position.y = -0.18;
         const glow = new THREE.Sprite(chestGlowMat);
-        glow.scale.setScalar(3.2);
-        glow.position.y = 0.4;
-        group.add(mesh, glow);
-        group.position.set(x, floorY + 0.45, z);
+        glow.scale.setScalar(3.4);
+        glow.position.y = 0.2;
+        group.add(coreCube, frameMesh, auraRing, glow);
+        group.position.set(x, floorY + 0.68, z);
         chestGroup.add(group);
         chests.push({ x, y: floorY, z, group, isOpen: 0, cost: Math.round(4 + 2.5 * floor) });
         break;
@@ -1348,11 +1720,21 @@ function buildTower(seed) {
       }
 
       const group = new THREE.Group();
-      const mesh = new THREE.Mesh(altarGeo, altarMat);
+      const pedestal = new THREE.Mesh(altarPedestalGeo, altarPedestalMat);
+      const pillar = new THREE.Mesh(altarGeo, altarMat);
+      const halo = new THREE.Mesh(altarHaloGeo, altarHaloMat);
+      halo.position.y = 2.18;
+      const swirl1 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      swirl1.position.y = 0.65;
+      swirl1.rotation.set(1.15, 0, 0.35);
+      const swirl2 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      swirl2.position.y = 1.05;
+      swirl2.rotation.set(-1.15, 0, -0.35);
       const glow = new THREE.Sprite(altarGlowMat);
-      glow.scale.setScalar(3.6);
-      glow.position.y = 0.6;
-      group.add(mesh, glow);
+      glow.scale.setScalar(3.8);
+      glow.position.y = 0.85;
+      group.add(pedestal, pillar, halo, swirl1, swirl2, glow);
+      group.userData = { pillar, halo, swirl1, swirl2 };
       group.position.set(x, floorY + 0.75, z);
       altarGroup.add(group);
       altars.push({ x, y: floorY, z, group, isOpen: 0, floor, cooldownUntil: 0 });
@@ -1374,6 +1756,14 @@ function buildTower(seed) {
 
   blocks.forEach((b, idx) => {
     const rawH = b[5] - b[4];
+    if (b[7] === 3) {
+      // Физический барьер Печати босса остаётся, а визуально рендерится паутина 0xff2a60 (bossGateSealGroup)
+      dummyObj.position.set(0, -999, 0);
+      dummyObj.scale.set(0, 0, 0);
+      dummyObj.updateMatrix();
+      towerInstancedMesh.setMatrixAt(idx, dummyObj.matrix);
+      return;
+    }
     const isStairBlock = rawH > 1.5 && b[7] !== 3;
     const visualH = isStairBlock ? 1.15 : rawH;
     const visualCenterY = isStairBlock ? b[5] - visualH * 0.5 : (b[4] + b[5]) / 2;

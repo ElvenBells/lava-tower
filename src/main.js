@@ -73,6 +73,9 @@ function gameLoop(timestamp) {
     orbitalBladeInstancedMesh.count = 0;
     orbitalBladeCoreInstancedMesh.count = 0;
     orbitalBladeTrailInstancedMesh.count = 0;
+    if (typeof orbitalDefenseGroup !== 'undefined') {
+      orbitalDefenseGroup.visible = false;
+    }
     pickupInstancedMesh.count = 0;
     healPickupInstancedMesh.count = 0;
     goldPickupInstancedMesh.count = 0;
