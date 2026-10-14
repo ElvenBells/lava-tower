@@ -82,9 +82,6 @@ function showToast(message, duration = 1.6) {
   }
 }
 
-/**
- * Вычисляет итоговый множитель урона с учётом томов, предметов и синергий тегов (2/4/6).
- */
 function calculateDamageMultiplier(tags) {
   const owned = state.itemsOwned;
   let additiveBonus = state.tomeLevels.dmg * 0.1;
@@ -110,9 +107,6 @@ function calculateDamageMultiplier(tags) {
   return (1 + additiveBonus) * totalMultiplier;
 }
 
-/**
- * Наносит урон врагу с учётом щитов, слабого места, пара (лёд+огонь) и Громового пояса.
- */
 function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
   if (enemy.shield) {
     if (!isChainHit) {
@@ -122,7 +116,7 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
         enemy.y + (enemy.radius || 1.5),
         enemy.z,
         1.1,
-        0xc090ff
+        state.towerId === 'ice' ? 0x80e8ff : 0xc090ff
       );
     }
     return;
@@ -151,7 +145,6 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
 
   enemy.hp -= dmg;
 
-  // Громовой пояс: каждый 5-й удар бьёт цепной молнией по соседним целям
   if (!isChainHit && state.itemsOwned.belt && ++state.totalHitCount % 5 === 0) {
     let chainCount = 0;
     const maxTargets = 3 * state.itemsOwned.belt;
@@ -168,9 +161,6 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
   }
 }
 
-/**
- * Создаёт круговую ударную волну игрока.
- */
 function triggerShockwave(x, z, radius, damage, isFire, tags) {
   playSound('boom');
   spawnWaveRingEffect(x, state.player.y, z, radius, isFire ? 0xff7a20 : 0x80e0ff);
@@ -352,7 +342,7 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
     targetY = state.player.lastGroundY;
     if (enemy.bkind === 'womb') {
       enemy.wombFloorY = state.player.lastGroundY;
-      enemy.baseY = state.player.lastGroundY + 3.2;
+      enemy.baseY = state.player.lastGroundY + (state.towerId === 'ice' ? 2.4 : 3.2);
       targetY = enemy.baseY;
     }
   }
@@ -366,10 +356,7 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
   enemy.targetY = targetY;
   enemy.y = startY;
 
-  enemy.mesh = MobFactory.acquire(type, enemy.bkind);
-  if (type === 'b') {
-    tintBossMaterials(enemy.mesh, state.towerId);
-  }
+  enemy.mesh = MobFactory.acquire(type, enemy.bkind, state.towerId);
   scene.add(enemy.mesh);
   state.enemies.push(enemy);
 
@@ -393,7 +380,7 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
       targetY + 0.2,
       enemy.z,
       2.5,
-      enemy.bkind === 'womb' ? 0xc070ff : 0xff7a20
+      state.towerId === 'ice' ? 0x70dcff : state.towerId === 'void' ? 0xc068ff : 0xff7a20
     );
   }
 }
@@ -422,16 +409,14 @@ function promoteToElite(enemy, floorIndex, forceElite) {
     enemy.contactDamage = baseStats.contactDamage * mod.damageMultiplier;
   }
 
-  showToast('⚠ Элита: ' + mod.name, 1.8);
+  const mobName =
+    (TOWER_MOB_NAMES[state.towerId] && TOWER_MOB_NAMES[state.towerId][enemy.type]) || '';
+  showToast('⚠ Элита: ' + mod.name + (mobName ? ' ' + mobName : ''), 1.8);
   playSound('roar');
 }
 
 /* ---------- 4. Выпадение лута и гибель врагов ---------- */
 
-/**
- * Создаёт подбираемый предмет на земле:
- * pickupType: 0 — опыт, 1 — лечение (доля от maxHP), 2 — золото
- */
 function spawnPickup(pickupType, x, y, z, value) {
   if (state.pickups.length >= MAX_PICKUPS - 20) {
     if (pickupType === 0) state.xp += value;
@@ -519,6 +504,11 @@ function killEnemy(enemyIndex) {
   const baseStats = ENEMY_TYPES[enemy.type];
   playSound('pickup');
 
+  // При гибели Мерзлявки в Ледяной башне она разлетается ледяной крошкой
+  if (enemy.type === 's' && state.towerId === 'ice') {
+    spawnSparkBurst(enemy.x, enemy.y + 0.4, enemy.z, 12, 'land');
+  }
+
   if (enemy.mesh) {
     if (enemy.bolts) {
       for (const bolt of enemy.bolts) releaseBolt(bolt);
@@ -590,7 +580,7 @@ function killEnemy(enemyIndex) {
       enemy.y + 1,
       enemy.z,
       4,
-      enemy.bkind === 'womb' ? 0xc070ff : 0xffa040
+      state.towerId === 'ice' ? 0x70dcff : state.towerId === 'void' ? 0xc070ff : 0xffa040
     );
 
     if (enemy.isFinalBoss) {

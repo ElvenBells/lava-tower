@@ -1,76 +1,495 @@
 /* ==========================================================================
-   Модель игрока и базовое окружение башни:
-   многослойная угроза снизу (лава / вихрь метели / воронка бездны),
-   рельефные внешние стены, полупрозрачная толща льда и смена тем башен
+   Модель главного героя «Угленосец» (Runner · Пепельная гильдия),
+   процедурные анимации перемещения, прыжков, двойного прыжка и подкатов,
+   а также базовое окружение башни и смена тем
    ========================================================================== */
 
 const playerMesh = new THREE.Group();
-
-const heroBodyMaterial = new THREE.MeshStandardMaterial({
-  color: 0x3f6f6a,
-  roughness: 0.6,
-  flatShading: true
-});
-const heroSkinMaterial = new THREE.MeshStandardMaterial({
-  color: 0xd4a574,
-  roughness: 0.7,
-  flatShading: true
-});
-const heroClothMaterial = new THREE.MeshStandardMaterial({
-  color: 0x2a1f1a,
-  roughness: 0.8,
-  flatShading: true
-});
-const heroMetalMaterial = new THREE.MeshStandardMaterial({
-  color: 0xcfd3dc,
-  roughness: 0.3,
-  metalness: 0.7,
-  flatShading: true
-});
-
-const heroTorsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 1, 8), heroBodyMaterial);
-heroTorsoMesh.position.y = 0.8;
-
-const heroHeadMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), heroSkinMaterial);
-heroHeadMesh.position.y = 1.6;
-heroHeadMesh.scale.set(1, 0.9, 1);
-
-const heroHelmetMesh = new THREE.Mesh(
-  new THREE.SphereGeometry(0.35, 8, 6, 0, TWO_PI, 0, Math.PI / 2),
-  heroMetalMaterial
-);
-heroHelmetMesh.position.y = 1.7;
-
-const heroVisorMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.42, 0.12, 0.15),
-  new THREE.MeshBasicMaterial({ color: 0x45e0c8 })
-);
-heroVisorMesh.position.set(0, 1.55, 0.28);
-
-const heroWeaponMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1, 0.18), heroMetalMaterial);
-heroWeaponMesh.position.set(0.5, 0.95, 0.15);
-heroWeaponMesh.rotation.z = -0.4;
-
-const heroLeftLegMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.6, 6), heroClothMaterial);
-heroLeftLegMesh.position.set(-0.18, 0.3, 0);
-
-const heroRightLegMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.6, 6), heroClothMaterial);
-heroRightLegMesh.position.set(0.18, 0.3, 0);
-
-const heroBeltMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 8), heroMetalMaterial);
-heroBeltMesh.position.y = 0.95;
-
-playerMesh.add(
-  heroTorsoMesh,
-  heroHeadMesh,
-  heroHelmetMesh,
-  heroVisorMesh,
-  heroWeaponMesh,
-  heroLeftLegMesh,
-  heroRightLegMesh,
-  heroBeltMesh
-);
 scene.add(playerMesh);
+
+/* ---------- 0. Детализированная 3D-модель героя «Угленосец» ---------- */
+
+const heroRig = (function buildCoalbearerHero() {
+  const T = THREE;
+  const PI = Math.PI;
+  const L = (color, opts) =>
+    new T.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2, ...opts });
+
+  const cu = L(0x4f7a69, { roughness: 0.5, metalness: 0.3 });
+  const cuD = L(0x35574b, { roughness: 0.5, metalness: 0.35 });
+  const lea = L(0x5a371e, { roughness: 0.9, metalness: 0 });
+  const leaD = L(0x2f1c11, { roughness: 0.95, metalness: 0 });
+  const st = L(0xaab0b8, { roughness: 0.35, metalness: 0.55 });
+  const stD = L(0x42464d, { roughness: 0.4, metalness: 0.5 });
+  const coal = L(0x2a1008, {
+    emissive: 0xff4a10,
+    emissiveIntensity: 1.35,
+    flatShading: true
+  });
+  const cr1 = L(0xffb347, {
+    emissive: 0xc86a00,
+    emissiveIntensity: 0.85,
+    roughness: 0.2,
+    flatShading: true
+  });
+  const cr2 = L(0xa77bff, {
+    emissive: 0x5a2ab0,
+    emissiveIntensity: 0.85,
+    roughness: 0.2,
+    flatShading: true
+  });
+  const vis = new T.MeshBasicMaterial({ color: 0x4dfff0 });
+
+  const makeGroup = (pos, parent) => {
+    const g = new T.Group();
+    g.position.set(pos[0], pos[1], pos[2]);
+    parent.add(g);
+    return g;
+  };
+  const makeMesh = (geo, mat, pos, parent, scale) => {
+    const m = new T.Mesh(geo, mat);
+    m.position.set(pos[0], pos[1], pos[2]);
+    if (scale) m.scale.set(scale[0], scale[1], scale[2]);
+    parent.add(m);
+    return m;
+  };
+  const cy = (a, b, h, n = 10) => new T.CylinderGeometry(a, b, h, n);
+  const sp = (r, w = 12, h = 9) => new T.SphereGeometry(r, w, h);
+  const bx = (w, h, d) => new T.BoxGeometry(w, h, d);
+  const ico = (r) => new T.IcosahedronGeometry(r, 0);
+  const oct = (r) => new T.OctahedronGeometry(r, 0);
+
+  const hero = makeGroup([0, 0, 0], playerMesh);
+  const lean = makeGroup([0, 0.95, 0], hero);
+  const up = makeGroup([0, -0.95, 0], lean);
+
+  // Ноги с тазобедренным ('h') и коленным ('k') суставами и ботинками
+  const legs = [1, -1].map((s) => {
+    const h = makeGroup([s * 0.1, 0.95, 0], hero);
+    makeMesh(cy(0.088, 0.066, 0.46), cu, [0, -0.23, 0], h);
+    makeMesh(cy(0.093, 0.093, 0.035), lea, [0, -0.17, 0], h);
+    const k = makeGroup([0, -0.46, 0], h);
+    makeMesh(sp(0.07), stD, [0, 0, 0.025], k, [1, 1, 0.8]);
+    makeMesh(cy(0.062, 0.048, 0.4), cu, [0, -0.2, 0], k);
+    makeMesh(cy(0.068, 0.064, 0.16), lea, [0, -0.31, 0], k);
+    makeMesh(cy(0.07, 0.07, 0.025), st, [0, -0.24, 0], k);
+    makeMesh(bx(0.115, 0.09, 0.22), leaD, [0, -0.445, 0.045], k);
+    makeMesh(sp(0.056), leaD, [0, -0.45, 0.15], k, [1, 0.8, 1]);
+    return { h, k };
+  });
+
+  // Торс, кираса, воротник и перекрещенные кожаные ремни
+  makeMesh(cy(0.2, 0.18, 0.16, 14), cu, [0, 0.93, 0], up, [1, 1, 0.74]);
+  makeMesh(cy(0.235, 0.19, 0.56, 16), cu, [0, 1.24, 0], up, [1, 1, 0.72]);
+  makeMesh(sp(0.235, 16, 8), cu, [0, 1.52, 0], up, [1, 0.35, 0.72]);
+  makeMesh(cy(0.238, 0.238, 0.13, 18), st, [0, 0.99, 0], up, [1, 1, 0.78]);
+  makeMesh(cy(0.07, 0.085, 0.14), cuD, [0, 1.57, 0], up);
+  makeMesh(new T.TorusGeometry(0.1, 0.02, 6, 16), st, [0, 1.55, 0], up).rotation.x = PI / 2;
+
+  [1, -1].forEach((s) => {
+    const g = makeGroup([0, 1.26, 0], up);
+    g.rotation.z = s * 0.5;
+    makeMesh(new T.TorusGeometry(0.262, 0.017, 6, 32), lea, [0, 0, 0], g, [1, 0.645, 1]).rotation.x =
+      PI / 2;
+  });
+
+  // Пряжка пояса, подсумки с углями/кристаллами и подвески
+  makeMesh(bx(0.1, 0.1, 0.03), stD, [0, 0.99, 0.2], up);
+  makeMesh(cy(0.028, 0.028, 0.02, 10), coal, [0, 0.99, 0.22], up).rotation.x = PI / 2;
+
+  [
+    [0.188, 0.153, 0.7, cr1],
+    [-0.188, 0.153, -0.7, coal],
+    [0.268, 0, 1.57, cr2],
+    [-0.268, 0, -1.57, coal]
+  ].forEach(([x, z, r, m]) => {
+    const p = makeGroup([x, 0.96, z], up);
+    p.rotation.y = r;
+    makeMesh(bx(0.1, 0.11, 0.06), lea, [0, 0, 0], p);
+    makeMesh(bx(0.102, 0.025, 0.062), stD, [0, 0.03, 0], p);
+    makeMesh(
+      m === coal ? ico(0.036) : oct(0.04),
+      m,
+      [0, 0.075, 0],
+      p,
+      m === coal ? [1, 0.9, 1] : [0.8, 1.7, 0.8]
+    );
+  });
+
+  [
+    [0.05, cr1],
+    [-0.06, coal]
+  ].forEach(([x, m], i) => {
+    makeMesh(cy(0.004, 0.004, 0.1, 4), stD, [x, 0.87, 0.19], up);
+    makeMesh(
+      i ? ico(0.032) : oct(0.04),
+      m,
+      [x, 0.795, 0.19],
+      up,
+      i ? undefined : [0.8, 1.5, 0.8]
+    );
+  });
+
+  // Аддитивное свечение углей на поясе (без перекомпиляции шейдеров сцены)
+  const beltGlow = new T.Sprite(
+    new T.SpriteMaterial({
+      map: TEXTURES.glowWarm,
+      color: 0xff6a20,
+      transparent: true,
+      opacity: 0.48,
+      blending: T.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  beltGlow.position.set(0, 0.96, 0.28);
+  beltGlow.scale.setScalar(0.65);
+  up.add(beltGlow);
+
+  // Руки с плечевым ('a') и локтевым ('e') суставами
+  const arms = [1, -1].map((s) => {
+    const a = makeGroup([s * 0.29, 1.47, 0], up);
+    makeMesh(sp(0.105, 12, 8), stD, [0, 0.01, 0], a, [1, 0.72, 1.05]);
+    makeMesh(cy(0.062, 0.052, 0.33), cu, [0, -0.17, 0], a);
+    const e = makeGroup([0, -0.34, 0], a);
+    makeMesh(sp(0.052), cuD, [0, 0, 0], e);
+    makeMesh(cy(0.05, 0.044, 0.3), cu, [0, -0.16, 0], e);
+    makeMesh(cy(0.062, 0.056, 0.15), lea, [0, -0.19, 0], e);
+    makeMesh(cy(0.064, 0.064, 0.025), st, [0, -0.12, 0], e);
+    makeMesh(sp(0.052, 10, 8), leaD, [0, -0.33, 0], e, [1, 1.1, 0.9]);
+    makeMesh(bx(0.07, 0.03, 0.06), stD, [0, -0.31, 0.03], e);
+    return { a, e };
+  });
+
+  // Шлем с гребнем, заклёпками и светящимся бирюзовым визором
+  const hd = makeGroup([0, 1.66, 0], up);
+  makeMesh(sp(1, 20, 14), cuD, [0, 0, 0], hd, [0.205, 0.225, 0.225]);
+  makeMesh(cy(0.14, 0.11, 0.1, 14), cuD, [0, -0.2, 0], hd, [1, 1, 1.05]);
+  makeMesh(
+    new T.CylinderGeometry(0.232, 0.232, 0.1, 20, 1, true, -0.85, 1.7),
+    stD,
+    [0, 0.025, 0],
+    hd,
+    [0.915, 1, 1]
+  );
+  makeMesh(
+    new T.CylinderGeometry(0.238, 0.238, 0.05, 20, 1, true, -0.725, 1.45),
+    vis,
+    [0, 0.025, 0],
+    hd,
+    [0.915, 1, 1]
+  );
+  const cg = makeGroup([0, 0, 0], hd);
+  cg.rotation.y = PI / 2;
+  makeMesh(new T.TorusGeometry(0.232, 0.014, 6, 24, PI * 0.83), st, [0, 0, 0], cg);
+  [1, -1].forEach((s) => {
+    makeMesh(cy(0.035, 0.035, 0.03, 8), stD, [s * 0.195, -0.07, 0.05], hd).rotation.z = PI / 2;
+  });
+
+  const rv = new T.InstancedMesh(sp(0.011, 6, 5), st, 30);
+  const dm = new T.Object3D();
+  for (let i = 0; i < 30; i++) {
+    const t = ((i % 15) / 15) * PI * 2;
+    const top = i < 15;
+    dm.position.set(
+      (top ? 0.183 : 0.19) * Math.sin(t),
+      top ? 0.11 : -0.09,
+      (top ? 0.2 : 0.207) * Math.cos(t)
+    );
+    dm.updateMatrix();
+    rv.setMatrixAt(i, dm.matrix);
+  }
+  hd.add(rv);
+
+  const visorGlow = new T.Sprite(
+    new T.SpriteMaterial({
+      map: TEXTURES.glowIce,
+      color: 0x45fff0,
+      transparent: true,
+      opacity: 0.55,
+      blending: T.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  visorGlow.position.set(0, 0.025, 0.26);
+  visorGlow.scale.set(0.55, 0.28, 1);
+  hd.add(visorGlow);
+
+  // Тяжёлое угольное орудие за спиной
+  const gn = makeGroup([0, 1.2, -0.27], up);
+  gn.rotation.z = -0.42;
+  makeMesh(bx(0.1, 0.4, 0.13), stD, [0, 0, 0], gn);
+  makeMesh(cy(0.05, 0.05, 0.24, 10), st, [0, 0.3, 0], gn);
+  [0.22, 0.28, 0.34, 0.4].forEach((y) =>
+    makeMesh(cy(0.055, 0.055, 0.016, 10), stD, [0, y, 0], gn)
+  );
+  makeMesh(cy(0.022, 0.022, 0.3, 8), stD, [0, 0.5, 0], gn);
+  makeMesh(cy(0.036, 0.032, 0.06, 8), st, [0, 0.7, 0], gn);
+  makeMesh(cy(0.09, 0.09, 0.08, 14), stD, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
+  makeMesh(cy(0.045, 0.045, 0.09, 10), coal, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
+  makeMesh(bx(0.07, 0.2, 0.1), leaD, [0, -0.3, 0], gn);
+  makeMesh(bx(0.03, 0.04, 0.06), st, [0.07, 0.12, -0.02], gn);
+  makeMesh(bx(0.17, 0.78, 0.03), stD, [0, 0.12, 0.085], gn);
+  [1, -1].forEach((s) => makeMesh(bx(0.02, 0.78, 0.1), stD, [s * 0.085, 0.12, 0.03], gn));
+
+  return {
+    hero,
+    lean,
+    up,
+    legs,
+    arms,
+    hd,
+    gn,
+    cu,
+    cuD,
+    coal,
+    vis,
+    visorGlow,
+    beltGlow,
+    runWeight: 0,
+    runPhase: 0,
+    airWeight: 0,
+    slideWeight: 0,
+    landSquash: 0,
+    doubleJumpSpin: 0,
+    wasGrounded: 1,
+    prevDoubleJumps: 0,
+    prevX: 0,
+    prevZ: 0,
+    prevFacing: 0,
+    turnBank: 0,
+    slideSparkAccum: 0,
+    appliedHeroId: ''
+  };
+})();
+
+/**
+ * Обновляет процедурную анимацию главного героя «Угленосец»:
+ * - плавный переход Покой ↔ Бег с учётом реальной скорости и наклоном в виражах;
+ * - фазы прыжка (отталкивание, полёт вверх, падение, сальто/крутка двойного прыжка и амортизация приземления);
+ * - низкий боевой подкат (Shift) с вытянутой вперёд ногой, разворотом корпуса и снопом искр из-под подошв.
+ * @param {number} dt
+ */
+function updatePlayerAnimation(dt) {
+  if (!state || !state.player) return;
+  const p = state.player;
+  const time = state.elapsedTime;
+  const rig = heroRig;
+
+  // Цветовой акцент брони под выбранного героя гильдии
+  if (rig.appliedHeroId !== state.heroId) {
+    rig.appliedHeroId = state.heroId;
+    if (state.heroId === 'pil') {
+      rig.cu.color.setHex(0x467285);
+      rig.cuD.color.setHex(0x2d4d5c);
+    } else if (state.heroId === 'smi') {
+      rig.cu.color.setHex(0x6e5842);
+      rig.cuD.color.setHex(0x4a3928);
+    } else if (state.heroId === 'ash') {
+      rig.cu.color.setHex(0x6e3b38);
+      rig.cuD.color.setHex(0x472321);
+    } else if (state.heroId === 'hun') {
+      rig.cu.color.setHex(0x426652);
+      rig.cuD.color.setHex(0x294234);
+    } else {
+      rig.cu.color.setHex(0x4f7a69);
+      rig.cuD.color.setHex(0x35574b);
+    }
+  }
+
+  // Оценка горизонтальной скорости и угловой скорости поворота
+  const safeDt = Math.max(0.001, dt);
+  const dx = p.x - rig.prevX;
+  const dz = p.z - rig.prevZ;
+  rig.prevX = p.x;
+  rig.prevZ = p.z;
+
+  const horizDist = Math.min(0.6, hypot2D(dx, dz));
+  const horizSpeed = horizDist / safeDt;
+  const isMovingHoriz = horizSpeed > 0.45 && state.slideTimer <= 0;
+
+  let facingDelta = angleDiff(state.facingAngle, rig.prevFacing);
+  rig.prevFacing = state.facingAngle;
+  const targetBank = Math.max(-0.26, Math.min(0.26, -facingDelta / safeDt * 0.032));
+  rig.turnBank += (targetBank - rig.turnBank) * Math.min(1, safeDt * 10);
+
+  // Отслеживание приземления и двойного прыжка
+  if (p.isGrounded && !rig.wasGrounded) {
+    rig.landSquash = 1.0;
+  }
+  if (!p.isGrounded && p.doubleJumpsUsed > rig.prevDoubleJumps) {
+    rig.doubleJumpSpin = 1.0;
+    spawnSparkBurst(p.x, p.y + 0.3, p.z, 14, 'takeoff');
+  }
+  rig.wasGrounded = p.isGrounded;
+  rig.prevDoubleJumps = p.doubleJumpsUsed;
+
+  rig.landSquash = Math.max(0, rig.landSquash - safeDt * 4.2);
+  rig.doubleJumpSpin = Math.max(0, rig.doubleJumpSpin - safeDt * 2.8);
+
+  // Веса состояний: бег, воздух, подкат
+  const targetRun = isMovingHoriz && p.isGrounded ? Math.min(1, horizSpeed / 5.5) : 0;
+  rig.runWeight += (targetRun - rig.runWeight) * Math.min(1, safeDt * 10);
+
+  const targetAir = p.isGrounded ? 0 : 1;
+  rig.airWeight += (targetAir - rig.airWeight) * Math.min(1, safeDt * 14);
+
+  const targetSlide = state.slideTimer > 0 ? 1 : 0;
+  rig.slideWeight += (targetSlide - rig.slideWeight) * Math.min(1, safeDt * 16);
+
+  // Фаза шага пропорциональна скорости бега
+  const stepRate = 8.5 + Math.min(6, horizSpeed * 0.55);
+  rig.runPhase += safeDt * stepRate * (0.25 + 0.75 * rig.runWeight);
+
+  const wRun = rig.runWeight * (1 - rig.airWeight) * (1 - rig.slideWeight);
+  const wAir = rig.airWeight * (1 - rig.slideWeight);
+  const wSlide = rig.slideWeight;
+  const ph = rig.runPhase;
+  const br = Math.sin(time * 2.1);
+
+  // 1. Базовая поза покоя + бега
+  let heroY = Math.abs(Math.sin(ph)) * 0.085 * wRun;
+  let leanX = 0.03 * br * (1 - wRun) + 0.24 * wRun;
+  let leanY = Math.sin(ph) * 0.16 * wRun;
+  let leanZ = rig.turnBank * (0.4 + 0.6 * wRun);
+
+  let headX = -0.14 * wRun + 0.03 * Math.cos(time * 1.6) * (1 - wRun);
+  let headY = Math.sin(time * 0.65) * 0.18 * (1 - wRun) - Math.sin(ph) * 0.15 * wRun;
+  let headZ = -leanZ * 0.5;
+
+  let leg0HipX = -0.92 * Math.sin(ph) * wRun;
+  let leg1HipX = -0.92 * Math.sin(ph + Math.PI) * wRun;
+  let leg0HipZ = 0;
+  let leg1HipZ = 0;
+  let leg0KneeX = 0.04 + (0.12 + 1.48 * Math.max(0, Math.cos(ph))) * wRun;
+  let leg1KneeX = 0.04 + (0.12 + 1.48 * Math.max(0, Math.cos(ph + Math.PI))) * wRun;
+
+  let arm0X = Math.sin(time * 1.8) * 0.04 * (1 - wRun) + 0.95 * Math.sin(ph) * wRun;
+  let arm1X = Math.sin(time * 1.8 + 1) * 0.04 * (1 - wRun) + 0.95 * Math.sin(ph + Math.PI) * wRun;
+  let arm0Z = 0.1 * (1 - wRun) + 0.07 * wRun;
+  let arm1Z = -0.1 * (1 - wRun) - 0.07 * wRun;
+  let elb0X = -0.22 * (1 - wRun) + (-1.18 + 0.36 * Math.sin(ph)) * wRun;
+  let elb1X = -0.22 * (1 - wRun) + (-1.18 + 0.36 * Math.sin(ph + Math.PI)) * wRun;
+
+  // 2. Амортизация приземления (Squash & Rebound)
+  if (rig.landSquash > 0 && wAir < 0.5) {
+    const sq = Math.sin(rig.landSquash * Math.PI);
+    heroY -= 0.18 * sq;
+    leanX += 0.28 * sq;
+    headX += 0.18 * sq;
+    leg0HipX -= 0.45 * sq;
+    leg1HipX -= 0.45 * sq;
+    leg0KneeX += 0.95 * sq;
+    leg1KneeX += 0.95 * sq;
+    arm0X += 0.45 * sq;
+    arm1X += 0.45 * sq;
+    arm0Z += 0.18 * sq;
+    arm1Z -= 0.18 * sq;
+  }
+
+  // 3. Поза прыжка и полёта в воздухе (взлёт, вершина, падение и крутка двойного прыжка)
+  if (wAir > 0.001) {
+    // vyFactor: +1 на взлёте, -1 при падении
+    const vyFactor = Math.max(-1, Math.min(1, p.vy / 8.5));
+    const riseBlend = (vyFactor + 1) * 0.5; // 1 = взлёт, 0 = падение
+
+    const airLeanX = lerp(0.28, -0.14, riseBlend) + Math.sin(rig.doubleJumpSpin * Math.PI) * 0.55;
+    const airLeanY = Math.sin(rig.doubleJumpSpin * TWO_PI) * 0.65;
+    const airHeadX = lerp(0.26, -0.18, riseBlend);
+
+    // Ведущая нога согнута в колене на взлёте, задняя вытянута; при падении обе готовятся к опоре
+    const airLeg0HipX = lerp(-0.55, -0.95, riseBlend);
+    const airLeg0KneeX = lerp(0.85, 1.55, riseBlend);
+    const airLeg1HipX = lerp(-0.35, 0.38, riseBlend);
+    const airLeg1KneeX = lerp(0.65, 0.35, riseBlend);
+
+    const airArm0X = lerp(-0.35, -1.25, riseBlend);
+    const airArm1X = lerp(-0.2, -1.05, riseBlend);
+    const airArm0Z = lerp(0.42, 0.22, riseBlend);
+    const airArm1Z = lerp(-0.42, -0.22, riseBlend);
+    const airElb0X = lerp(-0.55, -0.95, riseBlend);
+    const airElb1X = lerp(-0.55, -0.85, riseBlend);
+
+    heroY = lerp(heroY, 0.04, wAir);
+    leanX = lerp(leanX, airLeanX, wAir);
+    leanY = lerp(leanY, airLeanY, wAir);
+    headX = lerp(headX, airHeadX, wAir);
+    headY = lerp(headY, 0, wAir);
+    leg0HipX = lerp(leg0HipX, airLeg0HipX, wAir);
+    leg0KneeX = lerp(leg0KneeX, airLeg0KneeX, wAir);
+    leg1HipX = lerp(leg1HipX, airLeg1HipX, wAir);
+    leg1KneeX = lerp(leg1KneeX, airLeg1KneeX, wAir);
+    arm0X = lerp(arm0X, airArm0X, wAir);
+    arm1X = lerp(arm1X, airArm1X, wAir);
+    arm0Z = lerp(arm0Z, airArm0Z, wAir);
+    arm1Z = lerp(arm1Z, airArm1Z, wAir);
+    elb0X = lerp(elb0X, airElb0X, wAir);
+    elb1X = lerp(elb1X, airElb1X, wAir);
+  }
+
+  // 4. Поза низкого подката (Slide — Shift)
+  if (wSlide > 0.001) {
+    heroY = lerp(heroY, -0.52, wSlide);
+    leanX = lerp(leanX, -0.68, wSlide);
+    leanY = lerp(leanY, 0.36, wSlide);
+    leanZ = lerp(leanZ, -0.2, wSlide);
+    headX = lerp(headX, 0.56, wSlide);
+    headY = lerp(headY, -0.34, wSlide);
+    headZ = lerp(headZ, 0.14, wSlide);
+
+    // Правая нога вытянута вперёд скользящим клином, левая подогнута под корпус
+    leg0HipX = lerp(leg0HipX, -1.22, wSlide);
+    leg0HipZ = lerp(leg0HipZ, 0.14, wSlide);
+    leg0KneeX = lerp(leg0KneeX, 0.18, wSlide);
+
+    leg1HipX = lerp(leg1HipX, -0.32, wSlide);
+    leg1HipZ = lerp(leg1HipZ, -0.34, wSlide);
+    leg1KneeX = lerp(leg1KneeX, 2.08, wSlide);
+
+    // Правая рука уходит назад к полу для баланса, левая сгруппирована спереди
+    arm0X = lerp(arm0X, 0.72, wSlide);
+    arm0Z = lerp(arm0Z, 0.46, wSlide);
+    elb0X = lerp(elb0X, -0.32, wSlide);
+
+    arm1X = lerp(arm1X, -0.88, wSlide);
+    arm1Z = lerp(arm1Z, -0.32, wSlide);
+    elb1X = lerp(elb1X, -1.25, wSlide);
+
+    // Искры из-под подкованных сапог во время подката
+    rig.slideSparkAccum += safeDt * 35;
+    if (rig.slideSparkAccum >= 1) {
+      rig.slideSparkAccum -= 1;
+      spawnSparkBurst(p.x, p.y + 0.08, p.z, 2, 'land');
+    }
+  } else {
+    rig.slideSparkAccum = 0;
+  }
+
+  // Применяем вычисленные углы и смещения к скелету Угленосца
+  rig.hero.position.y = heroY;
+  rig.lean.rotation.set(leanX, leanY, leanZ);
+  rig.lean.scale.y = 1 + 0.008 * br * (1 - wRun) * (1 - wSlide);
+  rig.hd.rotation.set(headX, headY, headZ);
+
+  rig.legs[0].h.rotation.set(leg0HipX, 0, leg0HipZ);
+  rig.legs[0].k.rotation.x = leg0KneeX;
+  rig.legs[1].h.rotation.set(leg1HipX, 0, leg1HipZ);
+  rig.legs[1].k.rotation.x = leg1KneeX;
+
+  rig.arms[0].a.rotation.set(arm0X, 0, arm0Z);
+  rig.arms[0].e.rotation.x = elb0X;
+  rig.arms[1].a.rotation.set(arm1X, 0, arm1Z);
+  rig.arms[1].e.rotation.x = elb1X;
+
+  // Вторичное покачивание наспинного орудия и мерцание углей/визора
+  rig.gn.rotation.z = -0.42 + Math.sin(ph * 2) * 0.025 * wRun + wSlide * 0.18;
+  rig.gn.rotation.x = wSlide * 0.15;
+  rig.coal.emissiveIntensity = 1.25 + 0.42 * Math.sin(time * 7) * Math.sin(time * 3.1);
+
+  const visorPulse = Math.sin(time * 2.5);
+  rig.vis.color.setHSL(0.49, 1, 0.64 + 0.08 * visorPulse);
+  rig.visorGlow.material.opacity = 0.48 + 0.14 * visorPulse;
+  rig.beltGlow.material.opacity = 0.42 + 0.14 * Math.sin(time * 5.2);
+}
 
 /* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна) ---------- */
 
@@ -106,7 +525,6 @@ const lavaMesh = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), LAVA_MATERIAL
 lavaMesh.rotation.x = -Math.PI / 2;
 scene.add(lavaMesh);
 
-// Группа объёмных деталей угрозы снизу (движется синхронно с lavaMesh.position.y)
 const hazardEffectsGroup = new THREE.Group();
 scene.add(hazardEffectsGroup);
 
@@ -115,7 +533,7 @@ const hazardIceGroup = new THREE.Group();
 const hazardVoidGroup = new THREE.Group();
 hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
-// 1A. Детали моря магмы (Пепельная башня): плавающие корки шлака и конвекционное свечение
+// 1A. Детали моря магмы (Пепельная башня)
 (function buildAshHazardDetails() {
   const glowDisc = new THREE.Mesh(
     new THREE.CircleGeometry(30.2, 36),
@@ -133,7 +551,6 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardAshGroup.add(glowDisc);
   hazardAshGroup.userData.glowDisc = glowDisc;
 
-  // Островки застывшей базальтовой корки, плывущие в лаве
   const crustMat = new THREE.MeshStandardMaterial({
     color: 0x240b0d,
     emissive: 0x6a1400,
@@ -142,17 +559,17 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     flatShading: true
   });
   const crustRocks = [];
-  for (let i = 0; i < 16; i++) {
-    const angle = (i / 16) * TWO_PI + (i % 3) * 0.2;
-    const radius = 4 + (i % 4) * 6.2;
+  for (let i = 0; i < 18; i++) {
+    const angle = (i / 18) * TWO_PI + (i % 3) * 0.2;
+    const radius = 3.8 + (i % 4) * 6.0;
     const rockGeo = new THREE.CylinderGeometry(
       1.1 + (i % 3) * 0.6,
-      1.5 + (i % 3) * 0.7,
-      0.45,
+      1.6 + (i % 3) * 0.7,
+      0.5,
       7
     );
     const rock = new THREE.Mesh(rockGeo, crustMat);
-    rock.position.set(Math.cos(angle) * radius, 0.12, Math.sin(angle) * radius);
+    rock.position.set(Math.cos(angle) * radius, 0.14, Math.sin(angle) * radius);
     rock.rotation.y = i * 1.1;
     rock.userData = { baseAngle: angle, radius, phase: i * 0.7 };
     hazardAshGroup.add(rock);
@@ -161,17 +578,17 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardAshGroup.userData.crustRocks = crustRocks;
 })();
 
-// 1B. Детали вихря метели (Ледяная башня): вращающаяся воронка бурана и ледяные осколки
+// 1B. Детали вихря метели (Ледяная башня)
 (function buildIceHazardDetails() {
   const funnelRings = [];
-  for (let layer = 0; layer < 3; layer++) {
+  for (let layer = 0; layer < 4; layer++) {
     const ringMesh = new THREE.Mesh(
-      new THREE.RingGeometry(2.5 + layer * 5.5, 9.5 + layer * 7.2, 40, 1),
+      new THREE.RingGeometry(2.2 + layer * 4.8, 9.2 + layer * 6.2, 44, 1),
       new THREE.MeshBasicMaterial({
         map: iceLavaTexture,
         color: layer === 0 ? 0xffffff : 0x9cdfff,
         transparent: true,
-        opacity: 0.42 - layer * 0.08,
+        opacity: 0.46 - layer * 0.08,
         side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
         depthWrite: false
@@ -183,13 +600,12 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     funnelRings.push(ringMesh);
   }
 
-  // Центральное око ледяного бурана
   const eyeGlow = new THREE.Sprite(
     new THREE.SpriteMaterial({
       map: TEXTURES.glowIce,
       color: 0xdff8ff,
       transparent: true,
-      opacity: 0.75,
+      opacity: 0.78,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
@@ -202,18 +618,16 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardIceGroup.visible = false;
 })();
 
-// 1C. Детали Бездны (Башня Пустоты): чёрная дыра, аккреционный диск и далёкие вспыхивающие огни
+// 1C. Детали Бездны (Башня Пустоты)
 (function buildVoidHazardDetails() {
-  // Абсолютно чёрный горизонт событий в центре бездны
   const blackHoleCore = new THREE.Mesh(
-    new THREE.CircleGeometry(9.5, 40),
+    new THREE.CircleGeometry(9.8, 44),
     new THREE.MeshBasicMaterial({ color: 0x010003 })
   );
   blackHoleCore.rotation.x = -Math.PI / 2;
   blackHoleCore.position.y = 0.06;
   hazardVoidGroup.add(blackHoleCore);
 
-  // Светящиеся кольца аккреционного вихря пустоты
   const vortexRings = [];
   for (let r = 0; r < 3; r++) {
     const ring = new THREE.Mesh(
@@ -234,9 +648,8 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     vortexRings.push(ring);
   }
 
-  // Далёкие огни/звёзды, вспыхивающие в глубине бездны
   const abyssStarGeo = new THREE.BufferGeometry();
-  const starCount = 48;
+  const starCount = 56;
   const starPos = new Float32Array(starCount * 3);
   const starCol = new Float32Array(starCount * 3);
   for (let i = 0; i < starCount; i++) {
@@ -316,9 +729,8 @@ scene.add(towerWallMesh);
 towerWallMesh.matrixAutoUpdate = false;
 towerWallMesh.updateMatrix();
 
-// Полупрозрачный внутренний слой голубого льда (для Ледяной башни — создаёт глубину толщи льда поверх вмёрзших силуэтов)
 const iceInnerGlazeMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(29.95, 29.95, 220, 36, 1, true),
+  new THREE.CylinderGeometry(29.85, 29.85, 220, 36, 1, true),
   new THREE.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ice.map,
     color: 0x90d8ff,
@@ -327,7 +739,7 @@ const iceInnerGlazeMesh = new THREE.Mesh(
     roughness: 0.08,
     metalness: 0.35,
     transparent: true,
-    opacity: 0.28,
+    opacity: 0.26,
     side: THREE.BackSide,
     depthWrite: false
   })
@@ -342,8 +754,6 @@ let currentTowerTheme = TOWERS.ash;
 
 /**
  * Анимирует угрозу снизу, пульсацию трещин/рун на стенах и парящие элементы башни.
- * @param {number} time
- * @param {number} dt
  */
 function updateEnvironmentVisuals(time, dt) {
   hazardEffectsGroup.position.y = lavaMesh.position.y;
@@ -373,12 +783,11 @@ function updateEnvironmentVisuals(time, dt) {
     wallMat.emissiveIntensity = 1.05 + Math.sin(time * 1.6) * 0.18;
     const rings = hazardIceGroup.userData.funnelRings;
     if (rings) {
-      rings[0].rotation.z = time * 0.55;
-      rings[1].rotation.z = -time * 0.38;
-      rings[2].rotation.z = time * 0.25;
+      for (let i = 0; i < rings.length; i++) {
+        rings[i].rotation.z = time * (0.55 - i * 0.12) * (i % 2 ? -1 : 1);
+      }
     }
   } else if (towerId === 'void') {
-    // Руны на стенах мерцают и гаснут
     const wallMat = TOWER_WALL_MATERIALS.void;
     wallMat.emissiveIntensity =
       1.45 + Math.sin(time * 2.4) * 0.45 + Math.cos(time * 5.7) * 0.18;
@@ -395,15 +804,13 @@ function updateEnvironmentVisuals(time, dt) {
     }
   }
 
-  // Анимация динамических элементов башни (парящие обломки Пустоты, потоки лавы, туман)
   if (typeof updateTowerDecorAnimations === 'function') {
     updateTowerDecorAnimations(time, dt, towerId);
   }
 }
 
 /**
- * Применяет цветовую и визуальную тему выбранной башни к сцене.
- * @param {object} towerConfig
+ * Применяет цветовую и визуальную тему выбранной башни к сцене и всем пулам спецэффектов.
  */
 function applyTowerTheme(towerConfig) {
   currentTowerTheme = towerConfig;
@@ -441,5 +848,10 @@ function applyTowerTheme(towerConfig) {
     dustMat.color.setHex(towerConfig.dustColor);
     dustMat.size = towerConfig.dustSize || 0.32;
     dustMat.opacity = towerConfig.dustOpacity || 0.6;
+  }
+
+  // Перекраска спецэффектов боссов и вражеских снарядов под стихию башни
+  if (typeof applyTowerHazardPalette === 'function') {
+    applyTowerHazardPalette(id);
   }
 }

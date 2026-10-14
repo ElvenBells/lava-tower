@@ -16,19 +16,16 @@ const jumpPadGeo = (function buildJumpPadGeometry() {
   const ringColor = new THREE.Color(0x45ffdc);
   const coreColor = new THREE.Color(0xb8fff4);
 
-  // Каменное восьмигранное основание
   parts.push({
     geo: new THREE.CylinderGeometry(1.32, 1.48, 0.22, 8),
     matrix: computeTransformMatrix(0, -0.04, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: baseColor
   });
-  // Светящееся рунное кольцо
   parts.push({
     geo: new THREE.CylinderGeometry(1.08, 1.15, 0.28, 12),
     matrix: computeTransformMatrix(0, 0.04, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: ringColor
   });
-  // Центральный кристаллический излучатель
   parts.push({
     geo: new THREE.CylinderGeometry(0.65, 0.82, 0.34, 8),
     matrix: computeTransformMatrix(0, 0.08, 0, 0, Math.PI / 8, 0, 1, 1, 1, new THREE.Matrix4()),
@@ -55,19 +52,16 @@ const chestGeo = (function buildChestGeometry() {
   const goldColor = new THREE.Color(0xffcf40);
   const lockColor = new THREE.Color(0xfff0a0);
 
-  // Корпус сундука
   parts.push({
     geo: new THREE.BoxGeometry(1.26, 0.56, 0.86),
     matrix: computeTransformMatrix(0, -0.16, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: woodColor
   });
-  // Выпуклая крышка сундука
   parts.push({
     geo: new THREE.CylinderGeometry(0.43, 0.43, 1.24, 8, 1, false, 0, Math.PI),
     matrix: computeTransformMatrix(0, 0.12, 0, 0, 0, Math.PI / 2, 1, 1, 1, new THREE.Matrix4()),
     color: woodColor
   });
-  // Кованые золотые полосы-оковки
   for (const offsetX of [-0.46, 0, 0.46]) {
     parts.push({
       geo: new THREE.BoxGeometry(0.14, 0.88, 0.92),
@@ -75,7 +69,6 @@ const chestGeo = (function buildChestGeometry() {
       color: goldColor
     });
   }
-  // Замочная пластина с кристаллом
   parts.push({
     geo: new THREE.BoxGeometry(0.26, 0.32, 0.96),
     matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
@@ -99,7 +92,6 @@ const chestGlowMat = new THREE.SpriteMaterial({
   transparent: true,
   opacity: 0.7
 });
-// Скрытый меш для прогрева шейдера сундука на старте
 (function prewarmChestShader() {
   const dummyChest = new THREE.Mesh(chestGeo, chestMat);
   dummyChest.position.y = -80;
@@ -115,25 +107,21 @@ const altarGeo = (function buildAltarGeometry() {
   const trimColor = new THREE.Color(0x7a38c8);
   const crystalColor = new THREE.Color(0xe098ff);
 
-  // Ступенчатый пьедестал алтаря
   parts.push({
     geo: new THREE.CylinderGeometry(0.72, 0.92, 0.32, 6),
     matrix: computeTransformMatrix(0, -0.58, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: stoneColor
   });
-  // Резная колонна алтаря
   parts.push({
     geo: new THREE.CylinderGeometry(0.42, 0.58, 0.95, 6),
     matrix: computeTransformMatrix(0, -0.05, 0, 0, 0.5, 0, 1, 1, 1, new THREE.Matrix4()),
     color: trimColor
   });
-  // Чаша алтаря
   parts.push({
     geo: new THREE.CylinderGeometry(0.68, 0.38, 0.28, 6),
     matrix: computeTransformMatrix(0, 0.45, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: stoneColor
   });
-  // Парящий кристалл пакта над чашей
   parts.push({
     geo: new THREE.OctahedronGeometry(0.36, 0),
     matrix: computeTransformMatrix(0, 0.95, 0, 0.2, 0.4, 0, 0.85, 1.45, 0.85, new THREE.Matrix4()),
@@ -157,7 +145,6 @@ const altarGlowMat = new THREE.SpriteMaterial({
   transparent: true,
   opacity: 0.85
 });
-// Скрытый меш для прогрева шейдера алтаря на старте
 (function prewarmAltarShader() {
   const dummyAltar = new THREE.Mesh(altarGeo, altarMat);
   dummyAltar.position.y = -80;
@@ -185,40 +172,45 @@ const FORK_ROUTE_MATERIALS = {
   })
 };
 
-// Группа архитектурного декора и атмосферных деталей башни
 const towerDecorGroup = new THREE.Group();
 scene.add(towerDecorGroup);
 
-// Скульптурная геометрия каменной/ледяной/пустотной плиты (вписана в 1×1×1 для точного совпадения с физикой)
+// Скульптурная геометрия каменной/ледяной/пустотной плиты (вписана в 1×1×1)
 const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
   const parts = [];
   const topColor = new THREE.Color(0xffffff);
-  const midColor = new THREE.Color(0xd8d4dc);
-  const bottomColor = new THREE.Color(0x9a94a2);
+  const bevelColor = new THREE.Color(0xebe6f0);
+  const midColor = new THREE.Color(0xd0cad8);
+  const bottomColor = new THREE.Color(0x8e8898);
 
-  // Верхняя основная плита с фаской (y ∈ [0.14, 0.50])
+  // Верхняя основная плита (y ∈ [0.16, 0.50])
   parts.push({
-    geo: new THREE.BoxGeometry(1.0, 0.36, 1.0),
-    matrix: computeTransformMatrix(0, 0.32, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new THREE.BoxGeometry(1.0, 0.34, 1.0),
+    matrix: computeTransformMatrix(0, 0.33, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: topColor
   });
-  // Утопленный фриз-поясок посередине блока (y ∈ [-0.16, 0.14])
+  // Ступенчатый карниз под верхней плитой
   parts.push({
-    geo: new THREE.BoxGeometry(0.91, 0.3, 0.91),
-    matrix: computeTransformMatrix(0, -0.01, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new THREE.BoxGeometry(0.96, 0.14, 0.96),
+    matrix: computeTransformMatrix(0, 0.1, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    color: bevelColor
+  });
+  // Утопленный фриз-поясок посередине блока
+  parts.push({
+    geo: new THREE.BoxGeometry(0.88, 0.24, 0.88),
+    matrix: computeTransformMatrix(0, -0.08, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: midColor
   });
-  // Нижний сужающийся замковый свод/консоль под плитой (y ∈ [-0.50, -0.16])
+  // Нижний сужающийся замковый свод/консоль под плитой
   parts.push({
-    geo: new THREE.CylinderGeometry(0.66, 0.48, 0.34, 4),
-    matrix: computeTransformMatrix(0, -0.33, 0, 0, Math.PI / 4, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new THREE.CylinderGeometry(0.64, 0.44, 0.3, 4),
+    matrix: computeTransformMatrix(0, -0.35, 0, 0, Math.PI / 4, 0, 1, 1, 1, new THREE.Matrix4()),
     color: bottomColor
   });
 
   return mergeGeometryParts(parts);
 })();
 
-// Материалы плит и ступеней для трёх башен
 const TOWER_SLAB_MATERIALS = {
   ash: new THREE.MeshStandardMaterial({
     map: TOWER_FLOOR_TEXTURES.ash.map,
@@ -255,7 +247,6 @@ const TOWER_SLAB_MATERIALS = {
   })
 };
 
-// Глобальные коллекции объектов текущего уровня башни
 let blocks = [];
 let jumpPads = [];
 let chests = [];
@@ -265,7 +256,6 @@ let forkMarkers = [];
 let bossGateBlockIndices = {};
 let towerInstancedMesh = null;
 
-// Ссылки на анимируемые элементы окружения текущей башни
 let activeVoidFloatingMesh = null;
 let activeVoidFloatingData = [];
 let activeAshLavaStreamMat = null;
@@ -275,7 +265,7 @@ let activeVoidRunePillarMat = null;
 
 const GRID_FLOORS = 12;
 const GRID_DIM = 15;
-const GRID_OFFSET = 7; // индексы ячеек ix, iz ∈ [-7, 7]
+const GRID_OFFSET = 7;
 
 let blockGrid = new Array(GRID_FLOORS * GRID_DIM * GRID_DIM).fill(null);
 const _candidateBlockIndices = [];
@@ -304,9 +294,6 @@ function insertBlockIntoGrid(blockIndex) {
   blockGrid[key].push(blockIndex);
 }
 
-/**
- * Собирает индексы блоков в окрестности точки (этаж ±1, ячейки ±1).
- */
 function collectNearbyBlocks(x, z, centerFloor, outIndices) {
   outIndices.length = 0;
   const ix0 = Math.round(x / 4);
@@ -329,9 +316,6 @@ function collectNearbyBlocks(x, z, centerFloor, outIndices) {
   }
 }
 
-/**
- * Проверяет пересечение хитбокса игрока с блоком `[minX, maxX, minZ, maxZ, minY, maxY]`.
- */
 function isCollidingWithBlock(block, x, y, z) {
   return (
     x + 0.4 > block[0] &&
@@ -343,9 +327,6 @@ function isCollidingWithBlock(block, x, y, z) {
   );
 }
 
-/**
- * Возвращает высоту самой высокой опоры под точкой `(x, y, z)`.
- */
 function getGroundHeightAt(x, y, z) {
   let groundY = state ? state.lavaY : -10;
   const centerFloor = Math.floor(y / 14);
@@ -368,9 +349,6 @@ function getGroundHeightAt(x, y, z) {
   return groundY;
 }
 
-/**
- * Открывает запечатанный проход наверх после победы над боссом этажа `floorIndex`.
- */
 function openBossGate(floorIndex) {
   const gateIndices = bossGateBlockIndices[floorIndex] || [];
   for (const blockIdx of gateIndices) {
@@ -393,9 +371,6 @@ function openBossGate(floorIndex) {
 
 /* ---------- Генерация архитектурного окружения и деталей по темам башен ---------- */
 
-/**
- * Создаёт 3D-силуэт замёрзшего воина/монаха для вмуровывания в ледяные стены Ледяной башни.
- */
 function buildFrozenSilhouetteBaseGeometry() {
   const parts = [];
   const darkIceColor = new THREE.Color(0x0c2240);
@@ -431,6 +406,12 @@ function buildFrozenSilhouetteBaseGeometry() {
     matrix: computeTransformMatrix(0.42, 0.72, 0.18, 0.35, 0, 0.45, 1, 1, 1, new THREE.Matrix4()),
     color: cloakColor
   });
+  // Посох/клинок в руках замёрзшего стража
+  parts.push({
+    geo: new THREE.CylinderGeometry(0.06, 0.06, 2.7, 5),
+    matrix: computeTransformMatrix(0, 0.55, 0.28, 0.05, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    color: darkIceColor
+  });
   // Застывшее ледяное ядро и кристаллы льда, пронзающие фигуру
   parts.push({
     geo: new THREE.OctahedronGeometry(0.32, 0),
@@ -448,9 +429,6 @@ function buildFrozenSilhouetteBaseGeometry() {
 
 const frozenSilhouetteBaseGeo = buildFrozenSilhouetteBaseGeometry();
 
-/**
- * Очищает предыдущие декоративные меши башни.
- */
 function clearTowerDecorGroup() {
   for (let i = towerDecorGroup.children.length - 1; i >= 0; i--) {
     const child = towerDecorGroup.children[i];
@@ -469,8 +447,10 @@ function clearTowerDecorGroup() {
 }
 
 /**
- * Строит уникальное 3D-окружение башни (колонны, арки, трещины/потоки лавы,
- * сосульки и вмёрзшие силуэты, парящие обломки и рунные монолиты).
+ * Строит уникальное 3D-окружение башни по референсам мудбордов:
+ * - Пепельная: контрфорсы, стрельчатые арки, жаровни Горна, цепи, водопады магмы и базальтовые пики
+ * - Ледяная: готические ледяные своды, 3D вмёрзшие в лёд силуэты монахов Ордена Инея, каскады сосулек и друзы льда
+ * - Пустота: изгибающиеся щупальца/ленты тёмной материи, рунные обелиски, парящие обломки лестниц и руин в невесомости
  */
 function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor) {
   clearTowerDecorGroup();
@@ -483,7 +463,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
   const pillarCount = 8;
   const wallRadius = 30.18;
 
-  // Цвета архитектурного каркаса по башням
   const pillarPrimaryColor =
     towerId === 'ash'
       ? new THREE.Color(0x361318)
@@ -503,11 +482,11 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         ? new THREE.Color(0x88e4ff)
         : new THREE.Color(0xc458ff);
 
-  // 1. Массивные периметральные контрфорсы/пилястры вдоль стен башни (8 колонн)
-  const pillarSectionGeo = new THREE.CylinderGeometry(0.95, 1.12, 14, 6);
-  const capitalGeo = new THREE.CylinderGeometry(1.45, 1.05, 1.3, 6);
+  const pillarSectionGeo = new THREE.CylinderGeometry(0.95, 1.15, 14, 6);
+  const capitalGeo = new THREE.CylinderGeometry(1.5, 1.08, 1.35, 6);
   const archSegmentGeo = new THREE.BoxGeometry(5.6, 0.95, 0.95);
 
+  // 1. Периметральные контрфорсы, капители и стрельчатые арки
   for (let p = 0; p < pillarCount; p++) {
     const angle = (p / pillarCount) * TWO_PI;
     const px = Math.cos(angle) * wallRadius;
@@ -517,58 +496,67 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
 
-      // Ствол пилястры на этаже
-      computeTransformMatrix(px, floorY + 7, pz, 0, rotY, 0, 1, 1, 0.75, tempMat);
+      computeTransformMatrix(px, floorY + 7, pz, 0, rotY, 0, 1, 1, 0.78, tempMat);
       structureParts.push({
         geo: pillarSectionGeo,
         matrix: tempMat.clone(),
         color: pillarPrimaryColor
       });
 
-      // Массивная капитель/пояс на уровне каждого этажа
-      computeTransformMatrix(px, floorY + 0.2, pz, 0, rotY, 0, 1.1, 1, 0.85, tempMat);
+      computeTransformMatrix(px, floorY + 0.2, pz, 0, rotY, 0, 1.15, 1, 0.88, tempMat);
       structureParts.push({
         geo: capitalGeo,
         matrix: tempMat.clone(),
         color: pillarSecondaryColor
       });
 
-      // Настенные стрельчатые арки-рёбра между колоннами (на каждом 2-м этаже)
+      // Двойные стрельчатые арки между колоннами
       if (floor % 2 === 1) {
-        const nextAngle = ((p + 0.5) / pillarCount) * TWO_PI;
-        const ax = Math.cos(nextAngle) * (wallRadius + 0.15);
-        const az = Math.sin(nextAngle) * (wallRadius + 0.15);
-        const aRotY = -nextAngle + Math.PI / 2;
-
-        computeTransformMatrix(ax, floorY + 0.1, az, 0, aRotY, 0.14, 1.05, 1, 0.7, tempMat);
-        structureParts.push({
-          geo: archSegmentGeo,
-          matrix: tempMat.clone(),
-          color: pillarSecondaryColor
-        });
+        for (const side of [-0.22, 0.22]) {
+          const aAngle = ((p + 0.5 + side) / pillarCount) * TWO_PI;
+          const ax = Math.cos(aAngle) * (wallRadius + 0.12);
+          const az = Math.sin(aAngle) * (wallRadius + 0.12);
+          const aRotY = -aAngle + Math.PI / 2;
+          computeTransformMatrix(ax, floorY + 0.4, az, 0, aRotY, side > 0 ? -0.28 : 0.28, 0.95, 1, 0.75, tempMat);
+          structureParts.push({
+            geo: archSegmentGeo,
+            matrix: tempMat.clone(),
+            color: pillarSecondaryColor
+          });
+        }
       }
     }
   }
 
-  // 2. Детализация винтовых лестниц (каменные/ледяные/рунные балюстрады и ступени)
-  const stairStepTrimGeo = new THREE.BoxGeometry(4.15, 0.32, 4.15);
-  const stairPostGeo = new THREE.CylinderGeometry(0.24, 0.32, 1.35, 6);
+  // 2. Детализация винтовых лестниц (карнизы ступеней, опорные колонны, балюстрады с огнями)
+  const stairStepTrimGeo = new THREE.BoxGeometry(4.18, 0.34, 4.18);
+  const stairPostGeo = new THREE.CylinderGeometry(0.25, 0.34, 1.4, 6);
 
   for (let floor = 0; floor < 11; floor++) {
     const stairs = stairPositionsByFloor[floor] || [];
     for (let s = 0; s < stairs.length; s++) {
       const [sx, sz, topY] = stairs[s];
-      // Рельефная верхняя плита ступени с выступающим карнизом
       computeTransformMatrix(sx, topY - 0.14, sz, 0, 0, 0, 1, 1, 1, tempMat);
       structureParts.push({
         geo: stairStepTrimGeo,
         matrix: tempMat.clone(),
         color: pillarSecondaryColor
       });
-      // Стройная опорная колонна под высокой ступенью вместо растянутого блока
+
       const colH = Math.max(0.5, topY - floor * 14 - 1.1);
       if (colH > 0.8) {
-        computeTransformMatrix(sx, floor * 14 + colH * 0.5, sz, 0, s * 0.5, 0, 1.15, colH / 14, 1.15, tempMat);
+        computeTransformMatrix(
+          sx,
+          floor * 14 + colH * 0.5,
+          sz,
+          0,
+          s * 0.5,
+          0,
+          1.12,
+          colH / 14,
+          1.12,
+          tempMat
+        );
         structureParts.push({
           geo: pillarSectionGeo,
           matrix: tempMat.clone(),
@@ -576,34 +564,42 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
-      // Боковые столбики балюстрады на первой и последней ступени марша
       if (s % 6 === 0 || s % 6 === 5) {
-        computeTransformMatrix(sx + 1.65, topY + 0.65, sz + 1.65, 0, 0, 0, 1, 1, 1, tempMat);
-        structureParts.push({
-          geo: stairPostGeo,
-          matrix: tempMat.clone(),
-          color: pillarPrimaryColor
-        });
-        computeTransformMatrix(sx - 1.65, topY + 0.65, sz - 1.65, 0, 0, 0, 1, 1, 1, tempMat);
-        accentParts.push({
-          geo: new THREE.OctahedronGeometry(0.28, 0),
-          matrix: computeTransformMatrix(sx + 1.65, topY + 1.48, sz + 1.65, 0, 0, 0, 1, 1.3, 1, new THREE.Matrix4()),
-          color: accentGlowColor
-        });
+        for (const sign of [-1, 1]) {
+          computeTransformMatrix(sx + sign * 1.65, topY + 0.65, sz + sign * 1.65, 0, 0, 0, 1, 1, 1, tempMat);
+          structureParts.push({
+            geo: stairPostGeo,
+            matrix: tempMat.clone(),
+            color: pillarPrimaryColor
+          });
+          accentParts.push({
+            geo: new THREE.OctahedronGeometry(0.3, 0),
+            matrix: computeTransformMatrix(
+              sx + sign * 1.65,
+              topY + 1.52,
+              sz + sign * 1.65,
+              0,
+              0,
+              0,
+              1,
+              1.35,
+              1,
+              new THREE.Matrix4()
+            ),
+            color: accentGlowColor
+          });
+        }
       }
     }
   }
 
-  // 3. Специфические для каждой башни 3D-детали (по мудбордам и лору)
+  // 3. Специфические для каждой башни 3D-детали (по мудбордам)
   if (towerId === 'ash') {
-    // ПЕПЕЛЬНАЯ БАШНЯ:
-    // - Узкие раскалённые бойницы в стенах, сочащиеся лавой
-    // - Потоки жидкой магмы, стекающие по стенам и краям ступеней
-    // - Сталактиты застывшего шлака под плитами и кованые цепи под арками
-    const slitGeo = new THREE.BoxGeometry(0.85, 4.8, 0.35);
-    const lavaFallGeo = new THREE.CylinderGeometry(0.18, 0.42, 6.5, 6);
-    const stalactiteGeo = new THREE.ConeGeometry(0.42, 2.2, 5);
-    const chainLinkGeo = new THREE.CylinderGeometry(0.12, 0.12, 5.5, 5);
+    const slitGeo = new THREE.BoxGeometry(0.9, 5.2, 0.38);
+    const lavaFallGeo = new THREE.CylinderGeometry(0.22, 0.48, 7.0, 6);
+    const stalactiteGeo = new THREE.ConeGeometry(0.45, 2.4, 5);
+    const chainLinkGeo = new THREE.CylinderGeometry(0.14, 0.14, 6.2, 5);
+    const cragGeo = jitterGeometry(new THREE.ConeGeometry(1.1, 3.4, 5), 0.18);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
@@ -613,7 +609,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         const wz = Math.sin(midAngle) * 30.35;
         const rotY = -midAngle + Math.PI / 2;
 
-        // Светящиеся бойницы и вертикальные разломы с лавой
         if ((floor + p) % 2 === 0) {
           computeTransformMatrix(wx, floorY + 7.5, wz, 0, rotY, 0, 1, 1, 1, tempMat);
           accentParts.push({
@@ -622,16 +617,14 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             color: new THREE.Color(0xff7818)
           });
 
-          // Стекающий из разлома поток лавы по стене
-          computeTransformMatrix(wx * 0.99, floorY + 3.2, wz * 0.99, 0, rotY, 0, 1, 1, 0.5, tempMat);
+          computeTransformMatrix(wx * 0.99, floorY + 3.4, wz * 0.99, 0, rotY, 0, 1, 1, 0.55, tempMat);
           accentParts.push({
             geo: lavaFallGeo,
             matrix: tempMat.clone(),
             color: new THREE.Color(0xffaa30)
           });
         } else {
-          // Тяжёлые раскалённые цепи, свисающие вдоль стен Горна
-          computeTransformMatrix(wx * 0.985, floorY + 9.5, wz * 0.985, 0.08, rotY, 0.12, 1, 1, 1, tempMat);
+          computeTransformMatrix(wx * 0.98, floorY + 9.2, wz * 0.98, 0.1, rotY, 0.14, 1, 1, 1, tempMat);
           structureParts.push({
             geo: chainLinkGeo,
             matrix: tempMat.clone(),
@@ -640,20 +633,18 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // Наросты остывшей лавы и сталактиты под краями островков и ступеней
       const edgeCells = floorEdgeCellsByFloor[floor] || [];
       for (let e = 0; e < edgeCells.length; e += 3) {
         const [ex, ez] = edgeCells[e];
-        const dropH = 1.6 + ((e % 3) * 0.6);
-        computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.45, ez, Math.PI, e * 0.7, 0, 1, dropH / 2.2, 1, tempMat);
+        const dropH = 1.7 + (e % 3) * 0.65;
+        computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.45, ez, Math.PI, e * 0.7, 0, 1, dropH / 2.4, 1, tempMat);
         structureParts.push({
           geo: stalactiteGeo,
           matrix: tempMat.clone(),
           color: new THREE.Color(0x2d0f12)
         });
-        // Раскалённая капля на кончике сталактита
         if (e % 6 === 0) {
-          computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.9, ez, Math.PI, 0, 0, 0.55, 0.5, 0.55, tempMat);
+          computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.92, ez, Math.PI, 0, 0, 0.58, 0.55, 0.58, tempMat);
           accentParts.push({
             geo: stalactiteGeo,
             matrix: tempMat.clone(),
@@ -662,11 +653,34 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // Стекающая по ступеням лестниц лава (как на центральном кадре мудборда Пепельной башни)
+      // Зубчатые обсидиановые скалы у стен на этажах боссов
+      if (floor % 4 === 3) {
+        for (let c = 0; c < 6; c++) {
+          const ca = (c / 6) * TWO_PI + 0.3;
+          computeTransformMatrix(
+            Math.cos(ca) * 28.4,
+            floorY + 1.4,
+            Math.sin(ca) * 28.4,
+            -0.18,
+            -ca,
+            0,
+            1,
+            1 + (c % 2) * 0.35,
+            1,
+            tempMat
+          );
+          structureParts.push({
+            geo: cragGeo,
+            matrix: tempMat.clone(),
+            color: new THREE.Color(0x280c10)
+          });
+        }
+      }
+
       const stairs = stairPositionsByFloor[floor] || [];
       for (let s = 1; s < stairs.length; s += 2) {
         const [sx, sz, topY] = stairs[s];
-        computeTransformMatrix(sx + 1.85, topY - 1.2, sz, 0, 0, 0.08, 0.65, 0.45, 0.65, tempMat);
+        computeTransformMatrix(sx + 1.85, topY - 1.2, sz, 0, 0, 0.08, 0.68, 0.48, 0.68, tempMat);
         accentParts.push({
           geo: lavaFallGeo,
           matrix: tempMat.clone(),
@@ -675,39 +689,69 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       }
     }
   } else if (towerId === 'ice') {
-    // ЛЕДЯНАЯ БАШНЯ:
-    // - 3D вмёрзшие силуэты в толще ледяных стен (между внешней стеной 30.8 и внутренним слоем льда 29.95)
-    // - Гроздья острых сосулек под мостами, лестницами и готическими арками
-    // - Выступающие ледяные кристаллы и холодный туман из трещин пола
     const icicleGeo = new THREE.ConeGeometry(0.32, 2.4, 5);
-    const crystalSpikeGeo = new THREE.CylinderGeometry(0.06, 0.42, 2.8, 6);
+    const crystalSpikeGeo = new THREE.CylinderGeometry(0.06, 0.44, 2.9, 6);
     const silhouetteParts = [];
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
 
-      // Кристаллические ледяные контрфорсы и стрельчатые рёбра на стенах, обрамляющие вмёрзшие силуэты
+      // 3D-силуэты замёрзших монахов и воинов Ордена Инея в толще ледяных стен (между r=30.8 и внутренним слоем r=29.85)
       for (let s = 0; s < 4; s++) {
         const angle = ((s + 0.5) / 4) * TWO_PI + (floor % 2) * 0.38;
-        const ribRadius = 30.12;
-        const sx = Math.cos(angle) * ribRadius;
-        const sz = Math.sin(angle) * ribRadius;
-        const rotY = -angle + Math.PI / 2;
-        computeTransformMatrix(sx, floorY + 7.0, sz, 0, rotY, 0.12, 1.1, 2.2, 0.8, tempMat);
-        accentParts.push({
-          geo: crystalSpikeGeo,
-          matrix: tempMat.clone(),
-          color: new THREE.Color(0x98dcff)
+        const silRadius = 30.25;
+        const sx = Math.cos(angle) * silRadius;
+        const sz = Math.sin(angle) * silRadius;
+        const rotY = -angle - Math.PI / 2;
+        const tiltZ = ((floor + s) % 3 - 1) * 0.08;
+        const scale = 1.45 + ((floor + s) % 2) * 0.25;
+
+        computeTransformMatrix(
+          sx,
+          floorY + 5.2 + (s % 2) * 2.4,
+          sz,
+          0.06,
+          rotY,
+          tiltZ,
+          scale,
+          scale,
+          scale,
+          tempMat
+        );
+        silhouetteParts.push({
+          geo: frozenSilhouetteBaseGeo.clone(),
+          matrix: tempMat.clone()
         });
+
+        // Кристаллические ледяные рёбра по бокам вмёрзшего силуэта
+        for (const ribOffset of [-0.12, 0.12]) {
+          const rAng = angle + ribOffset;
+          computeTransformMatrix(
+            Math.cos(rAng) * 30.08,
+            floorY + 6.8,
+            Math.sin(rAng) * 30.08,
+            0,
+            -rAng + Math.PI / 2,
+            ribOffset > 0 ? -0.14 : 0.14,
+            1.1,
+            2.3,
+            0.8,
+            tempMat
+          );
+          accentParts.push({
+            geo: crystalSpikeGeo,
+            matrix: tempMat.clone(),
+            color: new THREE.Color(0x98dcff)
+          });
+        }
       }
 
-      // Ледяные пики-наросты у основания колонн
       for (let p = 0; p < pillarCount; p++) {
         if ((floor + p) % 2 !== 0) continue;
         const angle = (p / pillarCount) * TWO_PI + 0.18;
-        const cx = Math.cos(angle) * 29.85;
-        const cz = Math.sin(angle) * 29.85;
-        computeTransformMatrix(cx, floorY + 1.4, cz, -0.25, -angle, 0.15, 1, 1, 1, tempMat);
+        const cx = Math.cos(angle) * 29.75;
+        const cz = Math.sin(angle) * 29.75;
+        computeTransformMatrix(cx, floorY + 1.4, cz, -0.25, -angle, 0.15, 1.1, 1.15, 1.1, tempMat);
         accentParts.push({
           geo: crystalSpikeGeo,
           matrix: tempMat.clone(),
@@ -715,7 +759,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
-      // Сосульки под краями этажей и островов
       const edgeCells = floorEdgeCellsByFloor[floor] || [];
       for (let e = 0; e < edgeCells.length; e += 2) {
         const [ex, ez] = edgeCells[e];
@@ -739,7 +782,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
-      // Каскады сосулек под винтовыми лестницами (как на панорамах мудборда Ледяной башни)
       const stairs = stairPositionsByFloor[floor] || [];
       for (let s = 0; s < stairs.length; s++) {
         const [sx, sz, topY] = stairs[s];
@@ -765,7 +807,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // Холодный туман, сочащийся из трещин пола
       if (edgeCells.length > 0) {
         for (let m = 0; m < 2; m++) {
           const [mx, mz] = edgeCells[(m * 7 + floor * 3) % edgeCells.length];
@@ -789,24 +830,19 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     if (silhouetteParts.length) {
       const mergedSilGeo = mergeGeometryParts(silhouetteParts);
       const silMat = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        emissive: 0x164a78,
-        emissiveIntensity: 0.65,
-        roughness: 0.4,
-        metalness: 0.2
+        color: 0x16385e,
+        emissive: 0x2468a8,
+        emissiveIntensity: 0.75,
+        roughness: 0.35,
+        metalness: 0.25
       });
       const silMesh = new THREE.Mesh(mergedSilGeo, silMat);
       silMesh.userData.disposeMaterial = true;
       towerDecorGroup.add(silMesh);
     }
   } else if (towerId === 'void') {
-    // БАШНЯ ПУСТОТЫ:
-    // - Парящие в невесомости каменные кубы, обломки ступеней и рунные обелиски
-    // - Изогнутые ленты/щупальца застывшей пустоты вдоль стен и лестниц
-    // - Светящиеся рунные скрижали на колоннах
-    const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.2, 0.32);
-    const tendrilSegGeo = new THREE.CylinderGeometry(0.18, 0.34, 4.2, 6);
+    const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.4, 0.34);
+    const tendrilSegGeo = new THREE.CylinderGeometry(0.18, 0.38, 4.6, 6);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
@@ -816,7 +852,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         const rz = Math.sin(angle) * 29.45;
         const rotY = -angle + Math.PI / 2;
 
-        // Светящиеся рунные скрижали на монолитных колоннах
         if ((floor + p) % 2 === 0) {
           computeTransformMatrix(rx, floorY + 7.0, rz, 0, rotY, 0, 1, 1, 1, tempMat);
           accentParts.push({
@@ -826,21 +861,33 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           });
         }
 
-        // Изгибающиеся ленты тёмной материи («пространство складывается, как бумага»)
-        if ((floor + p) % 3 === 0) {
-          const tAngle = angle + 0.22;
-          const tx = Math.cos(tAngle) * 29.6;
-          const tz = Math.sin(tAngle) * 29.6;
-          computeTransformMatrix(tx, floorY + 5.5, tz, 0.35, -tAngle, 0.42, 1, 1, 1, tempMat);
-          structureParts.push({
-            geo: tendrilSegGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0x120624)
-          });
+        // Изгибающиеся ленты/щупальца тёмной материи («пространство складывается, как бумага»)
+        if ((floor + p) % 2 === 1) {
+          for (let seg = 0; seg < 2; seg++) {
+            const tAngle = angle + 0.18 + seg * 0.08;
+            const tx = Math.cos(tAngle) * (29.5 - seg * 0.4);
+            const tz = Math.sin(tAngle) * (29.5 - seg * 0.4);
+            computeTransformMatrix(
+              tx,
+              floorY + 4.2 + seg * 3.6,
+              tz,
+              0.38 * (seg ? -1 : 1),
+              -tAngle,
+              0.45,
+              1,
+              1,
+              1,
+              tempMat
+            );
+            structureParts.push({
+              geo: tendrilSegGeo,
+              matrix: tempMat.clone(),
+              color: new THREE.Color(0x120624)
+            });
+          }
         }
       }
 
-      // Фиолетовые энергетические кристаллы вдоль винтовых лестниц
       const stairs = stairPositionsByFloor[floor] || [];
       for (let s = 0; s < stairs.length; s += 2) {
         const [sx, sz, topY] = stairs[s];
@@ -851,9 +898,9 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           0.3 * s,
           0.5 * s,
           0.2,
-          0.6,
-          1.2,
-          0.6,
+          0.65,
+          1.3,
+          0.65,
           tempMat
         );
         accentParts.push({
@@ -864,14 +911,14 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       }
     }
 
-    // Парящие в невесомости каменные кубы и обломки (анимируются в каждом кадре)
-    const floatingCount = 72;
-    const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.15, 0.85, 1.15), 0.12);
+    // Парящие в невесомости обломки ступеней и рунные монолиты
+    const floatingCount = 84;
+    const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.25, 0.85, 1.25), 0.12);
     const floatingMat = new THREE.MeshStandardMaterial({
       map: TOWER_FLOOR_TEXTURES.void.map,
       emissive: 0x9030ff,
       emissiveMap: TOWER_FLOOR_TEXTURES.void.emissive,
-      emissiveIntensity: 1.35,
+      emissiveIntensity: 1.4,
       roughness: 0.5,
       metalness: 0.3
     });
@@ -883,16 +930,15 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     for (let i = 0; i < floatingCount; i++) {
       const floor = i % 12;
       const angle = seededRandom(seed, 'vfltA', i) * TWO_PI;
-      // Часть обломков парит у стен (r ∈ [26.8, 29.2]), часть — в пропастях под этажами
       const radius =
         i % 3 === 0
           ? 6 + seededRandom(seed, 'vfltR', i) * 14
-          : 26.8 + seededRandom(seed, 'vfltR', i) * 2.4;
+          : 26.6 + seededRandom(seed, 'vfltR', i) * 2.5;
       const baseY =
         i % 3 === 0
           ? floor * 14 - 4.2 - seededRandom(seed, 'vfltY', i) * 4.5
           : floor * 14 + 2.5 + seededRandom(seed, 'vfltY', i) * 9.5;
-      const scale = 0.55 + seededRandom(seed, 'vfltS', i) * 1.25;
+      const scale = 0.55 + seededRandom(seed, 'vfltS', i) * 1.3;
       const item = {
         x: Math.cos(angle) * radius,
         baseY,
@@ -915,7 +961,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     towerDecorGroup.add(activeVoidFloatingMesh);
   }
 
-  // Собираем единый меш архитектурного каркаса (колонны, капители, арки, балюстрады, сталактиты)
   if (structureParts.length) {
     const mergedStructGeo = mergeGeometryParts(structureParts);
     const structMat = new THREE.MeshStandardMaterial({
@@ -932,7 +977,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     towerDecorGroup.add(structMesh);
   }
 
-  // Собираем единый меш светящихся/полупрозрачных акцентов (потоки лавы, сосульки, рунные скрижали)
   if (accentParts.length) {
     const mergedAccentGeo = mergeGeometryParts(accentParts);
     let accentMat;
@@ -952,11 +996,11 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         color: 0xd8f4ff,
         vertexColors: true,
         emissive: 0x3898e0,
-        emissiveIntensity: 0.55,
+        emissiveIntensity: 0.58,
         roughness: 0.08,
         metalness: 0.35,
         transparent: true,
-        opacity: 0.82
+        opacity: 0.84
       });
     } else {
       accentMat = new THREE.MeshStandardMaterial({
@@ -976,9 +1020,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
   }
 }
 
-/**
- * Обновляет анимацию парящих обломков Пустоты и пульсацию архитектурных акцентов.
- */
 function updateTowerDecorAnimations(time, dt, towerId) {
   if (towerId === 'void' && activeVoidFloatingMesh && activeVoidFloatingData.length) {
     const dummy = _pickupDummyObj;
@@ -1007,9 +1048,6 @@ function updateTowerDecorAnimations(time, dt, towerId) {
   }
 }
 
-/**
- * Строит все 12 этажей башни по заданному зерну `seed`.
- */
 function buildTower(seed) {
   if (towerInstancedMesh) {
     scene.remove(towerInstancedMesh);
@@ -1041,7 +1079,6 @@ function buildTower(seed) {
       floor * Math.PI +
       (seededRandom(seed, 'tower', floor + 1) - 0.5) * 0.9;
 
-    // Координаты ступеней с этого этажа на следующий
     const currentStairCells = [];
     if (floor < 11) {
       const stairBranchCount = FORK_FLOORS.includes(floor) ? 2 : 1;
@@ -1056,7 +1093,6 @@ function buildTower(seed) {
       }
     }
 
-    // Выбор планировки этажа (Арена / Кольцо / Мосты / Острова)
     const layoutRoll = seededRandom(seed, 'lay', floor);
     const weights = currentTowerTheme.layoutWeights;
     const initialLayout =
@@ -1081,7 +1117,6 @@ function buildTower(seed) {
         if (i * i + j * j > 49) continue;
         const x = i * 4;
         const z = j * 4;
-        // Оставляем проём над лестницей с предыдущего этажа
         if (prevStairPositions.some((st) => Math.pow(st[0] - x, 2) + Math.pow(st[1] - z, 2) < 25)) {
           continue;
         }
@@ -1115,7 +1150,6 @@ function buildTower(seed) {
         }
       }
 
-      // Проверка связности графа плит (с учётом прыжка через 1 клетку)
       const startCellKey = currentStairCells.length
         ? (currentStairCells[0][0] / 4 + 7) * 15 + currentStairCells[0][1] / 4 + 7
         : -1;
@@ -1179,7 +1213,6 @@ function buildTower(seed) {
       const z = (cj - 7) * 4;
       blocks.push([x - 2, x + 2, z - 2, z + 2, floorY - 1, floorY, floor]);
 
-      // Запоминаем краевые плиты (граничащие с пропастью или проёмом) для размещения сосулек/сталактитов
       if (
         !activeCells.has((ci - 1) * 15 + cj) ||
         !activeCells.has((ci + 1) * 15 + cj) ||
@@ -1191,7 +1224,6 @@ function buildTower(seed) {
     }
     floorEdgeCellsByFloor[floor] = edgeCells;
 
-    // Ступени на следующий этаж и печати боссов
     prevStairPositions = [];
     const floorStairs = [];
     const isForkFloor = FORK_FLOORS.includes(floor);
@@ -1228,7 +1260,6 @@ function buildTower(seed) {
     }
     stairPositionsByFloor[floor] = floorStairs;
 
-    // Прыжковые площадки
     for (let i = 0; i < 2; i++) {
       const angle = seededRandom(seed, 'pad' + floor, i) * TWO_PI;
       const radius = 6 + seededRandom(seed, 'pad' + floor, i + 9) * 14;
@@ -1250,7 +1281,6 @@ function buildTower(seed) {
     insertBlockIntoGrid(i);
   }
 
-  // Сундуки: по 2 на этаж на свободных плитах
   for (let floor = 0; floor < 12; floor++) {
     const floorY = floor * 14;
     for (let i = 0; i < 2; i++) {
@@ -1291,7 +1321,6 @@ function buildTower(seed) {
     }
   }
 
-  // Алтари пактов: ~50% обычных этажей
   for (let floor = 1; floor < 11; floor++) {
     if (floor % 4 === 3 || seededRandom(seed, 'altp', floor) >= 0.5) continue;
     const floorY = floor * 14;
@@ -1331,7 +1360,6 @@ function buildTower(seed) {
     }
   }
 
-  // Единый InstancedMesh со скульптурными плитами и материалом текущей башни
   const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
   const dummyObj = new THREE.Object3D();
   const blockColor = new THREE.Color();
@@ -1375,6 +1403,5 @@ function buildTower(seed) {
   }
   scene.add(towerInstancedMesh);
 
-  // Строим архитектурное окружение башни (пилястры, арки, сосульки, вмёрзшие силуэты, руны, парящие обломки)
   buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor);
 }

@@ -38,6 +38,9 @@ function acquireBolt(parentObj, fromX, fromY, fromZ, toX, toY, toZ, amplitude, s
     };
   }
 
+  const towerId = (typeof state !== 'undefined' && state && state.towerId) || 'ash';
+  bolt.mat.color.setHex(towerId === 'ice' ? 0xb8f4ff : 0xe8ccff);
+
   bolt.n = segmentCount;
   bolt.amp = amplitude;
   bolt.life = 0;
@@ -211,7 +214,6 @@ function releaseAllGlobalBolts() {
 
 /* ---------- 2. Пулы опасностей и спецэффектов боссов ---------- */
 
-// Прыгаемые ударные кольца боссов
 const bossRingGeo = new THREE.RingGeometry(0.85, 1.15, 44);
 const bossRings = [];
 for (let i = 0; i < 6; i++) {
@@ -251,7 +253,6 @@ function spawnBossRing(x, y, z, damage, speed, maxRadius) {
   return ring;
 }
 
-// Секторная волна со спасательной щелью 90°
 const bossArcGeo = new THREE.RingGeometry(0.95, 1.25, 52, 1, 0, Math.PI * 1.5);
 const bossArcs = [];
 for (let i = 0; i < 4; i++) {
@@ -291,7 +292,6 @@ function spawnBossArc(x, y, z, gapAngle, damage) {
   return arc;
 }
 
-// Гейзеры Колосса (фаза 2): телеграф-кольцо + огненный столб
 const bossGeysers = [];
 const geyserJetGeo = new THREE.CylinderGeometry(0.28, 0.62, 7, 10, 1, true);
 geyserJetGeo.translate(0, 3.5, 0);
@@ -366,9 +366,9 @@ function placeGeysersNear(playerX, playerY, playerZ) {
   }
 }
 
-// Декаль трещин пола (фаза 2 Голема)
 const golemDecalMat = new THREE.MeshBasicMaterial({
   map: TEXTURES.golemFloor,
+  color: 0xff6a18,
   transparent: true,
   opacity: 0,
   blending: THREE.AdditiveBlending,
@@ -382,9 +382,9 @@ golemDecal.position.y = -500;
 scene.add(golemDecal);
 let golemDecalTargetOpacity = 0;
 
-// Руна и круги призыва Кристальной Матки
 const runeMat = new THREE.MeshBasicMaterial({
   map: TEXTURES.wombRune,
+  color: 0xc070ff,
   transparent: true,
   opacity: 0,
   blending: THREE.AdditiveBlending,
@@ -437,7 +437,6 @@ function placeSummonRings(bossEntity) {
   }
 }
 
-// Осколки шлака от ударов боссов
 const SLAG_COUNT = 22;
 const slagGeo = jitterGeometry(new THREE.BoxGeometry(0.16, 0.16, 0.16), 0.05);
 const slagMat = new THREE.MeshStandardMaterial({
@@ -503,15 +502,11 @@ function spawnSlagBurst(x, y, z, count, power) {
   }
 }
 
-// Капли магмы Лавового Колосса
 const DRIP_COUNT = 18;
 const dripGeo = new THREE.SphereGeometry(0.09, 6, 6);
 dripGeo.scale(1, 2.4, 1);
-const dripInstancedMesh = new THREE.InstancedMesh(
-  dripGeo,
-  new THREE.MeshBasicMaterial({ color: 0xffc040 }),
-  DRIP_COUNT
-);
+const dripMat = new THREE.MeshBasicMaterial({ color: 0xffc040 });
+const dripInstancedMesh = new THREE.InstancedMesh(dripGeo, dripMat, DRIP_COUNT);
 dripInstancedMesh.frustumCulled = false;
 scene.add(dripInstancedMesh);
 
@@ -549,14 +544,16 @@ const playerFireballInstancedMesh = new THREE.InstancedMesh(
   250
 );
 
+const enemyProjectileMat = new THREE.MeshStandardMaterial({
+  color: 0xff40a0,
+  emissive: 0xff0080,
+  emissiveIntensity: 2,
+  roughness: 0.2
+});
+
 const enemyProjectileInstancedMesh = new THREE.InstancedMesh(
   new THREE.SphereGeometry(0.3, 10, 10),
-  new THREE.MeshStandardMaterial({
-    color: 0xff40a0,
-    emissive: 0xff0080,
-    emissiveIntensity: 2,
-    roughness: 0.2
-  }),
+  enemyProjectileMat,
   100
 );
 
@@ -582,7 +579,6 @@ enemyProjectileInstancedMesh.frustumCulled = false;
 orbitalBladeInstancedMesh.frustumCulled = false;
 scene.add(playerFireballInstancedMesh, enemyProjectileInstancedMesh, orbitalBladeInstancedMesh);
 
-// Атмосферная пыль/пепел в воздухе
 const dustGeo = new THREE.BufferGeometry();
 const DUST_PARTICLE_COUNT = 200;
 const dustPositions = new Float32Array(DUST_PARTICLE_COUNT * 3);
@@ -601,7 +597,6 @@ const dustMat = new THREE.PointsMaterial({
 const dustParticles = new THREE.Points(dustGeo, dustMat);
 scene.add(dustParticles);
 
-// Пул искр (400 частиц)
 const SPARK_PARTICLE_COUNT = 400;
 const sparkGeo = new THREE.BufferGeometry();
 const sparkPositions = new Float32Array(SPARK_PARTICLE_COUNT * 3);
@@ -638,6 +633,7 @@ scene.add(sparkPoints);
 
 let sparkCursor = 0;
 function spawnSparkBurst(x, y, z, count, mode) {
+  const towerId = (typeof state !== 'undefined' && state && state.towerId) || 'ash';
   for (let k = 0; k < count; k++) {
     const idx = sparkCursor++ % SPARK_PARTICLE_COUNT;
     const angle = Math.random() * Math.PI * 2;
@@ -666,12 +662,17 @@ function spawnSparkBurst(x, y, z, count, mode) {
     }
     item.life = 0;
     item.max = 0.5 + Math.random() * 0.7;
-    item.color.setHSL(0.06 + Math.random() * 0.07, 1, 0.55 + Math.random() * 0.3);
+    if (towerId === 'ice') {
+      item.color.setHSL(0.53 + Math.random() * 0.06, 0.95, 0.68 + Math.random() * 0.25);
+    } else if (towerId === 'void') {
+      item.color.setHSL(0.76 + Math.random() * 0.08, 1.0, 0.62 + Math.random() * 0.28);
+    } else {
+      item.color.setHSL(0.06 + Math.random() * 0.07, 1, 0.55 + Math.random() * 0.3);
+    }
     item.active = true;
   }
 }
 
-// Пул клубов дыма (200 частиц)
 const SMOKE_PARTICLE_COUNT = 200;
 const smokeGeo = new THREE.BufferGeometry();
 const smokePositions = new Float32Array(SMOKE_PARTICLE_COUNT * 3);
@@ -724,7 +725,6 @@ function spawnSmokePuff(x, y, z, count) {
   }
 }
 
-// Огненные и пустотные кольца приземлений/разрядов мобов
 const fireLandingRingGeo = new THREE.RingGeometry(0.8, 1.0, 28);
 const voidLandingRingGeo = new THREE.RingGeometry(0.5, 0.68, 28);
 
@@ -786,7 +786,6 @@ function spawnVoidLandingRing(x, y, z) {
   ring.scale.setScalar(1);
 }
 
-// Кольца ударных волн игрока и взрывов
 const waveEffectRings = [...Array(6)].map(() => {
   const mesh = new THREE.Mesh(
     new THREE.RingGeometry(0.9, 1, 28),
@@ -809,6 +808,59 @@ function spawnWaveRingEffect(x, y, z, radius, colorHex) {
   mesh.visible = true;
 }
 
+/**
+ * Переключает цветовую палитру всех опасных зон боссов, колец, осколков, капель и снарядов
+ * в соответствии с темой выбранной башни ('ash' / 'ice' / 'void').
+ */
+function applyTowerHazardPalette(towerId) {
+  const ringHex = towerId === 'ice' ? 0x70dcff : towerId === 'void' ? 0xc055ff : 0xff8c30;
+  const arcHex = towerId === 'ice' ? 0x90ecff : towerId === 'void' ? 0xb442ff : 0xff7a20;
+  const geyserRingHex = towerId === 'ice' ? 0xb8f6ff : towerId === 'void' ? 0xe088ff : 0xffd060;
+  const geyserJetHex = towerId === 'ice' ? 0x78dcff : towerId === 'void' ? 0xa838ff : 0xffc050;
+  const runeHex = towerId === 'ice' ? 0x88ecff : towerId === 'void' ? 0xd878ff : 0xc070ff;
+
+  for (const r of bossRings) r.mesh.material.color.setHex(ringHex);
+  for (const a of bossArcs) a.mesh.material.color.setHex(arcHex);
+  for (const g of bossGeysers) {
+    g.ring.material.color.setHex(geyserRingHex);
+    g.jet.material.color.setHex(geyserJetHex);
+  }
+  for (const fr of fireLandingRings) fr.material.color.setHex(ringHex);
+  for (const vr of voidLandingRings) vr.material.color.setHex(runeHex);
+  for (const sr of summonRings) sr.mesh.material.color.setHex(runeHex);
+
+  golemDecalMat.color.setHex(ringHex);
+  runeMat.color.setHex(runeHex);
+  runeMat.map = towerId === 'ice' ? TEXTURES.frostWeb : TEXTURES.wombRune;
+  runeMat.needsUpdate = true;
+
+  if (towerId === 'ice') {
+    slagMat.color.setHex(0x88c8f0);
+    slagMat.emissive.setHex(0x38a8ff);
+    dripMat.color.setHex(0xd8f8ff);
+    enemyProjectileMat.color.setHex(0x90f0ff);
+    enemyProjectileMat.emissive.setHex(0x20a8ff);
+    smokeStartColor.setHex(0x88b8d8);
+    smokeEndColor.setHex(0x183858);
+  } else if (towerId === 'void') {
+    slagMat.color.setHex(0x1c0b2e);
+    slagMat.emissive.setHex(0xb038ff);
+    dripMat.color.setHex(0xe8b8ff);
+    enemyProjectileMat.color.setHex(0xd868ff);
+    enemyProjectileMat.emissive.setHex(0x9020ff);
+    smokeStartColor.setHex(0x28123e);
+    smokeEndColor.setHex(0x080212);
+  } else {
+    slagMat.color.setHex(0x3e383c);
+    slagMat.emissive.setHex(0xff4400);
+    dripMat.color.setHex(0xffc040);
+    enemyProjectileMat.color.setHex(0xff40a0);
+    enemyProjectileMat.emissive.setHex(0xff0080);
+    smokeStartColor.setHex(0x2e2c30);
+    smokeEndColor.setHex(0x140a18);
+  }
+}
+
 /* ---------- 4. Лут и маркеры элит ---------- */
 
 const MAX_PICKUPS = 400;
@@ -827,7 +879,6 @@ const PICKUP_COLORS = [
   new THREE.Color(0xffc83d),
   new THREE.Color(0xffe9a0)
 ];
-// Инициализируем instanceColor сразу, чтобы шейдер не перекомпилировался при первом дропе
 pickupInstancedMesh.setColorAt(0, PICKUP_COLORS[0]);
 const _pickupDummyObj = new THREE.Object3D();
 

@@ -212,7 +212,6 @@ function initializeRun(mode) {
   state.chillTimer = 0;
   state.vortexPull = null;
 
-  // Бонусы кузницы
   state.maxHpMultiplier *= 1 + 0.05 * (metaProgress.forge.hp | 0);
   state.damageMultiplier *= 1 + 0.04 * (metaProgress.forge.dmg | 0);
   state.playerSpeedMultiplier *= 1 + 0.03 * (metaProgress.forge.spd | 0);
@@ -248,11 +247,9 @@ function updateGameStep(dt) {
     getById('toast').style.opacity = 0;
   }
 
-  // Поворот камеры с клавиатуры
   if (keysPressed.ArrowLeft || keysPressed.KeyQ) state.cameraYaw += 2 * dt;
   if (keysPressed.ArrowRight || keysPressed.KeyE) state.cameraYaw -= 2 * dt;
 
-  // Направление движения игрока относительно камеры
   const sinYaw = Math.sin(state.cameraYaw);
   const cosYaw = Math.cos(state.cameraYaw);
   const forwardInput = (keysPressed.KeyW ? 1 : 0) - (keysPressed.KeyS ? 1 : 0);
@@ -276,7 +273,6 @@ function updateGameStep(dt) {
     (state.chillTimer > 0 ? 0.55 : 1) *
     lavaSlowFactor;
 
-  // Рывок-скольжение (Shift)
   if (keysPressed.slide && player.isGrounded && state.slideTimer <= 0 && state.slideCooldown <= 0) {
     state.slideTimer = 1;
     state.slideCooldown = 1.3 / (1 + 0.3 * (owned.ice || 0));
@@ -296,7 +292,6 @@ function updateGameStep(dt) {
     velocityZ = player.slideDirZ * slideSpeed;
   }
 
-  // Инерция на скользком полу Ледяной башни
   if (state.towerConfig.isSlipperyIce) {
     if (state.slideTimer > 0) {
       player.iceVelocityX = velocityX;
@@ -312,12 +307,11 @@ function updateGameStep(dt) {
     }
   }
 
-  // Притяжение гравитационной воронки (боссы Башни Пустоты)
   if (state.vortexPull) {
     const pull = state.vortexPull;
     pull.timer -= dt;
     const distToVortex = hypot2D(pull.x - player.x, pull.z - player.z);
-    if (distToVortex > 3) {
+    if (distToVortex > 2.6) {
       velocityX += ((pull.x - player.x) / distToVortex) * pull.strength;
       velocityZ += ((pull.z - player.z) / distToVortex) * pull.strength;
     }
@@ -344,7 +338,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Горизонтальные коллизии игрока по сетке блоков
   const currentFloorIdx = Math.floor(player.y / 14);
   const nextX = player.x + velocityX * dt;
   collectNearbyBlocks(nextX, player.z, currentFloorIdx, _candidateBlockIndices);
@@ -368,14 +361,12 @@ function updateGameStep(dt) {
   }
   if (!blockedZ) player.z = nextZ;
 
-  // Ограничение радиусом внешней стены башни
   const playerRadialDist = hypot2D(player.x, player.z);
   if (playerRadialDist > 29.4) {
     player.x *= 29.4 / playerRadialDist;
     player.z *= 29.4 / playerRadialDist;
   }
 
-  // Прыжок (coyote time + jump buffer + дополнительный прыжок в воздухе)
   player.coyoteTimer = player.isGrounded ? 0.1 : player.coyoteTimer - dt;
   player.jumpBufferTimer -= dt;
   if (keysPressed.jump) {
@@ -400,7 +391,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Вертикальное движение и приземление на блоки
   player.vy -= state.gravity * dt;
   const fallVelocity = player.vy;
   const oldY = player.y;
@@ -436,7 +426,6 @@ function updateGameStep(dt) {
   }
   player.isGrounded = groundedNow;
 
-  // Прыжковые площадки
   for (const pad of jumpPads) {
     if (
       Math.abs(pad.x - player.x) < 1.6 &&
@@ -450,7 +439,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Обновление максимального достигнутого этажа
   state.maxFloorReached = Math.max(
     state.maxFloorReached,
     Math.min(11, Math.floor(player.lastGroundY / 14 + 0.07))
@@ -459,7 +447,6 @@ function updateGameStep(dt) {
     unlockHero('pil');
   }
 
-  // Подъём лавы/метели/бездны и урон от неё
   const tierSpeed = [0.25, 0.35, 0.45][Math.min(2, Math.floor(state.maxFloorReached / 4))];
   const lavaRiseRate = Math.min(
     0.62,
@@ -476,7 +463,6 @@ function updateGameStep(dt) {
     damagePlayer(state.maxHp * 0.15 * dt, 1);
   }
 
-  // Пассивная регенерация вне боя
   if (state.timeSinceLastHit > 3 && !isInLava && player.hp < state.maxHp) {
     player.hp = Math.min(
       state.maxHp,
@@ -484,7 +470,6 @@ function updateGameStep(dt) {
     );
   }
 
-  // Холод в Ледяной башне при простое на месте
   if (state.towerConfig.hasColdPenalty) {
     const iceSpeed = hypot2D(player.iceVelocityX || 0, player.iceVelocityZ || 0);
     if (iceSpeed < 1.2 && state.slideTimer <= 0) {
@@ -502,7 +487,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Спавн боссов на этажах 4, 8 и 12 (индексы 3, 7, 11)
   for (const bossFloor of [3, 7, 11]) {
     if (state.maxFloorReached >= bossFloor && !state.bossSpawnedByFloor[bossFloor]) {
       state.bossSpawnedByFloor[bossFloor] = 1;
@@ -532,7 +516,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Бюджет и спавн волн обычных врагов
   const activeFloor = Math.min(11, Math.max(0, Math.floor(player.lastGroundY / 14 + 0.07)));
   state.spawnBudget +=
     dt *
@@ -605,7 +588,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Автоатакующее оружие игрока
   buildEnemyGrid();
   for (const weaponId in state.weaponLevels) {
     const weaponLv = state.weaponLevels[weaponId];
@@ -687,7 +669,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Движение и попадания снарядов
   for (let i = state.projectiles.length - 1; i >= 0; i--) {
     const proj = state.projectiles[i];
     proj.x += proj.vx * dt;
@@ -701,6 +682,7 @@ function updateGameStep(dt) {
         Math.abs(proj.y - player.y - 0.8) < 1.5
       ) {
         damagePlayer(proj.damage || 8);
+        if (state.towerId === 'ice') state.chillTimer = Math.max(state.chillTimer, 1.5);
         isExpired = 1;
       }
     } else {
@@ -729,7 +711,7 @@ function updateGameStep(dt) {
     }
   }
 
-  // Логика и движение врагов
+  // Логика и движение врагов (с учётом уникальных механик мобов 3 башен!)
   for (const enemy of state.enemies) {
     const baseStats = ENEMY_TYPES[enemy.type];
     const dx = player.x - enemy.x;
@@ -781,30 +763,51 @@ function updateGameStep(dt) {
               : 0
             : 1;
 
+    // Уникальные бонусы скорости:
+    // - Ледяной Волк ('ice' + 'l') быстрее скользит по льду (+18%)
+    // - Мерзлотный Голем ('ice' + 't') трескается и ускоряется ниже 50% HP (+32%)
+    let towerMobSpeedBonus = 1;
+    if (state.towerId === 'ice') {
+      if (enemy.type === 'l') towerMobSpeedBonus = 1.18;
+      else if (enemy.type === 't' && enemy.hp <= enemy.maxHp * 0.5) towerMobSpeedBonus = 1.32;
+    }
+
     const baseMoveSpeed =
       (enemy.bossSpeed !== undefined ? enemy.bossSpeed : baseStats.speed) *
+      towerMobSpeedBonus *
       (enemy.slowTimer > 0 ? 0.7 : 1) *
       (enemy.bossSpeedMul || 1) *
       (enemy.speedVariation || 1) *
       (state.enemySpeedMultiplier || 1);
     const radialSpeed = baseMoveSpeed * moveDirFactor;
 
-    // В Башне Пустоты обычные наземные мобы периодически телепортируются ближе к игроку
+    // В Башне Пустоты мобы периодически телепортируются (Страж Бездны ниже 50% HP — вдвое чаще, Теневой Мотылёк делает короткие рывки)
     if (
       state.towerConfig.canEnemiesBlink &&
       enemy.type !== 'b' &&
-      enemy.type !== 'r' &&
       !enemy.isRising
     ) {
       if (enemy.blinkCooldown === undefined) {
-        enemy.blinkCooldown = 4 + Math.random() * 6;
+        enemy.blinkCooldown = enemy.type === 's' ? 2.2 + Math.random() * 2.5 : 4 + Math.random() * 5;
       }
-      if ((enemy.blinkCooldown -= dt) <= 0) {
-        enemy.blinkCooldown = 6 + Math.random() * 6;
-        if (dist > 10 && dist < 34 && enemy.jumpState !== 'air') {
+      const blinkRateMul = enemy.type === 't' && enemy.hp <= enemy.maxHp * 0.5 ? 2.0 : 1.0;
+      if ((enemy.blinkCooldown -= dt * blinkRateMul) <= 0) {
+        enemy.blinkCooldown = enemy.type === 's' ? 2.5 + Math.random() * 2.5 : 5.5 + Math.random() * 5;
+        if (enemy.type === 's' && dist > 3.5 && dist < 24) {
+          // Теневой Мотылёк совершает короткий рывок-телепорт на 2.5 м
+          const step = 2.4;
+          const nx = enemy.x + (dx / dist) * step + (Math.random() - 0.5) * 1.4;
+          const nz = enemy.z + (dz / dist) * step + (Math.random() - 0.5) * 1.4;
+          const gY = getGroundHeightAt(nx, player.lastGroundY, nz);
+          if (gY >= player.lastGroundY - 2.5) {
+            enemy.x = nx;
+            enemy.z = nz;
+            enemy.groundY = gY;
+          }
+        } else if (dist > 9 && dist < 34 && enemy.jumpState !== 'air') {
           const angle =
             Math.atan2(enemy.z - player.z, enemy.x - player.x) + (Math.random() - 0.5) * 1.2;
-          const radius = 8 + Math.random() * 2;
+          const radius = enemy.type === 'r' ? 12 + Math.random() * 2 : 7.5 + Math.random() * 2;
           let nx = player.x + Math.cos(angle) * radius;
           let nz = player.z + Math.sin(angle) * radius;
           const radialDist = hypot2D(nx, nz);
@@ -814,14 +817,12 @@ function updateGameStep(dt) {
           }
           const newGroundY = getGroundHeightAt(nx, player.lastGroundY, nz);
           if (newGroundY >= player.lastGroundY - 2.5 && newGroundY <= player.lastGroundY + 2.5) {
-            if (enemy.type !== 's') {
-              spawnWaveRingEffect(enemy.x, enemy.y, enemy.z, 1.6, 0xb060ff);
-              spawnWaveRingEffect(nx, newGroundY, nz, 1.6, 0xb060ff);
-            }
+            spawnWaveRingEffect(enemy.x, enemy.y, enemy.z, 1.5, 0xb060ff);
+            spawnWaveRingEffect(nx, newGroundY, nz, 1.5, 0xb060ff);
             enemy.x = nx;
             enemy.z = nz;
             enemy.groundY = null;
-            enemy.y = newGroundY;
+            if (enemy.type !== 'r') enemy.y = newGroundY;
           }
         }
       }
@@ -851,7 +852,6 @@ function updateGameStep(dt) {
         enemy.groundY = getGroundHeightAt(enemy.x, enemy.y, enemy.z);
       }
       groundY = enemy.groundY;
-      // Край пропасти — стена для наземных мобов
       if (enemy.type !== 'b' && enemy.jumpState !== 'air' && groundY < enemy.y - 3) {
         enemy.x = oldEnemyX;
         enemy.z = oldEnemyZ;
@@ -883,7 +883,7 @@ function updateGameStep(dt) {
           enemy.jumpState = 'air';
           enemy.jumpTimer = 0;
           enemy.jumpVelocityY = baseStats.jumpVelocity;
-          if (dist < 45) spawnSparkBurst(enemy.x, enemy.y, enemy.z, 18, 'takeoff');
+          if (dist < 45) spawnSparkBurst(enemy.x, enemy.y, enemy.z, 14, 'takeoff');
         } else {
           enemy.jumpTimer += dt;
         }
@@ -898,8 +898,8 @@ function updateGameStep(dt) {
           enemy.jumpState = 'land';
           enemy.jumpTimer = 0;
           if (dist < 45) {
-            spawnSparkBurst(enemy.x, enemy.y, enemy.z, 26, 'land');
-            spawnSmokePuff(enemy.x, enemy.y, enemy.z, 8);
+            spawnSparkBurst(enemy.x, enemy.y, enemy.z, 20, 'land');
+            spawnSmokePuff(enemy.x, enemy.y, enemy.z, 6);
             spawnFireLandingRing(enemy.x, enemy.y, enemy.z);
           }
         }
@@ -924,7 +924,6 @@ function updateGameStep(dt) {
         enemy.anchorY = getGroundHeightAt(enemy.x, enemy.y, enemy.z);
       }
 
-      // Сепарация от соседних врагов
       collectNearbyEnemies(enemy.x, enemy.z, _separationCandidates);
       for (let si = 0; si < _separationCandidates.length; si++) {
         const other = _separationCandidates[si];
@@ -959,6 +958,12 @@ function updateGameStep(dt) {
         enemy.surgeActiveTimer = 1.4;
         enemy.surgeTimer = 4.5 + Math.random() * 3;
       }
+      // Фазовый Шип ('void' + 'r') в фазовом сдвиге неуязвим на 0.5 с
+      enemy.shield =
+        state.towerId === 'void' && enemy.surgeActiveTimer > 0.45 && enemy.surgeActiveTimer < 0.95
+          ? 1
+          : 0;
+
       if (enemy.surgeActiveTimer > 0) {
         enemy.surgeActiveTimer -= dt;
         if (enemy.surgeActiveTimer <= 0) {
@@ -970,6 +975,11 @@ function updateGameStep(dt) {
             spawnVoidLandingRing(gndX, gndY, gndZ);
             spawnShypOuterBolt(enemy);
             spawnShypOuterBolt(enemy);
+
+            // Инеевый Кристалл ('ice' + 'r') создаёт вокруг себя зону заморозки при разряде
+            if (state.towerId === 'ice' && dist < 4.5) {
+              state.chillTimer = Math.max(state.chillTimer, 1.8);
+            }
           }
           enemy.flashIntensity = 8;
           triggerScreenShake(0.15);
@@ -1019,8 +1029,8 @@ function updateGameStep(dt) {
         const jdx = player.x - enemy.x;
         const jdz = player.z - enemy.z;
         const jd = Math.sqrt(jdx * jdx + jdz * jdz) || 1;
-        enemy.x += (jdx / jd) * 2.2 * dt;
-        enemy.z += (jdz / jd) * 2.2 * dt;
+        enemy.x += (jdx / jd) * 2.4 * dt;
+        enemy.z += (jdz / jd) * 2.4 * dt;
         if (enemy.jumpOffsetY <= 0 && enemy.jumpVelocityY < 0) {
           enemy.jumpOffsetY = 0;
           enemy.jumpState = 'land';
@@ -1030,6 +1040,7 @@ function updateGameStep(dt) {
           enemy.jawAngle = 0.4;
           if (dist < 3.5 && Math.abs(player.y - enemy.y) < 3) {
             damagePlayer(13 * (enemy.damageMultiplier || 1));
+            if (state.towerId === 'ice') state.chillTimer = Math.max(state.chillTimer, 1.8);
           }
           if (dist < 45) {
             spawnSparkBurst(enemy.x, enemy.y, enemy.z, 26, 'land');
@@ -1069,7 +1080,7 @@ function updateGameStep(dt) {
       enemy.hp -= BASE_DAMAGE * 0.3 * dt;
     }
 
-    // Контактный урон моба по игроку
+    // Контактный урон моба по игроку (Мерзлявка также накладывает замедление при касании!)
     const enemyRadius = enemy.radius !== undefined ? enemy.radius : baseStats.radius;
     const contactDmg =
       enemy.contactDamage !== undefined ? enemy.contactDamage : baseStats.contactDamage;
@@ -1080,10 +1091,13 @@ function updateGameStep(dt) {
       enemy.attackCooldown <= 0
     ) {
       damagePlayer(contactDmg);
+      if (enemy.type === 's' && state.towerId === 'ice') {
+        state.chillTimer = Math.max(state.chillTimer, 1.4);
+      }
       enemy.attackCooldown = 0.6;
     }
 
-    // Выстрел Пустотного Шипа
+    // Выстрел Стрелка ('r'): в Ледяной башне Инеевый Кристалл даёт двойной залп ледяных игл
     if (
       enemy.type === 'r' &&
       enemy.attackCooldown <= 0 &&
@@ -1092,20 +1106,24 @@ function updateGameStep(dt) {
     ) {
       enemy.attackCooldown = 1.8;
       playSound('shoot');
-      state.projectiles.push({
-        x: enemy.x,
-        y: enemy.y + ENEMY_TYPES[enemy.type].radius,
-        z: enemy.z,
-        vx: (dx / dist) * 12,
-        vz: (dz / dist) * 12,
-        lifetime: 3,
-        isHostile: 1,
-        damage: 7 * (enemy.damageMultiplier || 1)
-      });
+      const shotCount = state.towerId === 'ice' ? 2 : 1;
+      const baseA = Math.atan2(dz, dx);
+      for (let s = 0; s < shotCount; s++) {
+        const ang = baseA + (shotCount > 1 ? (s - 0.5) * 0.14 : 0);
+        state.projectiles.push({
+          x: enemy.x,
+          y: enemy.y + ENEMY_TYPES[enemy.type].radius,
+          z: enemy.z,
+          vx: Math.cos(ang) * 12,
+          vz: Math.sin(ang) * 12,
+          lifetime: 3,
+          isHostile: 1,
+          damage: 7 * (enemy.damageMultiplier || 1)
+        });
+      }
     }
   }
 
-  // Притяжение и сбор лута
   const magnetRadius =
     4.5 * (1 + 0.35 * state.tomeLevels.mag) * (state.pickupRadiusMultiplier || 1);
   const magnetRadiusSq = magnetRadius * magnetRadius;
@@ -1159,7 +1177,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Открытие сундуков
   if (!state.pauseState) {
     for (let ci = 0; ci < chests.length; ci++) {
       const chest = chests[ci];
@@ -1189,7 +1206,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Алтари пактов
   if (!state.pauseState) {
     for (let ai = 0; ai < altars.length; ai++) {
       const altar = altars[ai];
@@ -1204,7 +1220,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Смена этажа и события
   if (state.maxFloorReached > state.lastAnnouncedFloor) {
     state.lastAnnouncedFloor = state.maxFloorReached;
     onFloorEnter();
@@ -1217,7 +1232,6 @@ function updateGameStep(dt) {
     }
   }
 
-  // Взрывы бомб («Взрывная» элита, Лавовый шторм, спецспособности боссов)
   for (let i = state.activeBombs.length - 1; i >= 0; i--) {
     const bomb = state.activeBombs[i];
     bomb.timer -= dt;
@@ -1229,12 +1243,22 @@ function updateGameStep(dt) {
         bomb.y,
         bomb.z,
         bomb.radius || 4.5,
-        bomb.applyChill ? 0x60c0ff : 0xff3010
+        bomb.applyChill
+          ? 0x60d0ff
+          : state.towerId === 'void'
+            ? 0xb848ff
+            : 0xff3010
       );
     }
     if (bomb.timer <= 0) {
       playSound('boom');
-      spawnWaveRingEffect(bomb.x, bomb.y, bomb.z, (bomb.radius || 4.5) + 0.5, 0xffa040);
+      spawnWaveRingEffect(
+        bomb.x,
+        bomb.y,
+        bomb.z,
+        (bomb.radius || 4.5) + 0.5,
+        bomb.applyChill ? 0x90ecff : state.towerId === 'void' ? 0xd878ff : 0xffa040
+      );
       triggerScreenShake(0.35);
       if (
         hypot2D(player.x - bomb.x, player.z - bomb.z) < (bomb.radius || 4.5) &&
@@ -1250,7 +1274,6 @@ function updateGameStep(dt) {
 
   updateBossHazards(dt);
 
-  // Удаление убитых врагов и тихий возврат в пул отставших/затопленных лавой мобов
   for (let i = state.enemies.length - 1; i >= 0; i--) {
     const enemy = state.enemies[i];
     if (enemy.hp <= 0) {

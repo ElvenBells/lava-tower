@@ -89,8 +89,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
 }
 
 // ==================== I. ПЕПЕЛЬНАЯ БАШНЯ (ASH) ====================
-// Тёмно-багровый кирпич стен с трещинами, из которых сочится оранжевое свечение,
-// и грубый тёмный камень пола с прожилками застывшей лавы
 (function buildAshTowerTextures() {
   const size = 512;
   const wallCracks = generateCrackNetwork(size, 9, 8, 52, 64);
@@ -99,7 +97,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.fillStyle = '#18070a';
     ctx.fillRect(0, 0, sz, sz);
 
-    // Кладка тёмно-багрового камня
     const rowH = 20;
     for (let y = 0, row = 0; y < sz; y += rowH, row++) {
       let x = row % 2 ? -20 : 0;
@@ -112,7 +109,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x + 2, y + 2, brickW - 4, rowH - 4);
 
-        // Светотень фаски кирпича
         ctx.fillStyle = 'rgba(145,45,38,0.32)';
         ctx.fillRect(x + 2, y + 2, brickW - 4, 3);
         ctx.fillStyle = 'rgba(10,2,4,0.7)';
@@ -122,7 +118,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       }
     }
 
-    // Пятна копоти, гари и жара
     for (let i = 0; i < 450; i++) {
       const rx = Math.random() * sz;
       const ry = Math.random() * sz;
@@ -135,7 +130,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       ctx.fill();
     }
 
-    // Светящиеся магматические разломы поверх кладки
     for (const crack of wallCracks) {
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 11 : 6, 'rgba(16,4,4,0.88)');
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5.5 : 3.2, '#ff6810', '#ff3300', 10);
@@ -172,15 +166,12 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
   }, size, 5, 4);
 
-  // Пол Пепельной башни: крупная базальтовая порода с органическими прожилками застывшей лавы (без мелкой сетки!)
   const floorVeins = generateCrackNetwork(size, 6, 6, 75, 75);
 
   const floorMap = createProceduralTexture((ctx, sz) => {
-    // Тёмный вулканический базальт
     ctx.fillStyle = '#26181b';
     ctx.fillRect(0, 0, sz, sz);
 
-    // Органические каменные пласты и неровности породы
     for (let i = 0; i < 65; i++) {
       const rx = Math.random() * sz;
       const ry = Math.random() * sz;
@@ -194,7 +185,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       ctx.fill();
     }
 
-    // Тонкая каменная фаска по краю плиты
     ctx.strokeStyle = 'rgba(85,48,46,0.55)';
     ctx.lineWidth = 8;
     ctx.strokeRect(6, 6, sz - 12, sz - 12);
@@ -202,7 +192,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.lineWidth = 4;
     ctx.strokeRect(2, 2, sz - 4, sz - 4);
 
-    // Прожилки застывшей и тлеющей лавы
     for (const vein of floorVeins) {
       drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 9 : 5, 'rgba(16,5,6,0.9)');
       drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 4.0 : 2.2, '#d84208', '#ff4400', 8);
@@ -241,23 +230,16 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
 })();
 
 // ==================== II. ЛЕДЯНАЯ БАШНЯ (ICE) ====================
-// Стены из полупрозрачного голубого льда с вмёрзшими силуэтами монахов/воинов,
-// зеркальный пол с трещинами и инеевыми узорами
 (function buildIceTowerTextures() {
   const size = 512;
   const frostCracks = generateCrackNetwork(size, 8, 6, 62, 62);
 
-  /**
-   * Рисует готический фэнтези-силуэт вмёрзшего в лёд монаха/рыцаря Ордена Инея
-   * (остроконечный капюшон, латные наплечники, развевающийся плащ, посох/меч).
-   */
   function drawGothicFrozenFigure(ctx, cx, cy, scale, tilt, hasStaff) {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(tilt);
     ctx.scale(scale, scale);
 
-    // Глубокое морозное свечение позади фигуры в толще льда
     const halo = ctx.createRadialGradient(0, 0, 6, 0, 0, 82);
     halo.addColorStop(0, 'rgba(160,230,255,0.35)');
     halo.addColorStop(0.5, 'rgba(20,65,110,0.45)');
@@ -267,12 +249,10 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.ellipse(0, 0, 64, 92, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // Силуэт фигуры (тёмно-синий обсидиановый лёд с мягким размытием глубины)
     ctx.fillStyle = 'rgba(8,24,46,0.88)';
     ctx.shadowColor = 'rgba(120,210,255,0.6)';
     ctx.shadowBlur = 12;
 
-    // Остроконечный монашеский капюшон / шлем
     ctx.beginPath();
     ctx.moveTo(0, -74);
     ctx.lineTo(15, -52);
@@ -282,7 +262,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.closePath();
     ctx.fill();
 
-    // Массивные наплечники, плащ и торс, уходящий в ледяную толщу
     ctx.beginPath();
     ctx.moveTo(-14, -36);
     ctx.lineTo(-34, -26);
@@ -298,7 +277,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.closePath();
     ctx.fill();
 
-    // Двуручный меч или посох Ордена Инея в руках силуэта
     ctx.strokeStyle = 'rgba(12,32,58,0.92)';
     ctx.lineWidth = 4.5;
     ctx.beginPath();
@@ -313,7 +291,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
     ctx.stroke();
 
-    // Светящееся замёрзшее сердце/искра в груди и кристальные грани поверх тела
     const heart = ctx.createRadialGradient(0, -12, 1, 0, -12, 16);
     heart.addColorStop(0, 'rgba(220,250,255,0.9)');
     heart.addColorStop(0.5, 'rgba(80,190,255,0.5)');
@@ -323,7 +300,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.arc(0, -12, 16, 0, Math.PI * 2);
     ctx.fill();
 
-    // Диагональные преломляющие трещины льда поверх вмёрзшего силуэта
     ctx.strokeStyle = 'rgba(215,248,255,0.55)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -337,7 +313,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
   }
 
   const wallMap = createProceduralTexture((ctx, sz) => {
-    // Глубокий градиент ледниковой толщи
     const bg = ctx.createLinearGradient(0, 0, sz, sz);
     bg.addColorStop(0, '#163d66');
     bg.addColorStop(0.4, '#265f96');
@@ -346,7 +321,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, sz, sz);
 
-    // Диагональные кристаллические пласты и преломления света во льду
     for (let i = 0; i < 32; i++) {
       ctx.save();
       ctx.translate(Math.random() * sz, Math.random() * sz);
@@ -363,12 +337,10 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       ctx.restore();
     }
 
-    // Вмёрзшие в толщу льда силуэты монахов и стражей
     drawGothicFrozenFigure(ctx, 115, 165, 0.95, -0.06, true);
     drawGothicFrozenFigure(ctx, 375, 145, 0.88, 0.05, false);
     drawGothicFrozenFigure(ctx, 245, 395, 0.92, -0.04, false);
 
-    // Морозные трещины и инеевые прожилки
     for (const crack of frostCracks) {
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5.5 : 3.0, 'rgba(135,215,255,0.6)', '#70d8ff', 8);
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.8 : 1.0, '#f4fcff');
@@ -404,7 +376,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
   }, size, 4, 3);
 
-  // Пол Ледяной башни: гладкий как зеркало бледно-голубой лёд с крупным инеевым узором и трещинами (1×1 на плиту)
   const floorCracks = generateCrackNetwork(size, 5, 5, 80, 80);
 
   const floorMap = createProceduralTexture((ctx, sz) => {
@@ -415,7 +386,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, sz, sz);
 
-    // Инеевый кристаллический узор по центру и углам плиты
     const cx = sz / 2;
     const cy = sz / 2;
     ctx.save();
@@ -441,12 +411,10 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
     ctx.restore();
 
-    // Кромка ледяной плиты
     ctx.strokeStyle = 'rgba(235,250,255,0.75)';
     ctx.lineWidth = 6;
     ctx.strokeRect(8, 8, sz - 16, sz - 16);
 
-    // Трещины во льду, из которых сочится холодный туман
     for (const crack of floorCracks) {
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 6 : 3.5, 'rgba(30,85,140,0.65)');
       drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 2.2 : 1.2, '#ffffff', '#a8e8ff', 8);
@@ -478,7 +446,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
 })();
 
 // ==================== III. БАШНЯ ПУСТОТЫ (VOID) ====================
-// Тёмно-фиолетовый камень со светящимися рунами и тёмный, почти чёрный пол со звёздной пылью
 (function buildVoidTowerTextures() {
   const size = 512;
   const voidRifts = generateCrackNetwork(size, 7, 6, 65, 65);
@@ -537,7 +504,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     ctx.fillStyle = '#0a0414';
     ctx.fillRect(0, 0, sz, sz);
 
-    // Кладка тёмно-фиолетового камня
     const rowH = 24;
     for (let y = 0, row = 0; y < sz; y += rowH, row++) {
       let x = row % 2 ? -24 : 0;
@@ -556,7 +522,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       }
     }
 
-    // Высеченные в отдельных камнях светящиеся руны (разбросаны по кладке и вертикальным фризам)
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const colX of [96, 352]) {
@@ -576,7 +541,6 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
     ctx.shadowBlur = 0;
 
-    // Разломы пространства, из которых сочится тьма и фиолетовое сияние
     for (const rift of voidRifts) {
       drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 8 : 4.5, '#030008');
       drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 3.5 : 2.0, '#b040ff', '#9020ff', 10);
@@ -624,14 +588,12 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
     }
   }, size, 4, 3);
 
-  // Пол Башни Пустоты: почти чёрный обсидиан с туманностями, звёздной пылью и разломами (без мелкой сетки!)
   const floorRifts = generateCrackNetwork(size, 5, 5, 78, 78);
 
   const floorMap = createProceduralTexture((ctx, sz) => {
     ctx.fillStyle = '#080311';
     ctx.fillRect(0, 0, sz, sz);
 
-    // Глубокие космические туманности внутри чёрного камня
     for (let i = 0; i < 38; i++) {
       const rx = Math.random() * sz;
       const ry = Math.random() * sz;
@@ -645,19 +607,16 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       ctx.fill();
     }
 
-    // Тонкая рунная окантовка по краю 4×4м плиты
     ctx.strokeStyle = 'rgba(145,65,235,0.45)';
     ctx.lineWidth = 5;
     ctx.strokeRect(6, 6, sz - 12, sz - 12);
 
-    // Трещины-разломы пустоты в полу
     for (const rift of floorRifts) {
       drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 6 : 3.5, '#020005');
       drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 2.6 : 1.5, '#a838ff', '#8820e0', 8);
       drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 1.0 : 0.6, '#ecc8ff');
     }
 
-    // Россыпь звёздной пыли в толще чёрного камня
     for (let i = 0; i < 240; i++) {
       const sx = Math.random() * sz;
       const sy = Math.random() * sz;
@@ -704,13 +663,11 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
   TOWER_FLOOR_TEXTURES.void = { map: floorMap, bump: floorBump, emissive: floorEmissive };
 })();
 
-// Обратная совместимость для базовых ссылок
 const brickTexture = TOWER_WALL_TEXTURES.ash.map;
 const stoneTexture = TOWER_FLOOR_TEXTURES.ash.map;
 
 /* ---------- 2. Поверхности угроз снизу (Лава / Метель / Бездна) ---------- */
 
-// Бурлящее море магмы с корками остывающего базальта (Пепельная башня)
 const lavaTexture = createProceduralTexture((ctx, size) => {
   const bg = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size * 0.7);
   bg.addColorStop(0, '#ff8800');
@@ -741,7 +698,6 @@ const lavaTexture = createProceduralTexture((ctx, size) => {
   }
 }, 512, 5, 5);
 
-// Бездонная вихревая метель (Ледяная башня)
 const iceLavaTexture = createProceduralTexture((ctx, size) => {
   ctx.fillStyle = '#3578b0';
   ctx.fillRect(0, 0, size, size);
@@ -773,7 +729,6 @@ const iceLavaTexture = createProceduralTexture((ctx, size) => {
   }
 }, 512, 4, 4);
 
-// Космическая Бездна с далёкими звёздами и гравитационными сполохами (Башня Пустоты)
 const voidLavaTexture = createProceduralTexture((ctx, size) => {
   ctx.fillStyle = '#05010d';
   ctx.fillRect(0, 0, size, size);
@@ -835,6 +790,156 @@ TEXTURES.ogarekCore = createProceduralTexture((ctx, size) => {
     ctx.fill();
   }
 }, 128);
+
+TEXTURES.iceCore = createProceduralTexture((ctx, size) => {
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.35, '#8ee8ff');
+  grad.addColorStop(0.75, '#1b88d8');
+  grad.addColorStop(1, '#083260');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = '#e8fbff';
+  ctx.shadowColor = '#60d8ff';
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 18; i++) {
+    let x = Math.random() * size;
+    let y = Math.random() * size;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    for (let k = 0; k < 3; k++) {
+      x += (Math.random() - 0.5) * 55;
+      y += (Math.random() - 0.5) * 55;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}, 128);
+
+TEXTURES.voidStarSkin = createProceduralTexture((ctx, size) => {
+  ctx.fillStyle = '#05020e';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 24; i++) {
+    const gx = Math.random() * size;
+    const gy = Math.random() * size;
+    const r = 14 + Math.random() * 38;
+    const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, r);
+    g.addColorStop(0, i % 2 ? 'rgba(120,40,220,0.45)' : 'rgba(40,80,190,0.38)');
+    g.addColorStop(1, 'rgba(5,2,14,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(gx, gy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < 140; i++) {
+    const sx = Math.random() * size;
+    const sy = Math.random() * size;
+    const sr = 0.7 + Math.random() * 1.9;
+    ctx.fillStyle = i % 3 === 0 ? '#ffffff' : i % 2 === 0 ? '#d8a8ff' : '#88e0ff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}, 256, 2, 2);
+
+TEXTURES.architectBlueprint = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 256;
+  const ctx = texCanvas.getContext('2d');
+  ctx.fillStyle = 'rgba(28, 6, 56, 0.38)';
+  ctx.fillRect(0, 0, 256, 256);
+
+  ctx.strokeStyle = 'rgba(215, 130, 255, 0.92)';
+  ctx.shadowColor = '#b448ff';
+  ctx.shadowBlur = 8;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(10, 10, 236, 236);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(20, 20, 216, 216);
+
+  // Координатная сетка и невозможная геометрия
+  ctx.strokeStyle = 'rgba(180, 95, 255, 0.45)';
+  ctx.lineWidth = 1;
+  for (let g = 40; g < 256; g += 36) {
+    ctx.beginPath();
+    ctx.moveTo(g, 20);
+    ctx.lineTo(g, 236);
+    ctx.moveTo(20, g);
+    ctx.lineTo(236, g);
+    ctx.stroke();
+  }
+
+  // Треугольник, концентрические круги и руны
+  ctx.strokeStyle = '#f2d4ff';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.arc(128, 128, 76, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(128, 128, 44, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(128, 42);
+  ctx.lineTo(202, 174);
+  ctx.lineTo(54, 174);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(128, 214);
+  ctx.lineTo(202, 82);
+  ctx.lineTo(54, 82);
+  ctx.closePath();
+  ctx.stroke();
+
+  return new THREE.CanvasTexture(texCanvas);
+})();
+
+TEXTURES.frostWeb = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  ctx.clearRect(0, 0, 512, 512);
+  ctx.strokeStyle = 'rgba(210, 245, 255, 0.88)';
+  ctx.shadowColor = '#68d8ff';
+  ctx.shadowBlur = 10;
+
+  const cx = 256;
+  const cy = 256;
+  // Радиальные нити паутины
+  ctx.lineWidth = 2.2;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(a) * 245, cy + Math.sin(a) * 245);
+    ctx.stroke();
+  }
+  // Концентрические провисающие нити
+  ctx.lineWidth = 1.8;
+  for (const r of [48, 92, 138, 184, 228]) {
+    ctx.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a0 = ((i - 1) / 16) * Math.PI * 2;
+      const a1 = (i / 16) * Math.PI * 2;
+      const am = (a0 + a1) * 0.5;
+      const x1 = cx + Math.cos(a1) * r;
+      const y1 = cy + Math.sin(a1) * r;
+      if (i === 0) {
+        ctx.moveTo(x1, y1);
+      } else {
+        const xm = cx + Math.cos(am) * (r * 0.91);
+        const ym = cy + Math.sin(am) * (r * 0.91);
+        ctx.quadraticCurveTo(xm, ym, x1, y1);
+      }
+    }
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(texCanvas);
+})();
 
 TEXTURES.glowWarm = createProceduralTexture((ctx, size) => {
   const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
@@ -981,6 +1086,48 @@ TEXTURES.guardCrack = (() => {
   return new THREE.CanvasTexture(texCanvas);
 })();
 
+TEXTURES.iceCrack = (() => {
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = texCanvas.height = 256;
+  const ctx = texCanvas.getContext('2d');
+  ctx.clearRect(0, 0, 256, 256);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const paths = [];
+  for (let m = 0; m < 4; m++) {
+    const points = [];
+    let x = 128 + (Math.random() - 0.5) * 60;
+    let y = 20 + Math.random() * 40;
+    points.push([x, y]);
+    for (let k = 0; k < 6; k++) {
+      x += (Math.random() - 0.5) * 70;
+      y += 30 + Math.random() * 25;
+      points.push([x, y]);
+    }
+    paths.push(points);
+  }
+
+  for (const [lw, col, blur] of [
+    [7, 'rgba(80,205,255,0.85)', 16],
+    [2.2, '#ffffff', 6]
+  ]) {
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = col;
+    ctx.shadowColor = '#38b8ff';
+    ctx.shadowBlur = blur;
+    for (const points of paths) {
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i][0], points[i][1]);
+      }
+      ctx.stroke();
+    }
+  }
+  return new THREE.CanvasTexture(texCanvas);
+})();
+
 TEXTURES.leaperLava = createProceduralTexture((ctx, size) => {
   ctx.fillStyle = '#9a1800';
   ctx.fillRect(0, 0, size, size);
@@ -1073,12 +1220,12 @@ TEXTURES.golemFloor = (() => {
       points.push([256 + Math.cos(angle) * radius, 256 + Math.sin(angle) * radius]);
     }
     for (const [lineWidth, color, blur] of [
-      [7, 'rgba(255,80,10,0.85)', 16],
-      [2.4, '#ffd8b0', 6]
+      [7, 'rgba(255,220,180,0.85)', 16],
+      [2.4, '#ffffff', 6]
     ]) {
       ctx.lineWidth = lineWidth;
       ctx.strokeStyle = color;
-      ctx.shadowColor = '#ff5500';
+      ctx.shadowColor = '#ffffff';
       ctx.shadowBlur = blur;
       ctx.beginPath();
       ctx.moveTo(points[0][0], points[0][1]);
@@ -1096,8 +1243,8 @@ TEXTURES.wombRune = (() => {
   texCanvas.width = texCanvas.height = 512;
   const ctx = texCanvas.getContext('2d');
   ctx.clearRect(0, 0, 512, 512);
-  ctx.strokeStyle = 'rgba(200,130,255,0.85)';
-  ctx.shadowColor = '#a040ff';
+  ctx.strokeStyle = 'rgba(235,215,255,0.9)';
+  ctx.shadowColor = '#ffffff';
   ctx.shadowBlur = 14;
 
   for (const radius of [120, 150, 205]) {

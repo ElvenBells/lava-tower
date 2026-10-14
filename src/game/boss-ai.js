@@ -1,6 +1,8 @@
 /* ==========================================================================
-   ИИ, опасные зоны и визуальная анимация трёх боссов:
-   Голем Пепельных Врат ('golem'), Кристальная Матка ('womb'), Лавовый Колосс ('koloss')
+   ИИ, уникальные навыки, опасные зоны и 3D-анимация 9 боссов трёх башен:
+   - Пепельная башня ('ash'): Голем Пепельных Врат, Кристальная Матка, Лавовый Колосс
+   - Ледяная башня ('ice'): Хранитель Забытых Обрядов, Изувеченная Снежная Пряха, Первозданный Буран
+   - Башня Пустоты ('void'): Архитектор Искажения, Пожиратель Фаз, Вестник Коллапса
    ========================================================================== */
 
 const KOLOSS_DRIP_ANCHORS = [
@@ -32,9 +34,6 @@ const KOLOSS_VENTS = [
 
 const _bossWorldCoords = [0, 0, 0];
 
-/**
- * Переводит локальные координаты точки босса в мировые (с учётом поворота и масштаба).
- */
 function bossLocalToWorld(boss, lx, ly, lz, outCoords) {
   const cosYaw = Math.cos(boss.facingYaw);
   const sinYaw = Math.sin(boss.facingYaw);
@@ -45,9 +44,6 @@ function bossLocalToWorld(boss, lx, ly, lz, outCoords) {
   return outCoords;
 }
 
-/**
- * Полный сброс всех активных эффектов и зон боссов (при старте/завершении забега).
- */
 function resetBossEffects() {
   for (const ring of bossRings) {
     ring.active = 0;
@@ -114,9 +110,6 @@ function resetBossEffects() {
   }
 }
 
-/**
- * Обновляет опасные зоны боссов (ударные кольца, секторные волны, гейзеры) в физическом шаге.
- */
 function updateBossHazards(dt) {
   const player = state.player;
   const airHeight = player.y - player.lastGroundY;
@@ -135,6 +128,7 @@ function updateBossHazards(dt) {
         ring.hasHit = 1;
         if (ring.damage > 0 && airHeight < 0.55 && Math.abs(player.y - ring.y) < 2.6) {
           damagePlayer(ring.damage);
+          if (state.towerId === 'ice') state.chillTimer = Math.max(state.chillTimer, 2.0);
           triggerScreenShake(0.35);
         }
       }
@@ -156,6 +150,7 @@ function updateBossHazards(dt) {
         const bearing = Math.atan2(player.z - arc.z, player.x - arc.x);
         if (Math.abs(angleDiff(bearing, arc.gapAngle)) > 0.95 && Math.abs(player.y - arc.y) < 5) {
           damagePlayer(arc.damage);
+          if (state.towerId === 'ice') state.chillTimer = Math.max(state.chillTimer, 2.2);
         }
       }
     }
@@ -186,6 +181,7 @@ function updateBossHazards(dt) {
       ) {
         geyser.hasHit = 1;
         damagePlayer(16);
+        if (state.towerId === 'ice') state.chillTimer = Math.max(state.chillTimer, 2.0);
         triggerScreenShake(0.3);
       }
       if (geyser.timer > 0.6) {
@@ -193,6 +189,29 @@ function updateBossHazards(dt) {
         geyser.jet.visible = false;
       }
     }
+  }
+}
+
+/**
+ * Вспомогательная функция веерного залпа снарядов босса.
+ */
+function fireBossProjectileFan(boss, player, count, spreadAngle, speed, damage) {
+  if (state.projectiles.length >= 235) return;
+  playSound('shoot');
+  const baseAngle = Math.atan2(player.z - boss.z, player.x - boss.x);
+  for (let i = 0; i < count; i++) {
+    const offset = count === 1 ? 0 : (i / (count - 1) - 0.5) * spreadAngle;
+    const ang = baseAngle + offset;
+    state.projectiles.push({
+      x: boss.x,
+      y: player.y + 0.85,
+      z: boss.z,
+      vx: Math.cos(ang) * speed,
+      vz: Math.sin(ang) * speed,
+      lifetime: 3.8,
+      isHostile: 1,
+      damage
+    });
   }
 }
 
@@ -206,152 +225,16 @@ function updateBossAI(boss, dt, player, dx, dz, dist) {
   } else {
     updateKolossBoss(boss, dt, player, dx, dz, dist);
   }
-
-  if (state.towerId !== 'ash') {
-    updateTowerSpecificBossMechanics(boss, dt, player, dist);
-  }
 }
 
 /**
- * Дополнительные механики боссов в Ледяной башне и Башне Пустоты.
+ * СЛОТ 1 (Этаж 4):
+ * - 'ash': Голем Пепельных Врат (тяжёлый марш, удар кулаком, в ярости — двойной удар и раскол пола)
+ * - 'ice': Хранитель Забытых Обрядов (звон гигантского колокола с кольцами стужи, линия ледяных шпилей от посоха, шаг сквозь метель)
+ * - 'void': Архитектор Искажения (голографические чертежи-ловушки вокруг игрока, складка пространства с телепортом и секторным разломом)
  */
-function updateTowerSpecificBossMechanics(boss, dt, player, dist) {
-  if (boss.bossState === 'spawn' || boss.bossState === 'emerge' || boss.hp <= 0) return;
-
-  const isIceTower = state.towerId === 'ice';
-  const isPhase2 = boss.phase === 2;
-  const kind = boss.bkind;
-  const floorY = kind === 'womb' ? boss.wombFloorY : boss.y;
-
-  boss.towerAbilityTimer = (boss.towerAbilityTimer === undefined ? 3 : boss.towerAbilityTimer) - dt;
-
-  if (isIceTower) {
-    if (kind === 'golem') {
-      if (boss.towerAbilityTimer <= 0) {
-        boss.towerAbilityTimer = isPhase2 ? 4.2 : 6;
-        state.activeBombs.push({
-          x: player.x,
-          y: player.lastGroundY,
-          z: player.z,
-          timer: 1.4,
-          nextRingTimer: 0,
-          radius: 4.5,
-          damage: 14,
-          applyChill: 1
-        });
-      }
-    } else if (kind === 'womb') {
-      if (boss.towerAbilityTimer <= 0) {
-        boss.towerAbilityTimer = isPhase2 ? 5 : 7;
-        spawnBossArc(boss.x, floorY, boss.z, Math.atan2(player.z - boss.z, player.x - boss.x), 14);
-        for (let i = 0; i < 2; i++) {
-          state.activeBombs.push({
-            x: player.x + (Math.random() - 0.5) * 8,
-            y: player.lastGroundY,
-            z: player.z + (Math.random() - 0.5) * 8,
-            timer: 1.5 + i * 0.3,
-            nextRingTimer: 0,
-            radius: 3.6,
-            damage: 12,
-            applyChill: 1
-          });
-        }
-      }
-    } else {
-      if (boss.towerAbilityTimer <= 0) {
-        boss.towerAbilityTimer = isPhase2 ? 4 : 6.2;
-        const angleToPlayer = Math.atan2(player.z - boss.z, player.x - boss.x);
-        for (let i = 1; i <= 6; i++) {
-          state.activeBombs.push({
-            x: boss.x + Math.cos(angleToPlayer) * i * 3.4,
-            y: player.lastGroundY,
-            z: boss.z + Math.sin(angleToPlayer) * i * 3.4,
-            timer: 0.9 + i * 0.17,
-            nextRingTimer: 0,
-            radius: 2.4,
-            damage: 12,
-            applyChill: 1
-          });
-        }
-        if (isPhase2) {
-          state.activeBombs.push({
-            x: player.x,
-            y: player.lastGroundY,
-            z: player.z,
-            timer: 1.4,
-            nextRingTimer: 0,
-            radius: 4.5,
-            damage: 14,
-            applyChill: 1
-          });
-        }
-      }
-    }
-  } else {
-    // Башня Пустоты
-    if (kind === 'golem') {
-      if (boss.teleportDest) {
-        boss.teleportDest.timer -= dt;
-        if (boss.teleportDest.timer <= 0) {
-          boss.x = boss.teleportDest.x;
-          boss.z = boss.teleportDest.z;
-          boss.teleportDest = null;
-          spawnBossRing(boss.x, boss.y, boss.z, 14, 10, 13);
-          triggerScreenShake(0.4);
-          playSound('pound');
-        }
-      } else if (boss.towerAbilityTimer <= 0 && boss.bossState === 'march') {
-        boss.towerAbilityTimer = isPhase2 ? 6 : 8.5;
-        const angle = Math.random() * TWO_PI;
-        let x = player.x + Math.cos(angle) * 3;
-        let z = player.z + Math.sin(angle) * 3;
-        const radialDist = hypot2D(x, z);
-        if (radialDist > 24) {
-          x *= 24 / radialDist;
-          z *= 24 / radialDist;
-        }
-        boss.teleportDest = { x, z, timer: 1.1 };
-        state.activeBombs.push({
-          x,
-          y: player.lastGroundY,
-          z,
-          timer: 1.1,
-          nextRingTimer: 0,
-          radius: 4.2,
-          damage: 16
-        });
-      }
-    } else if (kind === 'womb') {
-      if (boss.towerAbilityTimer <= 0 && !state.vortexPull) {
-        boss.towerAbilityTimer = isPhase2 ? 7 : 9.5;
-        state.vortexPull = {
-          x: boss.x,
-          z: boss.z,
-          y: floorY,
-          timer: 2.2,
-          strength: 7,
-          spawnRingOnEnd: 1
-        };
-        playSound('summon');
-      }
-    } else {
-      if (boss.towerAbilityTimer <= 0 && !state.vortexPull) {
-        boss.towerAbilityTimer = isPhase2 ? 6.5 : 8.5;
-        state.vortexPull = {
-          x: boss.x,
-          z: boss.z,
-          y: floorY,
-          timer: 2.5,
-          strength: 6.5,
-          spawnBombsOnEnd: 1
-        };
-        playSound('summon');
-      }
-    }
-  }
-}
-
 function updateGolemBoss(boss, dt, player, dx, dz, dist) {
+  const towerId = state.towerId || 'ash';
   const isPhase2 = boss.phase === 2;
   boss.bossTimer += dt;
   boss.facingYaw = Math.atan2(dx, dz);
@@ -366,13 +249,38 @@ function updateGolemBoss(boss, dt, player, dx, dz, dist) {
     boss.bossSpeedMul = 1.35;
     playSound('roar');
     triggerScreenShake(0.5);
-    triggerScreenFlash('radial-gradient(circle, rgba(255,120,40,.35) 0%, transparent 70%)');
+    const flashGrad =
+      towerId === 'ice'
+        ? 'radial-gradient(circle, rgba(90,210,255,.38) 0%, transparent 70%)'
+        : towerId === 'void'
+          ? 'radial-gradient(circle, rgba(190,80,255,.4) 0%, transparent 70%)'
+          : 'radial-gradient(circle, rgba(255,120,40,.35) 0%, transparent 70%)';
+    triggerScreenFlash(flashGrad);
     return;
   }
 
-  const windupDuration = isPhase2 ? 0.45 : 0.7;
+  // Перемещение по телепорту (для Хранителя во 2-й фазе и Архитектора Искажения)
+  if (boss.teleportDest) {
+    boss.teleportDest.timer -= dt;
+    if (boss.teleportDest.timer <= 0) {
+      const oldX = boss.x;
+      const oldZ = boss.z;
+      boss.x = boss.teleportDest.x;
+      boss.z = boss.teleportDest.z;
+      boss.teleportDest = null;
+      spawnWaveRingEffect(oldX, boss.y + 0.5, oldZ, 2.2, towerId === 'ice' ? 0x80e8ff : 0xc868ff);
+      spawnBossRing(boss.x, boss.y, boss.z, 15, 10, 15);
+      if (towerId === 'void') {
+        fireBossProjectileFan(boss, player, 4, Math.PI * 0.85, 11, 10);
+      }
+      triggerScreenShake(0.4);
+      playSound('pound');
+    }
+  }
+
+  const windupDuration = isPhase2 ? 0.45 : 0.68;
   const slamDuration = isPhase2 ? 0.25 : 0.35;
-  const recoverDuration = isPhase2 ? 0.6 : 0.95;
+  const recoverDuration = isPhase2 ? 0.58 : 0.92;
 
   if (boss.bossState === 'spawn') {
     boss.isMoving = 0;
@@ -382,7 +290,7 @@ function updateGolemBoss(boss, dt, player, dx, dz, dist) {
     }
   } else if (boss.bossState === 'march') {
     boss.isMoving = 1;
-    boss.marchTimer += dt * (isPhase2 ? 1.5 : 0.9);
+    boss.marchTimer += dt * (isPhase2 ? 1.5 : 0.95);
     const swing = Math.sin(boss.marchTimer * Math.PI * 2);
     if (boss.prevSwing * swing < 0 && Math.abs(swing - boss.prevSwing) < 1 && dist < 45) {
       const side = swing > 0 ? -0.65 : 0.65;
@@ -398,11 +306,55 @@ function updateGolemBoss(boss, dt, player, dx, dz, dist) {
     }
     boss.prevSwing = swing;
 
-    if (boss.bossTimer > (isPhase2 ? 1.5 : 2.7) && dist < 13.5) {
+    const triggerRange = towerId === 'ash' ? 13.5 : 19.5;
+    const cd = isPhase2 ? 1.45 : 2.5;
+    if (boss.bossTimer > cd && dist < triggerRange) {
       boss.bossState = 'windup';
       boss.bossTimer = 0;
       boss.attackCount++;
-      boss.nextAttack = isPhase2 && boss.attackCount % 2 === 0 ? 'pound' : 'fist';
+
+      if (towerId === 'ice') {
+        // Хранитель Забытых Обрядов чередует Похоронный Звон колокола и Шпили Покаяния от посоха
+        boss.nextAttack = boss.attackCount % 2 === 1 ? 'bellToll' : 'staffLine';
+        if (isPhase2 && boss.attackCount % 3 === 0) {
+          // Шаг сквозь метель к игроку перед ударом колокола
+          const ang = Math.random() * TWO_PI;
+          let tx = player.x + Math.cos(ang) * 4.5;
+          let tz = player.z + Math.sin(ang) * 4.5;
+          const rad = hypot2D(tx, tz);
+          if (rad > 24) {
+            tx *= 24 / rad;
+            tz *= 24 / rad;
+          }
+          boss.teleportDest = { x: tx, z: tz, timer: 0.35 };
+        }
+      } else if (towerId === 'void') {
+        // Архитектор Искажения чередует Чертежи Аннигиляции и Складку Пространства
+        boss.nextAttack = boss.attackCount % 2 === 1 ? 'blueprintGrid' : 'spatialFold';
+        if (boss.nextAttack === 'spatialFold') {
+          // Оставляет бомбу на старом месте и готовит телепорт к игроку
+          state.activeBombs.push({
+            x: boss.x,
+            y: player.lastGroundY,
+            z: boss.z,
+            timer: 1.0,
+            nextRingTimer: 0,
+            radius: 3.8,
+            damage: 15
+          });
+          const ang = Math.atan2(player.z - boss.z, player.x - boss.x) + (Math.random() - 0.5) * 1.4;
+          let tx = player.x - Math.cos(ang) * 5.0;
+          let tz = player.z - Math.sin(ang) * 5.0;
+          const rad = hypot2D(tx, tz);
+          if (rad > 24) {
+            tx *= 24 / rad;
+            tz *= 24 / rad;
+          }
+          boss.teleportDest = { x: tx, z: tz, timer: 0.42 };
+        }
+      } else {
+        boss.nextAttack = isPhase2 && boss.attackCount % 2 === 0 ? 'pound' : 'fist';
+      }
     }
   } else if (boss.bossState === 'windup') {
     boss.isMoving = 0;
@@ -415,32 +367,138 @@ function updateGolemBoss(boss, dt, player, dx, dz, dist) {
     boss.isMoving = 0;
     if (!boss.impactDone && boss.bossTimer > 0.12) {
       boss.impactDone = 1;
-      if (boss.nextAttack === 'pound') {
-        spawnBossRing(boss.x, boss.y, boss.z, 16, 10, 17);
-        if (isPhase2) boss.pendingRingTimer = 0.26;
-        if (dist < 50) {
-          spawnSlagBurst(boss.x, boss.y, boss.z, 12, 1.4);
-          spawnSparkBurst(boss.x, boss.y + 0.2, boss.z, 28, 'land');
-          spawnSmokePuff(boss.x, boss.y + 0.1, boss.z, 14);
+
+      if (towerId === 'ice') {
+        // ХРАНИТЕЛЬ ЗАБЫТЫХ ОБРЯДОВ
+        if (boss.nextAttack === 'bellToll') {
+          // Удар в гигантский Ритуальный Колокол: звуковая ледяная волна + морозные печати вокруг игрока
+          spawnBossRing(boss.x, boss.y, boss.z, 16, 11, 18);
+          if (isPhase2) {
+            boss.pendingRingTimer = 0.28;
+            spawnBossArc(boss.x, boss.y, boss.z, boss.facingYaw, 15);
+          }
+          const sealCount = isPhase2 ? 3 : 2;
+          for (let i = 0; i < sealCount; i++) {
+            const a = (i / sealCount) * TWO_PI + boss.facingYaw;
+            const r = i === 0 ? 0 : 4.2;
+            state.activeBombs.push({
+              x: player.x + Math.cos(a) * r,
+              y: player.lastGroundY,
+              z: player.z + Math.sin(a) * r,
+              timer: 1.15 + i * 0.2,
+              nextRingTimer: 0,
+              radius: 3.8,
+              damage: 14,
+              applyChill: 1
+            });
+          }
+          spawnSparkBurst(boss.x, boss.y + 1.8, boss.z, 26, 'land');
+          boss.flare = 1.5;
+          boss.shake = 0.22;
+          boss.floorFlare = 1;
+          playSound('pound');
+          triggerScreenShake(0.5);
+        } else {
+          // Удар Посохом Обряда: линия ледяных шпилей к игроку + веер ледяных снарядов
+          const ang = Math.atan2(player.z - boss.z, player.x - boss.x);
+          const spikeCount = isPhase2 ? 6 : 4;
+          for (let i = 1; i <= spikeCount; i++) {
+            state.activeBombs.push({
+              x: boss.x + Math.cos(ang) * i * 3.4,
+              y: player.lastGroundY,
+              z: boss.z + Math.sin(ang) * i * 3.4,
+              timer: 0.55 + i * 0.16,
+              nextRingTimer: 0,
+              radius: 2.6,
+              damage: 13,
+              applyChill: 1
+            });
+          }
+          fireBossProjectileFan(boss, player, isPhase2 ? 5 : 3, 0.65, 11.5, 10);
+          boss.flare = 1.2;
+          boss.shake = 0.16;
+          playSound('boom');
+          triggerScreenShake(0.35);
         }
-        boss.flare = 1.5;
-        boss.shake = 0.26;
-        boss.floorFlare = 1;
-        playSound('pound');
-        triggerScreenShake(0.55);
+      } else if (towerId === 'void') {
+        // АРХИТЕКТОР ИСКАЖЕНИЯ
+        if (boss.nextAttack === 'blueprintGrid') {
+          // Проекция геометрического чертежа (треугольник / пентаграмма рунных зон вокруг игрока)
+          const vertCount = isPhase2 ? 5 : 3;
+          for (let i = 0; i < vertCount; i++) {
+            const a = (i / vertCount) * TWO_PI + state.elapsedTime;
+            const r = 4.2;
+            let bx = player.x + Math.cos(a) * r;
+            let bz = player.z + Math.sin(a) * r;
+            const rad = hypot2D(bx, bz);
+            if (rad > 25) {
+              bx *= 25 / rad;
+              bz *= 25 / rad;
+            }
+            state.activeBombs.push({
+              x: bx,
+              y: player.lastGroundY,
+              z: bz,
+              timer: 1.05 + i * 0.12,
+              nextRingTimer: 0,
+              radius: 3.6,
+              damage: 15
+            });
+          }
+          fireBossProjectileFan(boss, player, isPhase2 ? 5 : 3, 0.72, 12, 11);
+          if (isPhase2 && !state.vortexPull) {
+            state.vortexPull = {
+              x: player.x,
+              z: player.z,
+              y: player.lastGroundY,
+              timer: 1.6,
+              strength: 5.5,
+              spawnRingOnEnd: 1
+            };
+          }
+          boss.flare = 1.45;
+          boss.floorFlare = 1;
+          playSound('summon');
+          triggerScreenShake(0.35);
+        } else {
+          // Удар посохом после Складки Пространства: секторный луч искажения + ударное кольцо
+          spawnBossRing(boss.x, boss.y, boss.z, 16, 10, 16);
+          spawnBossArc(boss.x, boss.y, boss.z, boss.facingYaw, 16);
+          if (isPhase2) boss.pendingRingTimer = 0.26;
+          boss.flare = 1.5;
+          boss.shake = 0.2;
+          playSound('boom');
+          triggerScreenShake(0.45);
+        }
       } else {
-        const fistX = boss.x + Math.sin(boss.facingYaw) * 2.9 * boss.bossScale;
-        const fistZ = boss.z + Math.cos(boss.facingYaw) * 2.9 * boss.bossScale;
-        spawnBossRing(fistX, boss.y, fistZ, 16, 9, 15);
-        if (dist < 50) {
-          spawnSlagBurst(fistX, boss.y, fistZ, 7, 1.2);
-          spawnSparkBurst(fistX, boss.y + 0.2, fistZ, 22, 'land');
-          spawnSmokePuff(fistX, boss.y + 0.1, fistZ, 10);
+        // ПЕПЕЛЬНАЯ БАШНЯ — ГОЛЕМ ПЕПЕЛЬНЫХ ВРАТ (оригинальные навыки)
+        if (boss.nextAttack === 'pound') {
+          spawnBossRing(boss.x, boss.y, boss.z, 16, 10, 17);
+          if (isPhase2) boss.pendingRingTimer = 0.26;
+          if (dist < 50) {
+            spawnSlagBurst(boss.x, boss.y, boss.z, 12, 1.4);
+            spawnSparkBurst(boss.x, boss.y + 0.2, boss.z, 28, 'land');
+            spawnSmokePuff(boss.x, boss.y + 0.1, boss.z, 14);
+          }
+          boss.flare = 1.5;
+          boss.shake = 0.26;
+          boss.floorFlare = 1;
+          playSound('pound');
+          triggerScreenShake(0.55);
+        } else {
+          const fistX = boss.x + Math.sin(boss.facingYaw) * 2.9 * boss.bossScale;
+          const fistZ = boss.z + Math.cos(boss.facingYaw) * 2.9 * boss.bossScale;
+          spawnBossRing(fistX, boss.y, fistZ, 16, 9, 15);
+          if (dist < 50) {
+            spawnSlagBurst(fistX, boss.y, fistZ, 7, 1.2);
+            spawnSparkBurst(fistX, boss.y + 0.2, fistZ, 22, 'land');
+            spawnSmokePuff(fistX, boss.y + 0.1, fistZ, 10);
+          }
+          boss.flare = 1;
+          boss.shake = 0.16;
+          playSound('boom');
+          triggerScreenShake(0.4);
         }
-        boss.flare = 1;
-        boss.shake = 0.16;
-        playSound('boom');
-        triggerScreenShake(0.4);
       }
     }
     if (boss.bossTimer > slamDuration) {
@@ -494,9 +552,17 @@ function updateGolemBoss(boss, dt, player, dx, dz, dist) {
   }
 }
 
+/**
+ * СЛОТ 2 (Этаж 8):
+ * - 'ash': Кристальная Матка (призыв из рунных кругов под щитом, обстрел сферами и молниями, окно уязвимости ×2)
+ * - 'ice': Изувеченная Снежная Пряха (активное движение на паучьих лапах, веер ледяных веретён, секторная паутина и стягивание нитью)
+ * - 'void': Пожиратель Фаз (фазовый панцирь, сдвоенные залпы теневых фантомов, фазовый рывок с рассечением косами и воронкой)
+ */
 function updateWombBoss(boss, dt, player, dx, dz, dist) {
+  const towerId = state.towerId || 'ash';
   boss.bossTimer += dt;
   const isPhase2 = boss.phase === 2;
+  boss.facingYaw = Math.atan2(dx, dz);
 
   if (!isPhase2 && boss.hp <= boss.maxHp * 0.5) {
     boss.phase = 2;
@@ -504,14 +570,27 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
     playSound('roar');
     triggerScreenShake(0.35);
     if (dist < 50) {
-      spawnWaveRingEffect(boss.x, boss.y, boss.z, 3, 0xc090ff);
+      spawnWaveRingEffect(
+        boss.x,
+        boss.y,
+        boss.z,
+        3.2,
+        towerId === 'ice' ? 0x80e8ff : 0xc090ff
+      );
     }
   }
 
-  boss.isMoving = dist > 30 ? 1 : 0;
-  boss.y = boss.baseY + Math.sin(state.elapsedTime * 1.2) * 0.18;
+  // Пряха и Пожиратель Фаз двигаются активнее Кристальной Матки
+  if (towerId === 'ice' || towerId === 'void') {
+    boss.isMoving = dist > 10.5 ? 1 : 0;
+  } else {
+    boss.isMoving = dist > 30 ? 1 : 0;
+  }
 
-  const summonDuration = isPhase2 ? 4.6 : 6.0;
+  const hoverAmp = towerId === 'ice' ? 0.08 : 0.22;
+  boss.y = boss.baseY + Math.sin(state.elapsedTime * 1.4) * hoverAmp;
+
+  const summonDuration = isPhase2 ? 4.8 : 6.0;
   const rechargeDuration = isPhase2 ? 3.8 : 3.4;
 
   if (boss.bossState === 'spawn') {
@@ -519,19 +598,21 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
       boss.bossState = 'summon';
       boss.bossTimer = 0;
       boss.summonTimer = 0.4;
+      boss.specialSkillTimer = 2.6;
       placeSummonRings(boss);
     }
   } else if (boss.bossState === 'summon') {
+    // Призыв миньонов соответствующей башни из 4 кругов
     boss.summonTimer -= dt;
     if (boss.summonTimer <= 0) {
-      boss.summonTimer = isPhase2 ? 0.55 : 0.75;
+      boss.summonTimer = isPhase2 ? 0.6 : 0.8;
       let summonedMinions = 0;
       for (const other of state.enemies) {
         if (other.fromWomb) summonedMinions++;
       }
-      if (summonedMinions < (isPhase2 ? 9 : 7) && state.enemies.length < 200) {
+      if (summonedMinions < (isPhase2 ? 8 : 6) && state.enemies.length < 200) {
         const ring = summonRings[Math.floor(Math.random() * 4)];
-        const minionType = Math.random() < 0.5 ? 's' : 'r';
+        const minionType = Math.random() < 0.55 ? 's' : 'r';
         spawnEnemy(
           minionType,
           ring.x + (Math.random() - 0.5) * 1.2,
@@ -541,11 +622,18 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
         state.enemies[state.enemies.length - 1].fromWomb = 1;
         playSound('summon');
         if (dist < 50) {
-          spawnWaveRingEffect(ring.x, ring.y + 0.4, ring.z, 1.3, 0xc070ff);
+          spawnWaveRingEffect(
+            ring.x,
+            ring.y + 0.4,
+            ring.z,
+            1.3,
+            towerId === 'ice' ? 0x80e8ff : 0xc070ff
+          );
         }
       }
     }
 
+    // Электрические/морозные дуги вокруг босса
     boss.arcBoltTimer -= dt;
     if (boss.arcBoltTimer <= 0) {
       boss.arcBoltTimer = isPhase2 ? 0.4 : 0.6;
@@ -569,21 +657,87 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
       }
     }
 
+    // Дальние атаки по башням
     boss.orbTimer -= dt;
     if (boss.orbTimer <= 0 && dist < 34 && state.projectiles.length < 240) {
-      boss.orbTimer = isPhase2 ? 1.15 : 1.7;
-      playSound('shoot');
-      const safeDist = dist || 1;
-      state.projectiles.push({
-        x: boss.x,
-        y: player.y + 0.8,
-        z: boss.z,
-        vx: (dx / safeDist) * 9,
-        vz: (dz / safeDist) * 9,
-        lifetime: 4,
-        isHostile: 1,
-        damage: 9
-      });
+      if (towerId === 'ice') {
+        // ИЗУВЕЧЕННАЯ СНЕЖНАЯ ПРЯХА: веер ледяных игл-веретён
+        boss.orbTimer = isPhase2 ? 1.25 : 1.75;
+        fireBossProjectileFan(boss, player, isPhase2 ? 5 : 3, 0.55, 11.5, 9);
+      } else if (towerId === 'void') {
+        // ПОЖИРАТЕЛЬ ФАЗ: залпы из двух призрачных Теневых Фантомов по бокам
+        boss.orbTimer = isPhase2 ? 1.1 : 1.55;
+        fireBossProjectileFan(boss, player, isPhase2 ? 4 : 2, 0.42, 12.5, 10);
+      } else {
+        // КРИСТАЛЬНАЯ МАТКА: прицельная энергетическая сфера
+        boss.orbTimer = isPhase2 ? 1.15 : 1.7;
+        fireBossProjectileFan(boss, player, 1, 0, 9.5, 9);
+      }
+    }
+
+    // Уникальные спецнавыки Пряхи (Ледяная Паутина) и Пожирателя Фаз (Фазовый Рывок и Рассечение)
+    if (towerId !== 'ash') {
+      boss.specialSkillTimer = (boss.specialSkillTimer === undefined ? 2.8 : boss.specialSkillTimer) - dt;
+      if (boss.specialSkillTimer <= 0) {
+        boss.specialSkillTimer = isPhase2 ? 3.2 : 4.5;
+        const floorY = boss.wombFloorY || boss.y - 3.2;
+
+        if (towerId === 'ice') {
+          // Секторная волна морозной паутины + ледяные коконы-ловушки
+          spawnBossArc(boss.x, floorY, boss.z, boss.facingYaw, 14);
+          for (let i = 0; i < (isPhase2 ? 3 : 2); i++) {
+            state.activeBombs.push({
+              x: player.x + (Math.random() - 0.5) * 7,
+              y: player.lastGroundY,
+              z: player.z + (Math.random() - 0.5) * 7,
+              timer: 1.25 + i * 0.25,
+              nextRingTimer: 0,
+              radius: 3.5,
+              damage: 12,
+              applyChill: 1
+            });
+          }
+          if (isPhase2 && !state.vortexPull) {
+            // Натянутая нить паутины подтягивает игрока
+            state.vortexPull = {
+              x: boss.x,
+              z: boss.z,
+              y: floorY,
+              timer: 1.5,
+              strength: 5.8,
+              spawnRingOnEnd: 1
+            };
+          }
+          boss.flare = 1.2;
+          playSound('boom');
+        } else if (towerId === 'void') {
+          // Пожиратель Фаз совершает короткий фазовый скачок ближе к игроку и рассекает пространство серпами!
+          if (dist > 7) {
+            const stepDist = Math.min(6.5, dist - 5.5);
+            boss.x += (dx / dist) * stepDist;
+            boss.z += (dz / dist) * stepDist;
+            const rad = hypot2D(boss.x, boss.z);
+            if (rad > 24) {
+              boss.x *= 24 / rad;
+              boss.z *= 24 / rad;
+            }
+          }
+          spawnBossArc(boss.x, floorY, boss.z, boss.facingYaw, 16);
+          if (!state.vortexPull) {
+            state.vortexPull = {
+              x: boss.x,
+              z: boss.z,
+              y: floorY,
+              timer: 1.9,
+              strength: 6.5,
+              spawnRingOnEnd: 1
+            };
+          }
+          boss.flare = 1.35;
+          playSound('pound');
+          triggerScreenShake(0.3);
+        }
+      }
     }
 
     if (boss.bossTimer > summonDuration) {
@@ -612,7 +766,13 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
             );
           }
         }
-        spawnWaveRingEffect(boss.x, boss.y, boss.z, 2.5, 0xc090ff);
+        spawnWaveRingEffect(
+          boss.x,
+          boss.y,
+          boss.z,
+          2.5,
+          towerId === 'ice' ? 0x80e8ff : 0xc090ff
+        );
       }
     }
   } else if (boss.bossState === 'crack') {
@@ -646,7 +806,6 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
       boss.bossTimer = 0;
     }
   } else {
-    // close
     if (boss.bossTimer > 0.7) {
       boss.bossState = 'summon';
       boss.bossTimer = 0;
@@ -670,12 +829,19 @@ function updateWombBoss(boss, dt, player, dx, dz, dist) {
   if (ringsActive && boss.isMoving) {
     placeSummonRings(boss);
   }
-  wombRuneTargetOpacity = ringsActive ? 0.5 : boss.openAmount * 0.15;
+  wombRuneTargetOpacity = ringsActive ? 0.55 : boss.openAmount * 0.18;
   summonRingsTargetOpacity = ringsActive ? 0.55 : 0;
   boss.flare *= Math.exp(-dt * 3);
 }
 
+/**
+ * СЛОТ 3 (Этаж 12 — Финальные боссы):
+ * - 'ash': Лавовый Колосс (удары кулаком, секторные волны, огненные гейзеры, ярость лавы и истощение ×2)
+ * - 'ice': Первозданный Буран (ледниковый раскол со шпилями, двойной буран с веером копий, град обломков, око бурана)
+ * - 'void': Вестник Коллапса (хватка звёздных рук, разрез горизонта событий, гравитационный коллапс с воронкой и гейзерами антиматерии)
+ */
 function updateKolossBoss(boss, dt, player, dx, dz, dist) {
+  const towerId = state.towerId || 'ash';
   boss.bossTimer += dt;
   const isPhase2 = boss.phase === 2;
   boss.facingYaw = Math.atan2(dx, dz);
@@ -692,15 +858,21 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       boss.bossSpeedMul = 1.3;
     }
     playSound('roar');
-    triggerScreenFlash('radial-gradient(circle, rgba(255,90,20,.4) 0%, transparent 75%)');
+    const flashGrad =
+      towerId === 'ice'
+        ? 'radial-gradient(circle, rgba(100,220,255,.42) 0%, transparent 75%)'
+        : towerId === 'void'
+          ? 'radial-gradient(circle, rgba(185,65,255,.45) 0%, transparent 75%)'
+          : 'radial-gradient(circle, rgba(255,90,20,.4) 0%, transparent 75%)';
+    triggerScreenFlash(flashGrad);
   }
 
-  boss.flowMultiplier += ((boss.isFury ? 1.3 : 1) - boss.flowMultiplier) * Math.min(1, dt * 2);
+  boss.flowMultiplier += ((boss.isFury ? 1.35 : 1) - boss.flowMultiplier) * Math.min(1, dt * 2);
 
-  const idleDuration = isPhase2 ? 1.5 : 2.2;
-  const windSlamDuration = isPhase2 ? 0.5 : 0.7;
-  const windSweepDuration = isPhase2 ? 0.45 : 0.6;
-  const recoverDuration = isPhase2 ? 0.6 : 0.95;
+  const idleDuration = isPhase2 ? 1.45 : 2.15;
+  const windSlamDuration = isPhase2 ? 0.48 : 0.68;
+  const windSweepDuration = isPhase2 ? 0.44 : 0.58;
+  const recoverDuration = isPhase2 ? 0.58 : 0.92;
 
   if (boss.bossState === 'emerge') {
     boss.isMoving = 0;
@@ -724,17 +896,19 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
     if (boss.barrageShotsLeft > 0) {
       boss.barrageShotCooldown -= dt;
       if (boss.barrageShotCooldown <= 0 && state.projectiles.length < 240) {
-        boss.barrageShotCooldown = 0.22;
+        boss.barrageShotCooldown = 0.2;
         boss.barrageShotsLeft--;
         playSound('shoot');
         const safeDist = dist || 1;
+        const spread = (boss.barrageShotsLeft - 1) * 0.14;
+        const baseA = Math.atan2(dz, dx) + spread;
         state.projectiles.push({
           x: boss.x,
-          y: player.y + 0.8,
+          y: player.y + 0.85,
           z: boss.z,
-          vx: (dx / safeDist) * 13,
-          vz: (dz / safeDist) * 13,
-          lifetime: 3,
+          vx: Math.cos(baseA) * 13.5,
+          vz: Math.sin(baseA) * 13.5,
+          lifetime: 3.2,
           isHostile: 1,
           damage: 11
         });
@@ -745,10 +919,10 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       }
     } else {
       boss.barrageTimer -= dt;
-      if (isPhase2 && boss.barrageTimer <= 0 && dist < 34) {
-        boss.barrageShotsLeft = 3;
+      if ((isPhase2 || towerId !== 'ash') && boss.barrageTimer <= 0 && dist < 34) {
+        boss.barrageShotsLeft = isPhase2 ? 4 : 2;
         boss.barrageShotCooldown = 0;
-        boss.barrageTimer = 6.5 + Math.random() * 3;
+        boss.barrageTimer = isPhase2 ? 5.2 + Math.random() * 2.5 : 7.0;
       }
     }
 
@@ -756,14 +930,16 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       boss.attackCount++;
       const roll = Math.random();
       boss.nextAttack = isPhase2
-        ? roll < 0.4
+        ? roll < 0.38
           ? 'slam'
-          : roll < 0.72
+          : roll < 0.70
             ? 'sweep'
             : 'geysers'
-        : roll < 0.6
+        : roll < 0.52
           ? 'slam'
-          : 'sweep';
+          : roll < 0.85
+            ? 'sweep'
+            : 'geysers';
       boss.bossState =
         boss.nextAttack === 'slam'
           ? 'windSlam'
@@ -774,6 +950,31 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       if (boss.nextAttack === 'geysers') {
         placeGeysersNear(player.x, boss.y, player.z);
         playSound('summon');
+        if (towerId === 'void' && !state.vortexPull) {
+          // Вестник Коллапса затягивает игрока Чёрной Дырой во время взрыва столбов антиматерии!
+          state.vortexPull = {
+            x: boss.x,
+            z: boss.z,
+            y: boss.y,
+            timer: 2.0,
+            strength: 6.8,
+            spawnBombsOnEnd: 1
+          };
+        } else if (towerId === 'ice') {
+          // Первозданный Буран обрушивает ледяные глыбы вокруг игрока
+          for (let i = 0; i < (isPhase2 ? 3 : 2); i++) {
+            state.activeBombs.push({
+              x: player.x + (Math.random() - 0.5) * 9,
+              y: player.lastGroundY,
+              z: player.z + (Math.random() - 0.5) * 9,
+              timer: 1.15 + i * 0.25,
+              nextRingTimer: 0,
+              radius: 3.6,
+              damage: 13,
+              applyChill: 1
+            });
+          }
+        }
       }
     }
   } else if (boss.bossState === 'windSlam') {
@@ -790,14 +991,35 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       bossLocalToWorld(boss, 0.35, 0.6, 3.4, _bossWorldCoords);
       const fistX = _bossWorldCoords[0];
       const fistZ = _bossWorldCoords[2];
-      spawnBossRing(fistX, boss.y, fistZ, 18, 10, 16);
+      spawnBossRing(fistX, boss.y, fistZ, 18, 10, 17);
+
+      if (towerId === 'ice') {
+        // Первозданный Буран: линия ледяных шпилей от точки удара к игроку
+        const ang = Math.atan2(player.z - fistZ, player.x - fistX);
+        for (let i = 1; i <= (isPhase2 ? 5 : 3); i++) {
+          state.activeBombs.push({
+            x: fistX + Math.cos(ang) * i * 3.5,
+            y: player.lastGroundY,
+            z: fistZ + Math.sin(ang) * i * 3.5,
+            timer: 0.5 + i * 0.16,
+            nextRingTimer: 0,
+            radius: 2.5,
+            damage: 13,
+            applyChill: 1
+          });
+        }
+      } else if (towerId === 'void') {
+        // Вестник Коллапса: Хватка Забвения выпускает кольцо звёздных снарядов
+        fireBossProjectileFan(boss, player, isPhase2 ? 5 : 3, 0.9, 12, 12);
+      }
+
       if (dist < 50) {
         spawnSparkBurst(fistX, boss.y + 0.3, fistZ, 26, 'land');
         spawnSmokePuff(fistX, boss.y + 0.1, fistZ, 10);
-        spawnSlagBurst(fistX, boss.y, fistZ, 6, 1.2);
+        spawnSlagBurst(fistX, boss.y, fistZ, 7, 1.25);
       }
-      boss.flare = 1.2;
-      boss.shake = 0.18;
+      boss.flare = 1.25;
+      boss.shake = 0.2;
       playSound('boom');
       triggerScreenShake(0.45);
     }
@@ -812,9 +1034,12 @@ function updateKolossBoss(boss, dt, player, dx, dz, dist) {
       boss.bossState = 'sweep';
       boss.bossTimer = 0;
       spawnBossArc(boss.x, boss.y, boss.z, boss.facingYaw + (Math.random() - 0.5) * 0.7, 20);
+      if (towerId === 'ice' || towerId === 'void') {
+        fireBossProjectileFan(boss, player, isPhase2 ? 5 : 3, 0.75, 12.5, 11);
+      }
       playSound('boom');
-      triggerScreenShake(0.2);
-      boss.flare = Math.max(boss.flare, 0.8);
+      triggerScreenShake(0.22);
+      boss.flare = Math.max(boss.flare, 0.85);
     }
   } else if (boss.bossState === 'sweep') {
     boss.isMoving = 0;
@@ -950,6 +1175,7 @@ function renderGolemBoss(boss, ud, dt) {
   const time = state.elapsedTime;
   const isPhase2 = boss.phase === 2;
   const bt = boss.bossTimer;
+  const towerId = ud.towerId || state.towerId || 'ash';
 
   boss.mesh.rotation.y = boss.facingYaw;
   boss.mesh.position.set(boss.x, boss.y, boss.z);
@@ -969,21 +1195,36 @@ function renderGolemBoss(boss, ud, dt) {
 
   if (boss.bossState === 'march') {
     const swing = Math.sin(boss.marchTimer * Math.PI * 2);
-    legL = swing * 0.42;
-    legR = -swing * 0.42;
-    armR += -swing * 0.12;
-    armL += swing * 0.12;
-    hipY += Math.abs(Math.cos(boss.marchTimer * Math.PI * 2)) * 0.1;
-    lean = 0.14;
+    if (towerId === 'void') {
+      // Архитектор Искажения плавно парит над вихрем ступеней
+      hipY = 2.95 + Math.sin(time * 2.2) * 0.22;
+      lean = 0.08 + Math.sin(time * 1.5) * 0.04;
+      armR = -0.35 + Math.sin(time * 1.8) * 0.12;
+      armL = -0.65 + Math.cos(time * 2.1) * 0.18;
+    } else {
+      legL = swing * 0.42;
+      legR = -swing * 0.42;
+      armR += -swing * 0.12;
+      armL += swing * 0.12;
+      hipY += Math.abs(Math.cos(boss.marchTimer * Math.PI * 2)) * 0.1;
+      lean = 0.14;
+    }
     jaw = 0.06 + Math.abs(Math.sin(time * 0.7)) * 0.05;
   } else if (boss.bossState === 'windup') {
-    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.45 : 0.7)));
-    if (boss.nextAttack === 'pound') {
-      armR = lerp(-0.15, -2.7, k);
-      armL = lerp(-0.15, -2.7, k);
+    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.45 : 0.68)));
+    if (boss.nextAttack === 'pound' || boss.nextAttack === 'blueprintGrid') {
+      armR = lerp(-0.15, -2.6, k);
+      armL = lerp(-0.15, -2.6, k);
       lean = lerp(0.14, -0.22, k);
-      hipY = lerp(2.75, 2.9, k);
+      hipY = lerp(2.75, 2.95, k);
       headX = lerp(0.1, -0.3, k);
+    } else if (boss.nextAttack === 'bellToll') {
+      // Хранитель высоко вздымает левую руку с Ритуальным Колоколом!
+      armL = lerp(-0.15, -2.65, k);
+      armLz = lerp(-0.12, -0.35, k);
+      armR = lerp(-0.15, -0.6, k);
+      lean = lerp(0.14, -0.18, k);
+      hipY = lerp(2.75, 2.9, k);
     } else {
       armR = lerp(-0.15, -2.5, k);
       armL = lerp(-0.15, -0.5, k);
@@ -997,12 +1238,17 @@ function renderGolemBoss(boss, ud, dt) {
   } else if (boss.bossState === 'slam') {
     const k = Math.min(1, bt / (isPhase2 ? 0.25 : 0.35));
     const ee = k * k;
-    if (boss.nextAttack === 'pound') {
-      armR = lerp(-2.7, -0.45, ee);
-      armL = lerp(-2.7, -0.45, ee);
+    if (boss.nextAttack === 'pound' || boss.nextAttack === 'blueprintGrid') {
+      armR = lerp(-2.6, -0.45, ee);
+      armL = lerp(-2.6, -0.45, ee);
       lean = lerp(-0.22, 0.5, ee);
-      hipY = lerp(2.9, 2.35, ee);
+      hipY = lerp(2.95, 2.35, ee);
       headX = lerp(-0.3, 0.5, ee);
+    } else if (boss.nextAttack === 'bellToll') {
+      armL = lerp(-2.65, -0.35, ee);
+      armR = lerp(-0.6, -0.9, ee);
+      lean = lerp(-0.18, 0.42, ee);
+      hipY = lerp(2.9, 2.45, ee);
     } else {
       armR = lerp(-2.5, -0.35, ee);
       armL = lerp(-0.5, -0.9, ee);
@@ -1013,12 +1259,12 @@ function renderGolemBoss(boss, ud, dt) {
     headY = 0;
     jaw = lerp(0.25, 0.4, ee);
   } else if (boss.bossState === 'recover') {
-    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.6 : 0.95)));
+    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.58 : 0.92)));
     armR = lerp(-0.45, -0.15, k);
-    armL = lerp(-0.9, -0.15, k);
-    lean = lerp(0.5, 0.1, k);
+    armL = lerp(-0.6, -0.15, k);
+    lean = lerp(0.45, 0.1, k);
     hipY = lerp(2.4, 2.75, k);
-    headX = lerp(0.5, 0.1, k);
+    headX = lerp(0.45, 0.1, k);
     jaw = lerp(0.4, 0.06, k);
   } else {
     const k = Math.sin(Math.min(1, bt / 1.2) * Math.PI);
@@ -1043,6 +1289,35 @@ function renderGolemBoss(boss, ud, dt) {
   ud.legL.rotation.x = legL;
   ud.legR.rotation.x = legR;
 
+  // Анимация Ритуального Колокола Хранителя Забытых Обрядов
+  if (ud.bellPivot) {
+    const bellSwing =
+      boss.bossState === 'windup' || boss.bossState === 'slam'
+        ? Math.sin(time * 16) * 0.55
+        : Math.sin(boss.marchTimer * Math.PI * 2) * 0.25;
+    ud.bellPivot.rotation.x = -armL * 0.75 + bellSwing;
+    ud.bellPivot.rotation.z = Math.cos(time * 3.2) * 0.16;
+    if (ud.bellGlow) {
+      ud.bellGlow.scale.setScalar(3.2 + boss.flare * 1.8);
+    }
+  }
+
+  // Анимация голографических чертежей и ступеней Архитектора Искажения
+  if (ud.stairVortex) {
+    ud.stairVortex.rotation.y = time * (isPhase2 ? 0.85 : 0.45);
+  }
+  if (ud.blueprints) {
+    for (let i = 0; i < ud.blueprints.length; i++) {
+      const bp = ud.blueprints[i];
+      const d = bp.userData;
+      const orbitA = time * (isPhase2 ? 1.1 : 0.55) + d.phase;
+      bp.position.x = d.baseX + Math.cos(orbitA) * 0.22;
+      bp.position.y = d.baseY + Math.sin(orbitA * 1.4) * 0.18;
+      bp.position.z = d.baseZ + Math.sin(orbitA) * 0.18 + boss.flare * 0.35;
+      bp.rotation.z = d.brz + Math.sin(time * 2 + d.phase) * 0.14;
+    }
+  }
+
   if (boss.shake > 0.002) {
     boss.mesh.position.x += (Math.random() - 0.5) * boss.shake;
     boss.mesh.position.z += (Math.random() - 0.5) * boss.shake;
@@ -1058,24 +1333,26 @@ function renderGolemBoss(boss, ud, dt) {
 
   if (!boss.tintState) {
     ud.charMat.emissiveIntensity =
-      1.0 + Math.sin(time * 3.4) * 0.3 + boss.flare * 1.2 + (isPhase2 ? 0.9 : 0);
+      1.1 + Math.sin(time * 3.4) * 0.3 + boss.flare * 1.2 + (isPhase2 ? 0.9 : 0);
   }
 
   const crackOpacity =
-    0.45 + Math.sin(time * 1.9) * 0.12 + boss.flare * 0.45 + (isPhase2 ? 0.25 : 0);
+    0.55 + Math.sin(time * 1.9) * 0.14 + boss.flare * 0.45 + (isPhase2 ? 0.25 : 0);
   for (const mat of ud.crackMats) {
     mat.opacity = Math.min(1, crackOpacity);
   }
 
-  ud.chestGlow.material.opacity = Math.min(0.9, 0.32 + Math.sin(time * 4) * 0.1 + boss.flare * 0.4);
+  ud.chestGlow.material.opacity = Math.min(0.92, 0.38 + Math.sin(time * 4) * 0.1 + boss.flare * 0.4);
   ud.chestGlow.scale.setScalar(4.6 + boss.flare * 1.5);
 
   golemDecalTargetOpacity = isPhase2
-    ? Math.min(0.65, 0.4 + Math.sin(time * 5) * 0.1 + boss.flare * 0.25 + boss.floorFlare * 0.4)
-    : boss.floorFlare * 0.4;
+    ? Math.min(0.68, 0.42 + Math.sin(time * 5) * 0.1 + boss.flare * 0.25 + boss.floorFlare * 0.4)
+    : boss.floorFlare * 0.45;
   golemDecal.position.set(boss.x, boss.y + 0.05, boss.z);
 
-  bossLight.color.setHex(0xff5500);
+  bossLight.color.setHex(
+    towerId === 'ice' ? 0x58d0ff : towerId === 'void' ? 0xb845ff : 0xff5500
+  );
   bossLight.position.set(boss.x, boss.y + 2.6 * boss.bossScale, boss.z);
   bossLight.intensity = 2.0 + Math.sin(time * 4) * 0.5 + boss.flare * 3 + (isPhase2 ? 0.8 : 0);
 }
@@ -1083,8 +1360,14 @@ function renderGolemBoss(boss, ud, dt) {
 function renderWombBoss(boss, ud, dt, tier) {
   const time = state.elapsedTime;
   const isPhase2 = boss.phase === 2;
+  const towerId = ud.towerId || state.towerId || 'ash';
 
-  boss.mesh.rotation.y = time * 0.15;
+  if (towerId === 'ice' || towerId === 'void') {
+    // Пряха и Пожиратель Фаз поворачиваются лицом к игроку
+    boss.mesh.rotation.y = boss.facingYaw;
+  } else {
+    boss.mesh.rotation.y = time * 0.18;
+  }
   boss.mesh.position.set(boss.x, boss.y, boss.z);
   boss.mesh.scale.setScalar(boss.bossScale);
 
@@ -1094,19 +1377,52 @@ function renderWombBoss(boss, ud, dt, tier) {
   }
 
   const openRatio = boss.openAmount;
-  ud.shell.rotation.y = -time * 0.25;
-  const pulse = 1 + Math.sin(time * (2 + openRatio * 6)) * (0.04 + openRatio * 0.06);
+  ud.shell.rotation.y = towerId === 'ash' ? Math.sin(time * 0.8) * 0.15 : -time * 0.35;
+  const pulse = 1 + Math.sin(time * (2 + openRatio * 6)) * (0.05 + openRatio * 0.07);
   ud.core.scale.setScalar(pulse);
-  ud.core.rotation.y = time * 0.4;
-  ud.coreGlowMat.opacity = 0.18 + openRatio * 0.5 + boss.flare * 0.2;
-  ud.haloMat.opacity = 0.45 + openRatio * 0.35 + boss.flare * 0.2;
-  ud.halo.scale.setScalar(4.2 + openRatio * 1.6 + Math.sin(time * 3) * 0.2);
+  ud.core.rotation.y = time * 0.5;
+  ud.coreGlowMat.opacity = 0.2 + openRatio * 0.5 + boss.flare * 0.2;
+  ud.haloMat.opacity = 0.5 + openRatio * 0.35 + boss.flare * 0.2;
+  ud.halo.scale.setScalar(4.4 + openRatio * 1.6 + Math.sin(time * 3) * 0.2);
+
+  // Анимация 6 паучьих лап Изувеченной Снежной Пряхи
+  if (ud.spiderLegs) {
+    for (let i = 0; i < ud.spiderLegs.length; i++) {
+      const leg = ud.spiderLegs[i];
+      const d = leg.userData;
+      const stepPhase = time * (isPhase2 ? 7.5 : 5.2) + d.idx * 1.2 + (d.side > 0 ? 0 : Math.PI);
+      leg.rotation.y = d.baseYaw + Math.sin(stepPhase) * 0.22;
+      leg.rotation.z = d.side * (Math.cos(stepPhase) * 0.18 + openRatio * 0.25);
+    }
+  }
+  if (ud.webBackdrop) {
+    ud.webBackdrop.rotation.z = time * 0.25;
+  }
+
+  // Анимация 6 серповидных богомольих лап и 2 Теневых Фантомов Пожирателя Фаз
+  if (ud.scytheArms) {
+    for (let i = 0; i < ud.scytheArms.length; i++) {
+      const arm = ud.scytheArms[i];
+      const d = arm.userData;
+      const slashWave = Math.sin(time * (isPhase2 ? 6.0 : 4.0) + d.row * 0.9 + (d.side > 0 ? 0 : 1.5));
+      arm.rotation.y = d.side * (-0.35 + openRatio * 0.65 + slashWave * 0.25);
+      arm.rotation.z = d.side * (0.15 * slashWave - openRatio * 0.3);
+    }
+  }
+  if (ud.phantoms) {
+    for (let i = 0; i < ud.phantoms.length; i++) {
+      const ph = ud.phantoms[i];
+      const d = ph.userData;
+      ph.position.x = d.baseX + Math.sin(time * 2.2 + i * 3) * 0.35;
+      ph.position.y = d.baseY + Math.cos(time * 2.7 + i * 2) * 0.25;
+    }
+  }
 
   const shardData = ud.shardData;
   for (let i = 0; i < shardData.length; i++) {
     const shard = shardData[i];
     const radius =
-      shard.baseR + (shard.openR - shard.baseR) * openRatio + Math.sin(time * 2 + shard.ph) * 0.03;
+      shard.baseR + (shard.openR - shard.baseR) * openRatio + Math.sin(time * 2 + shard.ph) * 0.04;
     _bossDummyObj.position.set(shard.dir.x * radius, shard.dir.y * radius, shard.dir.z * radius);
     _bossDummyObj.quaternion.copy(shard.quat);
     _bossDummyObj.scale.set(shard.sx, shard.sy, shard.sz);
@@ -1115,17 +1431,17 @@ function renderWombBoss(boss, ud, dt, tier) {
   }
   ud.shardIM.instanceMatrix.needsUpdate = true;
 
-  ud.shieldMat.opacity = 0.16 * (1 - openRatio) + Math.sin(time * 4) * 0.03 * (1 - openRatio);
-  ud.shieldWireMat.opacity = 0.25 * (1 - openRatio);
+  ud.shieldMat.opacity = 0.18 * (1 - openRatio) + Math.sin(time * 4) * 0.03 * (1 - openRatio);
+  ud.shieldWireMat.opacity = 0.28 * (1 - openRatio);
   ud.shield.scale.setScalar(1 + Math.sin(time * 2.4) * 0.02);
   ud.shieldWire.rotation.y = time * 0.3;
-  ud.vrMat.opacity = openRatio * (0.5 + Math.sin(time * 6) * 0.2);
+  ud.vrMat.opacity = openRatio * (0.55 + Math.sin(time * 6) * 0.2);
   ud.vulnRings[0].rotation.z += dt * 1.6;
   ud.vulnRings[1].rotation.z -= dt * 1.2;
 
   if (!boss.tintState) {
     ud.crystalMat.emissiveIntensity =
-      0.5 + openRatio * 0.4 + boss.flare * 0.5 + (isPhase2 ? 0.35 : 0);
+      0.55 + openRatio * 0.4 + boss.flare * 0.5 + (isPhase2 ? 0.35 : 0);
   }
 
   if (ud.swarm.visible && tier === 0) {
@@ -1148,7 +1464,9 @@ function renderWombBoss(boss, ud, dt, tier) {
   }
 
   wombRune.position.set(boss.x, boss.wombFloorY + 0.05, boss.z);
-  bossLight.color.setHex(0xa050ff);
+  bossLight.color.setHex(
+    towerId === 'ice' ? 0x60d8ff : towerId === 'void' ? 0xb848ff : 0xa050ff
+  );
   bossLight.position.set(boss.x, boss.y, boss.z);
   bossLight.intensity = 2.2 + openRatio * 3 + boss.flare * 2.5 + Math.sin(time * 7) * 0.3;
 }
@@ -1157,6 +1475,7 @@ function renderKolossBoss(boss, ud, dt) {
   const time = state.elapsedTime;
   const isPhase2 = boss.phase === 2;
   const bt = boss.bossTimer;
+  const towerId = ud.towerId || state.towerId || 'ash';
 
   boss.mesh.rotation.y = boss.facingYaw;
   boss.mesh.position.set(boss.x, boss.y, boss.z);
@@ -1185,13 +1504,13 @@ function renderKolossBoss(boss, ud, dt) {
     jaw = lerp(0.5, 0.08, k);
   } else if (boss.bossState === 'idle') {
     const swing = Math.sin(time * (isPhase2 ? 1.6 : 1.0) * Math.PI);
-    armRx += -swing * 0.1;
-    armLx += swing * 0.1;
-    hipsY += Math.sin(time * 2.2) * 0.07;
+    armRx += -swing * 0.12;
+    armLx += swing * 0.12;
+    hipsY += Math.sin(time * 2.2) * 0.08;
     torsoY = Math.sin(time * 0.5) * 0.12;
     jaw = 0.08 + Math.abs(Math.sin(time * 0.7)) * 0.06;
   } else if (boss.bossState === 'windSlam') {
-    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.5 : 0.7)));
+    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.48 : 0.68)));
     armRx = lerp(-0.15, -2.6, k);
     elbRx = lerp(-0.35, -0.7, k);
     torsoX = lerp(0.08, -0.22, k);
@@ -1208,7 +1527,7 @@ function renderKolossBoss(boss, ud, dt) {
     headX = lerp(-0.25, 0.5, ee);
     jaw = lerp(0.3, 0.45, ee);
   } else if (boss.bossState === 'windSweep') {
-    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.45 : 0.6)));
+    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.44 : 0.58)));
     armRx = lerp(-0.15, -0.25, k);
     armRz = lerp(0.18, 1.4, k);
     torsoY = lerp(0, -0.85, k);
@@ -1249,7 +1568,7 @@ function renderKolossBoss(boss, ud, dt) {
     jaw = lerp(0.08, 0.18, k);
     headY = 0;
   } else if (boss.bossState === 'recover') {
-    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.6 : 0.95)));
+    const k = easeInOutQuad(Math.min(1, bt / (isPhase2 ? 0.58 : 0.92)));
     armRx = lerp(-0.5, -0.15, k);
     armLx = lerp(-0.5, -0.15, k);
     armRz = lerp(0.6, 0.18, k);
@@ -1272,6 +1591,7 @@ function renderKolossBoss(boss, ud, dt) {
 
   ud.hips.position.y = hipsY;
   ud.column.scale.y = Math.max(0.3, hipsY / KOLOSS_COLUMN_HEIGHT);
+  ud.column.rotation.y = time * (towerId === 'ice' ? 2.4 : towerId === 'void' ? 1.8 : 0.5) * boss.flowMultiplier;
   ud.torso.rotation.x = torsoX;
   ud.torso.rotation.y = torsoY;
   ud.head.rotation.x = headX;
@@ -1284,22 +1604,36 @@ function renderKolossBoss(boss, ud, dt) {
   ud.armR.elbow.rotation.x = elbRx;
   ud.armL.elbow.rotation.x = elbLx;
 
+  // Специфическая анимация Замёрзшего Сердца Бурана и Аккреционного Диска Вестника Коллапса
+  if (ud.frozenHeartMesh) {
+    ud.frozenHeartMesh.rotation.y = time * 1.8;
+    const heartPulse = 1 + Math.sin(time * 5.5) * 0.12 + (boss.weak ? 0.3 : 0);
+    ud.frozenHeartMesh.scale.set(0.9 * heartPulse, 1.25 * heartPulse, 0.85 * heartPulse);
+  }
+  if (ud.accretionDiscGroup) {
+    ud.accretionDiscGroup.rotation.z = -time * (isPhase2 ? 2.8 : 1.6);
+    const discScale = 1 + Math.sin(time * 4.5) * 0.08 + boss.flare * 0.25;
+    ud.accretionDiscGroup.scale.setScalar(discScale);
+  }
+
   if (boss.shake > 0.002) {
     boss.mesh.position.x += (Math.random() - 0.5) * boss.shake;
     boss.mesh.position.z += (Math.random() - 0.5) * boss.shake;
   }
 
-  TEXTURES.kolBody.offset.y -= dt * 0.06 * boss.flowMultiplier;
-  TEXTURES.kolCol.offset.y -= dt * 0.11 * boss.flowMultiplier;
-  TEXTURES.kolEye.rotation += dt * 0.7;
+  if (towerId === 'ash') {
+    TEXTURES.kolBody.offset.y -= dt * 0.06 * boss.flowMultiplier;
+    TEXTURES.kolCol.offset.y -= dt * 0.11 * boss.flowMultiplier;
+    TEXTURES.kolEye.rotation += dt * 0.7;
+  }
 
   if (!boss.tintState) {
     ud.lavaMat.emissiveIntensity =
-      1.05 + Math.sin(time * 3.1) * 0.15 + boss.flare * 0.8 + (boss.isFury ? 0.35 : 0);
+      1.0 + Math.sin(time * 3.1) * 0.15 + boss.flare * 0.8 + (boss.isFury ? 0.35 : 0);
     ud.columnMat.emissiveIntensity =
       1.15 + Math.sin(time * 2.6) * 0.2 + boss.flare * 0.9 + (boss.isFury ? 0.4 : 0);
     ud.incMat.emissiveIntensity =
-      0.35 + Math.sin(time * 2) * 0.15 + (boss.isFury ? 0.5 : 0);
+      0.45 + Math.sin(time * 2) * 0.15 + (boss.isFury ? 0.5 : 0);
   }
 
   const coalBrightness =
@@ -1319,45 +1653,60 @@ function renderKolossBoss(boss, ud, dt) {
   }
 
   ud.weakSprite.material.opacity = exhaustRatio * 0.85;
-  ud.weakSprite.scale.setScalar(2.2 + Math.sin(time * 9) * 0.25);
+  ud.weakSprite.scale.setScalar(2.4 + Math.sin(time * 9) * 0.25);
 
   for (let i = 0; i < ud.vents.length; i++) {
     ud.vents[i].flare.material.opacity = boss.ventFlares[i];
   }
 
+  // Вращение включений / обломков башен в вихре
   const inclusions = ud.incData;
   for (let i = 0; i < inclusions.length; i++) {
     const inc = inclusions[i];
-    inc.life += dt;
-    let ratio = Math.min(1, inc.life / inc.max);
-    if (ratio >= 1) {
-      inc.life = 0;
-      inc.max = 6 + Math.random() * 6;
-      const host = KOLOSS_INCLUSION_HOSTS[Math.floor(Math.random() * KOLOSS_INCLUSION_HOSTS.length)];
-      inc.hx = host.x;
-      inc.hy = host.y;
-      inc.hz = host.z;
-      inc.hr = host.r;
-      inc.dx = Math.random() - 0.5;
-      inc.dy = Math.random() - 0.5;
-      inc.dz = Math.random() - 0.5;
-      const len = Math.sqrt(inc.dx * inc.dx + inc.dy * inc.dy + inc.dz * inc.dz) || 1;
-      inc.dx /= len;
-      inc.dy /= len;
-      inc.dz /= len;
-      ratio = 0;
+    if (towerId === 'ice' || towerId === 'void') {
+      const orbitAngle = time * (isPhase2 ? 1.5 : 0.9) + (i / inclusions.length) * TWO_PI;
+      const r = 2.25 + (i % 3) * 0.75;
+      _bossDummyObj.position.set(
+        Math.cos(orbitAngle) * r,
+        0.5 + (i % 4) * 0.65 + Math.sin(time * 2 + i) * 0.2,
+        Math.sin(orbitAngle) * r
+      );
+      _bossDummyObj.rotation.set(inc.rx + time * 0.8, inc.ry + time, inc.rz);
+      _bossDummyObj.scale.setScalar(inc.base);
+      _bossDummyObj.updateMatrix();
+      ud.incIM.setMatrixAt(i, _bossDummyObj.matrix);
+    } else {
+      inc.life += dt;
+      let ratio = Math.min(1, inc.life / inc.max);
+      if (ratio >= 1) {
+        inc.life = 0;
+        inc.max = 6 + Math.random() * 6;
+        const host = KOLOSS_INCLUSION_HOSTS[Math.floor(Math.random() * KOLOSS_INCLUSION_HOSTS.length)];
+        inc.hx = host.x;
+        inc.hy = host.y;
+        inc.hz = host.z;
+        inc.hr = host.r;
+        inc.dx = Math.random() - 0.5;
+        inc.dy = Math.random() - 0.5;
+        inc.dz = Math.random() - 0.5;
+        const len = Math.sqrt(inc.dx * inc.dx + inc.dy * inc.dy + inc.dz * inc.dz) || 1;
+        inc.dx /= len;
+        inc.dy /= len;
+        inc.dz /= len;
+        ratio = 0;
+      }
+      const scale = inc.base * (1 - 0.85 * ratio * ratio);
+      const radius = inc.hr * (0.92 - 0.22 * ratio);
+      _bossDummyObj.position.set(
+        inc.hx + inc.dx * radius,
+        inc.hy + inc.dy * radius,
+        inc.hz + inc.dz * radius
+      );
+      _bossDummyObj.rotation.set(inc.rx, inc.ry, inc.rz);
+      _bossDummyObj.scale.setScalar(Math.max(0.02, scale));
+      _bossDummyObj.updateMatrix();
+      ud.incIM.setMatrixAt(i, _bossDummyObj.matrix);
     }
-    const scale = inc.base * (1 - 0.85 * ratio * ratio);
-    const radius = inc.hr * (0.92 - 0.22 * ratio);
-    _bossDummyObj.position.set(
-      inc.hx + inc.dx * radius,
-      inc.hy + inc.dy * radius,
-      inc.hz + inc.dz * radius
-    );
-    _bossDummyObj.rotation.set(inc.rx, inc.ry, inc.rz);
-    _bossDummyObj.scale.setScalar(Math.max(0.02, scale));
-    _bossDummyObj.updateMatrix();
-    ud.incIM.setMatrixAt(i, _bossDummyObj.matrix);
   }
   ud.incIM.instanceMatrix.needsUpdate = true;
 
@@ -1365,14 +1714,16 @@ function renderKolossBoss(boss, ud, dt) {
     0.85,
     0.35 + Math.sin(time * 2.4) * 0.08 + (boss.isFury ? 0.2 : 0) + boss.flare * 0.2
   );
-  ud.baseGlow.scale.setScalar(7 + Math.sin(time * 3) * 0.5 + boss.flare);
+  ud.baseGlow.scale.setScalar(7.2 + Math.sin(time * 3) * 0.5 + boss.flare);
   ud.chestGlow.material.opacity = Math.min(
-    0.9,
-    0.3 + Math.sin(time * 4) * 0.1 + boss.flare * 0.35 + (boss.isFury ? 0.15 : 0)
+    0.92,
+    0.45 + Math.sin(time * 4) * 0.1 + boss.flare * 0.35 + (boss.isFury ? 0.15 : 0)
   );
-  ud.chestGlow.scale.setScalar(4.2 + boss.flare * 1.2);
+  ud.chestGlow.scale.setScalar(4.4 + boss.flare * 1.2);
 
-  bossLight.color.setHex(0xff7a20);
+  bossLight.color.setHex(
+    towerId === 'ice' ? 0x58d0ff : towerId === 'void' ? 0xb848ff : 0xff7a20
+  );
   bossLight.position.set(boss.x, boss.y + 3.6 * boss.bossScale, boss.z);
   bossLight.intensity =
     2.6 + Math.sin(time * 4) * 0.6 + boss.flare * 3 + (boss.isFury ? 1.2 : 0);

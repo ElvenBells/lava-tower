@@ -1,59 +1,90 @@
 /* ==========================================================================
-   Фабрика и объектный пул мешей мобов и боссов
-   (исключает аллокации и сборку мусора во время боя)
+   Фабрика и объектный пул мешей мобов и боссов с поддержкой 3 башен:
+   - 12 типов обычных мобов (4 роли × 3 башни: 'ash', 'ice', 'void')
+   - 9 уникальных боссов (3 тира × 3 башни)
    ========================================================================== */
 
-const PROTOTYPE_VARIANTS = 3;
+const PROTOTYPE_VARIANTS = 2;
 const ENEMY_PROTOTYPES = {
-  s: [],
-  r: null,
-  l: [],
-  t: [],
-  b: null
+  ash: { s: [], r: null, l: [], t: [] },
+  ice: { s: [], r: null, l: [], t: [] },
+  void: { s: [], r: null, l: [], t: [] }
 };
 
-for (let v = 0; v < PROTOTYPE_VARIANTS; v++) {
-  ENEMY_PROTOTYPES.s.push(buildOgarekPrototype());
-  ENEMY_PROTOTYPES.l.push(buildLeaperPrototype());
-  ENEMY_PROTOTYPES.t.push(buildGuardPrototype());
+for (const towerId of ['ash', 'ice', 'void']) {
+  for (let v = 0; v < PROTOTYPE_VARIANTS; v++) {
+    ENEMY_PROTOTYPES[towerId].s.push(buildOgarekPrototype(towerId));
+    ENEMY_PROTOTYPES[towerId].l.push(buildLeaperPrototype(towerId));
+    ENEMY_PROTOTYPES[towerId].t.push(buildGuardPrototype(towerId));
+  }
+  ENEMY_PROTOTYPES[towerId].r = buildShypPrototype(towerId);
 }
-ENEMY_PROTOTYPES.r = buildShypPrototype();
 
-const mobPool = { s: [], r: [], l: [], t: [], b: [] };
-const mobCreatedCount = { s: 0, r: 0, l: 0, t: 0, b: 0 };
-const bossPool = { golem: [], womb: [], koloss: [] };
+const mobPool = {};
+const mobCreatedCount = {};
+const bossPool = {};
 
-function createBossInstanceByKind(bossKind) {
-  if (bossKind === 'womb') return createWombInstance();
-  if (bossKind === 'koloss') return createKolossInstance();
-  return createGolemInstance();
+for (const towerId of ['ash', 'ice', 'void']) {
+  for (const type of ['s', 'r', 'l', 't']) {
+    mobPool[`${towerId}_${type}`] = [];
+    mobCreatedCount[`${towerId}_${type}`] = 0;
+  }
+  for (const bkind of ['golem', 'womb', 'koloss']) {
+    bossPool[`${towerId}_${bkind}`] = [];
+  }
+}
+
+function getActiveTowerIdForFactory(explicitTowerId) {
+  if (explicitTowerId && ENEMY_PROTOTYPES[explicitTowerId]) return explicitTowerId;
+  if (typeof state !== 'undefined' && state && state.towerId && ENEMY_PROTOTYPES[state.towerId]) {
+    return state.towerId;
+  }
+  if (typeof currentTowerTheme !== 'undefined' && currentTowerTheme && currentTowerTheme.id) {
+    return currentTowerTheme.id;
+  }
+  return 'ash';
+}
+
+function createBossInstanceByKind(bossKind, towerId) {
+  if (bossKind === 'womb') return createWombInstance(towerId);
+  if (bossKind === 'koloss') return createKolossInstance(towerId);
+  return createGolemInstance(towerId);
 }
 
 const MobFactory = {
-  create(type, bossKind) {
+  create(type, bossKind, explicitTowerId) {
+    const towerId = getActiveTowerIdForFactory(explicitTowerId);
+    const key = `${towerId}_${type}`;
+    const protos = ENEMY_PROTOTYPES[towerId] || ENEMY_PROTOTYPES.ash;
+
     if (type === 's') {
-      return createOgarekInstance(ENEMY_PROTOTYPES.s[mobCreatedCount.s++ % PROTOTYPE_VARIANTS]);
+      return createOgarekInstance(protos.s[mobCreatedCount[key]++ % PROTOTYPE_VARIANTS]);
     }
     if (type === 'r') {
-      return createShypInstance(ENEMY_PROTOTYPES.r);
+      return createShypInstance(protos.r);
     }
     if (type === 'l') {
-      return createLeaperInstance(ENEMY_PROTOTYPES.l[mobCreatedCount.l++ % PROTOTYPE_VARIANTS]);
+      return createLeaperInstance(protos.l[mobCreatedCount[key]++ % PROTOTYPE_VARIANTS]);
     }
     if (type === 't') {
-      return createGuardInstance(ENEMY_PROTOTYPES.t[mobCreatedCount.t++ % PROTOTYPE_VARIANTS]);
+      return createGuardInstance(protos.t[mobCreatedCount[key]++ % PROTOTYPE_VARIANTS]);
     }
-    return createBossInstanceByKind(bossKind || 'golem');
+    return createBossInstanceByKind(bossKind || 'golem', towerId);
   },
 
-  acquire(type, bossKind) {
-    let mesh =
-      type === 'b' ? bossPool[bossKind || 'golem'].pop() : mobPool[type].pop();
+  acquire(type, bossKind, explicitTowerId) {
+    const towerId = getActiveTowerIdForFactory(explicitTowerId);
+    const poolKey =
+      type === 'b' ? `${towerId}_${bossKind || 'golem'}` : `${towerId}_${type}`;
+    const pool = type === 'b' ? bossPool[poolKey] : mobPool[poolKey];
+
+    let mesh = pool ? pool.pop() : null;
     if (!mesh) {
-      mesh = this.create(type, bossKind);
+      mesh = this.create(type, bossKind, towerId);
     }
 
     const ud = mesh.userData;
+    ud.towerId = towerId;
     mesh.visible = true;
     mesh.position.set(0, -999, 0);
     mesh.rotation.set(0, 0, 0);
@@ -72,10 +103,10 @@ const MobFactory = {
       for (const piece of ud.debris) {
         const pieceData = piece.userData;
         pieceData.angle = Math.random() * Math.PI * 2;
-        pieceData.radius = 1.8 + Math.random() * 0.7;
-        pieceData.height = 0.9 + Math.random() * 1.1;
-        pieceData.speed = 0.25 + Math.random() * 0.4;
-        piece.scale.setScalar(0.7 + Math.random() * 0.7);
+        pieceData.radius = 1.7 + Math.random() * 0.7;
+        pieceData.height = 0.6 + Math.random() * 1.1;
+        pieceData.speed = 0.4 + Math.random() * 0.5;
+        piece.scale.setScalar(0.7 + Math.random() * 0.6);
       }
       ud.eyeMatO.color.copy(ud.eyeBaseO);
       ud.eyeMatI.color.copy(ud.eyeBaseI);
@@ -85,17 +116,17 @@ const MobFactory = {
         const shardData = shard.userData;
         shardData.angle = Math.random() * Math.PI * 2;
         shardData.phase = Math.random() * Math.PI * 2;
-        shardData.radius = 1.7 + Math.random() * 0.6;
-        shardData.speed = 0.35 + Math.random() * 0.4;
+        shardData.radius = 1.65 + Math.random() * 0.55;
+        shardData.speed = 0.45 + Math.random() * 0.4;
       }
       for (const sd of ud.stData) {
-        sd.radius = 0.1 + Math.random() * 0.45;
+        sd.radius = 0.12 + Math.random() * 0.48;
         sd.theta = Math.random() * Math.PI * 2;
         sd.y = (Math.random() - 0.5) * 1.6;
       }
-      ud.shellMat.opacity = 0.5;
-      ud.edgesMat.opacity = 0.55;
-      ud.shellMat.emissiveIntensity = 0.55;
+      ud.shellMat.opacity = towerId === 'ice' ? 0.68 : 0.56;
+      ud.edgesMat.opacity = 0.65;
+      ud.shellMat.emissiveIntensity = 0.65;
     } else if (type === 't') {
       ud.atkState = 'idle';
       ud.atkT = 0;
@@ -144,31 +175,32 @@ const MobFactory = {
       }
     } else if (type === 'b') {
       if (ud.bkind === 'golem') {
-        ud.charMat.emissiveIntensity = 1.0;
+        ud.charMat.emissiveIntensity = 1.15;
         ud.eyeMat.color.copy(ud.eyeBase);
         ud.haloMat.opacity = 0.9;
         for (const crackMat of ud.crackMats) {
-          crackMat.opacity = 0.5;
+          crackMat.opacity = 0.6;
         }
-        ud.chestGlow.material.opacity = 0.4;
+        ud.chestGlow.material.opacity = 0.55;
         ud.hips.position.y = 2.75;
-        ud.torso.rotation.x = 0.1;
+        ud.torso.rotation.set(0.1, 0, 0);
         ud.head.rotation.set(0.1, 0, 0);
         ud.jaw.rotation.x = 0.06;
         ud.armR.rotation.set(-0.15, 0, 0.12);
         ud.armL.rotation.set(-0.15, 0, -0.12);
         ud.legR.rotation.x = 0;
         ud.legL.rotation.x = 0;
+        if (ud.bellPivot) ud.bellPivot.rotation.set(0, 0, 0);
       } else if (ud.bkind === 'womb') {
-        ud.coreGlowMat.opacity = 0.2;
-        ud.haloMat.opacity = 0.6;
-        ud.shieldMat.opacity = 0.16;
-        ud.shieldWireMat.opacity = 0.25;
+        ud.coreGlowMat.opacity = 0.25;
+        ud.haloMat.opacity = 0.7;
+        ud.shieldMat.opacity = 0.18;
+        ud.shieldWireMat.opacity = 0.28;
         ud.vrMat.opacity = 0;
         ud.core.scale.setScalar(1);
         ud.shell.rotation.set(0, 0, 0);
       } else {
-        ud.lavaMat.emissiveIntensity = 1.15;
+        ud.lavaMat.emissiveIntensity = 1.1;
         ud.columnMat.emissiveIntensity = 1.25;
         ud.haloMat.opacity = 0.9;
         for (const crackMat of ud.crackMats) {
@@ -178,8 +210,8 @@ const MobFactory = {
         for (const vent of ud.vents) {
           vent.flare.material.opacity = 0;
         }
-        ud.baseGlow.material.opacity = 0.4;
-        ud.chestGlow.material.opacity = 0.4;
+        ud.baseGlow.material.opacity = 0.45;
+        ud.chestGlow.material.opacity = 0.6;
         ud.column.scale.y = 1;
         ud.hips.position.y = KOLOSS_COLUMN_HEIGHT;
         ud.torso.rotation.set(0.08, 0, 0);
@@ -203,10 +235,15 @@ const MobFactory = {
     if (mesh.parent) {
       mesh.parent.remove(mesh);
     }
+    const towerId = (mesh.userData && mesh.userData.towerId) || 'ash';
     if (type === 'b') {
-      bossPool[mesh.userData.bkind].push(mesh);
+      const bKey = `${towerId}_${mesh.userData.bkind || 'golem'}`;
+      if (!bossPool[bKey]) bossPool[bKey] = [];
+      bossPool[bKey].push(mesh);
     } else {
-      mobPool[type].push(mesh);
+      const mKey = `${towerId}_${type}`;
+      if (!mobPool[mKey]) mobPool[mKey] = [];
+      mobPool[mKey].push(mesh);
     }
   }
 };

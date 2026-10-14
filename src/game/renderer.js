@@ -1,7 +1,7 @@
 /* ==========================================================================
    Отрисовка игрового кадра:
-   положение героя и камеры, LOD-анимация мобов и боссов, обновление буферов
-   инстансинга, частиц и HUD
+   анимация героя «Угленосец», положение камеры, LOD-анимация 12 типов мобов
+   и 9 боссов, обновление буферов инстансинга, частиц и HUD
    ========================================================================== */
 
 const DOM_CACHE = {
@@ -32,7 +32,7 @@ const _leaperPose = {
   jaw: 0.12
 };
 
-const LOD_DISTANCE = 32; // дальше этой дистанции детальная анимация мобов отключается
+const LOD_DISTANCE = 32;
 
 let lastBossWidthText = '';
 let lastBossHpText = '';
@@ -47,11 +47,14 @@ function renderGameFrame(dt) {
   const player = state.player;
   const time = state.elapsedTime;
 
-  // Герой и источники света вокруг него
+  // Позиция, поворот и процедурная анимация героя «Угленосец» (бег, прыжки, двойной прыжок, подкат)
   playerMesh.position.set(player.x, player.y, player.z);
   playerMesh.rotation.y = state.facingAngle;
-  playerMesh.scale.y = state.slideTimer > 0 ? 0.6 : 1;
+  playerMesh.scale.set(1, 1, 1);
   playerMesh.visible = state.invulnerabilityTimer > 0 ? ((time * 24) | 0) % 2 === 0 : true;
+  if (typeof updatePlayerAnimation === 'function') {
+    updatePlayerAnimation(dt);
+  }
 
   lavaMesh.position.y = state.lavaY;
   if (typeof updateEnvironmentVisuals === 'function') {
@@ -97,7 +100,6 @@ function renderGameFrame(dt) {
     const dy = player.y - enemy.y;
     const dist3D = Math.sqrt(dx * dx + dz * dz + dy * dy);
 
-    // Подкраска статуса (ожог / замедление) применяется только при смене состояния
     const newTintState = enemy.burnTimer > 0 ? 2 : enemy.slowTimer > 0 ? 1 : 0;
     if (newTintState !== enemy.tintState) {
       enemy.tintState = newTintState;
@@ -105,7 +107,6 @@ function renderGameFrame(dt) {
       applyStatusTint(ud.tintMats, newTintState);
     }
 
-    // Переключение LOD-яруса (скрытие мелких деталей вдали)
     const lodTier = dist3D > LOD_DISTANCE ? 1 : 0;
     if (lodTier !== enemy.lodTier) {
       enemy.lodTier = lodTier;
@@ -126,15 +127,28 @@ function renderGameFrame(dt) {
         renderKolossBoss(enemy, ud, dt);
       }
     } else if (enemy.type === 's') {
-      // Огарёк
-      enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius, enemy.z);
+      // Рой: Огарёк ('ash') / Мерзлявка ('ice') / Теневой Мотылёк ('void')
+      const hasWings = !!(ud.wingL && ud.wingR);
+      const hoverBoost = hasWings ? 0.36 + Math.sin(time * 6.5 + enemy.x) * 0.14 : 0;
+      enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius + hoverBoost, enemy.z);
       enemy.mesh.scale.set(
         baseStats.scale * (enemy.scaleXZ || 1),
         baseStats.scale * (enemy.scaleY || 1),
         baseStats.scale * (enemy.scaleXZ || 1)
       );
-      enemy.mesh.rotation.y = time * 0.3 + enemy.x * 0.5;
-      ud.core.rotation.y = -time * 0.12;
+      if (hasWings) {
+        enemy.mesh.rotation.y = Math.atan2(dx, dz);
+        const flap = Math.sin(time * 24 + enemy.x * 2) * 0.55;
+        ud.wingL.rotation.y = flap;
+        ud.wingR.rotation.y = -flap;
+      } else {
+        enemy.mesh.rotation.y = time * 0.3 + enemy.x * 0.5;
+      }
+      ud.core.rotation.y = -time * 0.25;
+      if (ud.flameCrown) {
+        ud.flameCrown.rotation.y = time * 2.5;
+        ud.flameCrown.scale.y = 0.88 + Math.sin(time * 14 + enemy.x) * 0.22;
+      }
 
       if (lodTier === 0) {
         ud.chunks.scale.setScalar(1 + Math.sin(time * 1.8 + ud.chunksPhase) * 0.02);
@@ -166,13 +180,13 @@ function renderGameFrame(dt) {
         enemy.eyeFlickerTimer = 0.1;
       }
     } else if (enemy.type === 'r') {
-      // Пустотный Шип
+      // Стрелок: Пустотный Шип ('ash') / Инеевый Кристалл ('ice') / Фазовый Шип ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius, enemy.z);
       _tempVec3.set(dz / dist2D, 0, -dx / dist2D);
       _tempQuatA.setFromAxisAngle(_tempVec3, Math.PI / 2);
       _tempEuler.set(
         Math.sin(time * 0.7 + enemy.x) * 0.05,
-        0,
+        time * (ud.towerId === 'ice' ? 0.85 : 0.35),
         Math.cos(time * 0.9 + enemy.z) * 0.06
       );
       _tempQuatB.setFromEuler(_tempEuler);
@@ -187,10 +201,18 @@ function renderGameFrame(dt) {
         0.32 + surge * 0.3 + (enemy.flashIntensity || 0) * 0.02
       );
       ud.glow.scale.setScalar(2.8 + surge * 0.8 + (enemy.flashIntensity || 0) * 0.08);
+
+      // Отображение фазового сдвига (полупрозрачность при неуязвимости) у Фазового Шипа
+      ud.shellMat.opacity = enemy.shield ? 0.18 : ud.towerId === 'ice' ? 0.68 : 0.56;
       if (!enemy.tintState) {
-        ud.shellMat.emissiveIntensity = 0.55 + surge * 0.7;
+        ud.shellMat.emissiveIntensity = 0.65 + surge * 0.7;
       }
       ud.edgesMat.opacity = 0.45 + surge * 0.35 + Math.sin(time * 6) * 0.1;
+
+      if (ud.phaseRings && ud.phaseRings.length) {
+        ud.phaseRings[0].rotation.z += dt * 1.8;
+        ud.phaseRings[1].rotation.x -= dt * 1.4;
+      }
 
       if (lodTier === 0) {
         const posAttr = ud.stGeo.attributes.position;
@@ -236,7 +258,7 @@ function renderGameFrame(dt) {
         updateBoltList(enemy.bolts, dt);
       }
     } else if (enemy.type === 'l') {
-      // Обсидиановый Прыгун
+      // Прыгун: Обсидиановый Прыгун ('ash') / Ледяной Волк ('ice') / Пустотный Прыгун ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius - 0.98 * 0.7, enemy.z);
       enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
 
@@ -341,18 +363,13 @@ function renderGameFrame(dt) {
         ud.eyeMat.color.copy(ud.eyeBase).multiplyScalar(coalBrightness);
         ud.haloMat.opacity = Math.min(1, 0.45 + 0.4 * coalBrightness);
         ud.glow.material.opacity = Math.min(1, 0.28 + 0.14 * coalBrightness + ud.flare * 0.25);
-        ud.mawMat.color.setHSL(
-          0.05,
-          1,
-          0.45 + 0.15 * Math.sin(time * 6) + (enemy.jawAngle || 0.12) * 0.2
-        );
 
         ud.shake *= Math.exp(-dt * 9);
         enemy.mesh.position.x += (Math.random() - 0.5) * ud.shake;
         enemy.mesh.position.z += (Math.random() - 0.5) * ud.shake;
       }
     } else if (enemy.type === 't') {
-      // Каменный Страж
+      // Танк: Каменный Страж ('ash') / Мерзлотный Голем ('ice') / Страж Бездны ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + 0.02, enemy.z);
       enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
 
@@ -382,6 +399,21 @@ function renderGameFrame(dt) {
             ud.impacted = true;
             if (dist2D < 4.5 && Math.abs(player.y - enemy.y) < 3) {
               damagePlayer(17 * (enemy.damageMultiplier || 1));
+              if (state.towerId === 'ice') {
+                // Удар кулаком Мерзлотного Голема замораживает пол вокруг
+                state.chillTimer = Math.max(state.chillTimer, 2.2);
+              }
+            }
+            // Удар Стража Бездны создаёт кратковременную зону притяжения к точке удара
+            if (state.towerId === 'void' && dist2D < 9 && !state.vortexPull) {
+              state.vortexPull = {
+                x: enemy.x,
+                z: enemy.z,
+                y: enemy.y,
+                timer: 0.9,
+                strength: 4.8,
+                spawnRingOnEnd: 0
+              };
             }
             spawnFireLandingRing(enemy.x, enemy.y + 0.05, enemy.z);
             triggerScreenShake(0.35);
@@ -406,10 +438,13 @@ function renderGameFrame(dt) {
         let headX = 0.16;
         let headY = Math.sin(time * 0.5) * 0.04;
 
+        // Мерзлотный Голем ниже 50% HP бьёт обеими руками!
+        const doubleSlam = ud.towerId === 'ice' && enemy.hp <= enemy.maxHp * 0.5;
+
         if (ud.atkState === 'windup') {
           const k = easeInOutQuad(Math.min(1, ud.atkT / 0.55));
           armRp = lerp(armRp, -2.5, k);
-          armLp = lerp(armLp, -0.5, k);
+          armLp = lerp(armLp, doubleSlam ? -2.5 : -0.5, k);
           armRz = lerp(armRz, 0.25, k);
           lean = lerp(lean, -0.14, k);
           headX = lerp(headX, 0.02, k);
@@ -418,7 +453,7 @@ function renderGameFrame(dt) {
           const k = Math.min(1, ud.atkT / 0.22);
           const ee = k * k;
           armRp = lerp(-2.5, -0.55, ee);
-          armLp = lerp(-0.5, -0.9, ee);
+          armLp = lerp(doubleSlam ? -2.5 : -0.5, doubleSlam ? -0.55 : -0.9, ee);
           armRz = lerp(0.25, 0.1, ee);
           lean = lerp(-0.14, 0.42, ee);
           headX = lerp(0.02, 0.42, ee);
@@ -426,7 +461,7 @@ function renderGameFrame(dt) {
         } else if (ud.atkState === 'recover') {
           const k = easeInOutQuad(Math.min(1, ud.atkT / 0.7));
           armRp = lerp(-0.55, -0.08, k);
-          armLp = lerp(-0.9, -0.08, k);
+          armLp = lerp(doubleSlam ? -0.55 : -0.9, -0.08, k);
           lean = lerp(0.42, 0.12, k);
           headX = lerp(0.42, 0.16, k);
         }
@@ -463,7 +498,6 @@ function renderGameFrame(dt) {
       }
     }
 
-    // Масштаб и маркер элитных мобов
     if (enemy.type !== 'b') {
       const eliteScale = enemy.eliteScale || 1;
       if (enemy.type !== 's') {
@@ -495,7 +529,6 @@ function renderGameFrame(dt) {
     eliteMarkerSprites[q].visible = false;
   }
 
-  // Отрисовка лута (кристаллы опыта, сферы лечения, монеты золота)
   let pickupCount = 0;
   for (let i = 0; i < state.pickups.length && pickupCount < MAX_PICKUPS; i++) {
     const pk = state.pickups[i];
@@ -520,7 +553,6 @@ function renderGameFrame(dt) {
   pickupInstancedMesh.instanceMatrix.needsUpdate = true;
   pickupInstancedMesh.instanceColor.needsUpdate = true;
 
-  // Вращение закрытых сундуков
   for (let i = 0; i < chests.length; i++) {
     const chest = chests[i];
     if (!chest.isOpen) {
@@ -528,7 +560,6 @@ function renderGameFrame(dt) {
     }
   }
 
-  // Отрисовка снарядов и орбитальных клинков
   let fireCount = 0;
   let enemyFireCount = 0;
   let bladeCount = 0;
@@ -570,7 +601,6 @@ function renderGameFrame(dt) {
   if (enemyFireCount) enemyProjectileInstancedMesh.instanceMatrix.needsUpdate = true;
   if (bladeCount) orbitalBladeInstancedMesh.instanceMatrix.needsUpdate = true;
 
-  // Кольца волн игрока
   for (const ringMesh of waveEffectRings) {
     if (ringMesh.visible) {
       ringMesh.lifeLeft -= 1 / 60;
@@ -580,7 +610,6 @@ function renderGameFrame(dt) {
     }
   }
 
-  // Атмосферная пыль / пепел / искрящаяся снежная пыль / планктон Пустоты
   const activeTowerId = state.towerId || 'ash';
   dustParticles.rotation.y += dt * (activeTowerId === 'ice' ? 0.24 : activeTowerId === 'void' ? 0.03 : 0.06);
   const dustPosArr = dustParticles.geometry.attributes.position.array;
@@ -597,7 +626,6 @@ function renderGameFrame(dt) {
   }
   dustParticles.geometry.attributes.position.needsUpdate = true;
 
-  // Обновление искр
   const sparkPosAttr = sparkGeo.attributes.position;
   const sparkColAttr = sparkGeo.attributes.color;
   let anySparkActive = false;
@@ -624,7 +652,6 @@ function renderGameFrame(dt) {
     sparkPosAttr.needsUpdate = sparkColAttr.needsUpdate = true;
   }
 
-  // Обновление клубов дыма
   const smokePosAttr = smokeGeo.attributes.position;
   const smokeColAttr = smokeGeo.attributes.color;
   let anySmokeActive = false;
@@ -652,7 +679,6 @@ function renderGameFrame(dt) {
     smokePosAttr.needsUpdate = smokeColAttr.needsUpdate = true;
   }
 
-  // Кольца приземлений мобов
   for (const ring of fireLandingRings) {
     if (!ring.visible) continue;
     ring.userData.life += dt / 0.45;
@@ -678,7 +704,7 @@ function renderGameFrame(dt) {
   updateGlobalBolts(dt);
   syncBossVisualEffects(dt);
 
-  // Полоса здоровья босса (обновляем DOM только при изменении текста/ширины)
+  // Полоса здоровья босса с индивидуальными статусами для всех 9 боссов
   const activeBoss = state.enemies.find((e) => e.type === 'b');
   if (activeBoss) {
     const currentHp = Math.max(0, activeBoss.hp);
@@ -696,11 +722,40 @@ function renderGameFrame(dt) {
 
     let statusSuffix = '';
     if (activeBoss.bkind === 'womb') {
-      statusSuffix = activeBoss.shield ? ' · ЩИТ' : activeBoss.weak ? ' · ЯДРО ОТКРЫТО ×2' : '';
-    } else if (activeBoss.phase === 2) {
-      statusSuffix = activeBoss.bkind === 'koloss' ? ' · ЯРОСТЬ ЛАВЫ' : ' · ЯРОСТЬ';
+      if (activeTowerId === 'ice') {
+        statusSuffix = activeBoss.shield
+          ? ' · КОКОН ПАУТИНЫ'
+          : activeBoss.weak
+            ? ' · НИТИ СОРВАНЫ ×2'
+            : '';
+      } else if (activeTowerId === 'void') {
+        statusSuffix = activeBoss.shield
+          ? ' · ФАЗОВЫЙ ПАНЦИРЬ'
+          : activeBoss.weak
+            ? ' · РАЗЛОМ СИНГУЛЯРНОСТИ ×2'
+            : '';
+      } else {
+        statusSuffix = activeBoss.shield
+          ? ' · ЩИТ'
+          : activeBoss.weak
+            ? ' · ЯДРО ОТКРЫТО ×2'
+            : '';
+      }
     } else if (activeBoss.bkind === 'koloss' && activeBoss.bossState === 'exhaust') {
-      statusSuffix = ' · ИСТОЩЕНИЕ ×2';
+      statusSuffix =
+        activeTowerId === 'ice'
+          ? ' · СЕРДЦЕ ОТКРЫТО ×2'
+          : activeTowerId === 'void'
+            ? ' · ГОРИЗОНТ ОТКРЫТ ×2'
+            : ' · ИСТОЩЕНИЕ ×2';
+    } else if (activeBoss.phase === 2) {
+      if (activeTowerId === 'ice') {
+        statusSuffix = activeBoss.bkind === 'koloss' ? ' · ОКО БУРАНА' : ' · ЗВОН ПОКАЯНИЯ';
+      } else if (activeTowerId === 'void') {
+        statusSuffix = activeBoss.bkind === 'koloss' ? ' · СИНГУЛЯРНОСТЬ' : ' · СЛОМ ГЕОМЕТРИИ';
+      } else {
+        statusSuffix = activeBoss.bkind === 'koloss' ? ' · ЯРОСТЬ ЛАВЫ' : ' · ЯРОСТЬ';
+      }
     }
 
     const fullBossTitle = activeBoss.bossName + statusSuffix;
@@ -720,7 +775,6 @@ function renderGameFrame(dt) {
     DOM_CACHE.bossHpContainer.classList.remove('visible');
   }
 
-  // Текстовый HUD обновляется раз в 6 кадров
   if (state.frameCount++ % 6 === 0) {
     DOM_CACHE.healthBar.style.width = Math.max(0, (player.hp / state.maxHp) * 100) + '%';
     DOM_CACHE.xpBar.style.width = (state.xp / (6 + 5 * state.level)) * 100 + '%';

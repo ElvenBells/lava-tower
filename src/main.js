@@ -10,23 +10,16 @@ let frameDelta = 0;
 let averageFrameTimeMs = 16;
 let pixelRatioCheckTick = 0;
 
-/**
- * Главный цикл приложения (requestAnimationFrame).
- * Ограничивает число догоняющих шагов физики (предотвращает «спираль смерти»)
- * и плавно адаптирует pixelRatio при устойчивых просадках FPS.
- * @param {number} timestamp
- */
 function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 
   let rawDelta = (timestamp - lastFrameTimestamp) / 1000;
   lastFrameTimestamp = timestamp;
   if (!(rawDelta > 0) || rawDelta > 0.25) {
-    rawDelta = 1 / 60; // Защита от скачка времени после возврата из неактивной вкладки
+    rawDelta = 1 / 60;
   }
   frameDelta = Math.min(0.1, rawDelta);
 
-  // Адаптивное разрешение рендера
   averageFrameTimeMs += (rawDelta * 1000 - averageFrameTimeMs) * 0.05;
   if (++pixelRatioCheckTick >= 180) {
     pixelRatioCheckTick = 0;
@@ -39,7 +32,6 @@ function gameLoop(timestamp) {
     }
   }
 
-  // Анимация текстуры лавы / метели / бездны
   lavaTexture.offset.x += frameDelta * 0.05;
   lavaTexture.offset.y += frameDelta * 0.03;
   iceLavaTexture.offset.x += frameDelta * 0.09;
@@ -73,7 +65,6 @@ function gameLoop(timestamp) {
       renderGameFrame(frameDelta);
     }
   } else {
-    // Фоновый пролёт камеры вокруг выбранной башни в главном меню
     const menuTime = timestamp * 0.001;
     playerMesh.visible = false;
     playerFireballInstancedMesh.count = 0;
@@ -87,7 +78,6 @@ function gameLoop(timestamp) {
       updateEnvironmentVisuals(menuTime, frameDelta);
     }
 
-    // Атмосферные частицы в меню
     dustParticles.rotation.y += frameDelta * 0.08;
 
     camera.position.set(
@@ -100,22 +90,21 @@ function gameLoop(timestamp) {
   }
 }
 
-// Применяем тему выбранной башни и генерируем её для фона главного меню
 applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
 buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
 
-// Прогрев шейдеров: компилируем все типы мобов и боссов один раз на старте,
-// чтобы первый спавн во время игры не вызывал микрофриз
+// Прогрев шейдеров: компилируем мобов и боссов выбранной башни на старте
 (function prewarmShaders() {
   const prewarmedMeshes = [];
+  const initTowerId = selectedTowerId || 'ash';
   for (const mobType of ['s', 'r', 'l', 't']) {
-    const mesh = MobFactory.acquire(mobType);
+    const mesh = MobFactory.acquire(mobType, undefined, initTowerId);
     mesh.position.set(0, -80, 0);
     scene.add(mesh);
     prewarmedMeshes.push([mobType, mesh]);
   }
   for (const bossKind of ['golem', 'womb', 'koloss']) {
-    const mesh = MobFactory.acquire('b', bossKind);
+    const mesh = MobFactory.acquire('b', bossKind, initTowerId);
     mesh.position.set(0, -80, 0);
     scene.add(mesh);
     prewarmedMeshes.push(['b', mesh]);
@@ -130,6 +119,5 @@ buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
   }
 })();
 
-// Запускаем главное меню и цикл рендера
 showMainMenu();
 requestAnimationFrame(gameLoop);
