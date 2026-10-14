@@ -42,8 +42,10 @@ function gameLoop(timestamp) {
   // Анимация текстуры лавы / метели / бездны
   lavaTexture.offset.x += frameDelta * 0.05;
   lavaTexture.offset.y += frameDelta * 0.03;
-  iceLavaTexture.offset.copy(lavaTexture.offset);
-  voidLavaTexture.offset.copy(lavaTexture.offset);
+  iceLavaTexture.offset.x += frameDelta * 0.09;
+  iceLavaTexture.offset.y += frameDelta * 0.06;
+  voidLavaTexture.offset.x -= frameDelta * 0.035;
+  voidLavaTexture.offset.y += frameDelta * 0.04;
 
   if (state && !state.isGameOver) {
     playerMesh.visible = true;
@@ -71,25 +73,36 @@ function gameLoop(timestamp) {
       renderGameFrame(frameDelta);
     }
   } else {
-    // Фоновый пролёт камеры вокруг башни в главном меню
+    // Фоновый пролёт камеры вокруг выбранной башни в главном меню
+    const menuTime = timestamp * 0.001;
     playerMesh.visible = false;
     playerFireballInstancedMesh.count = 0;
     enemyProjectileInstancedMesh.count = 0;
     orbitalBladeInstancedMesh.count = 0;
     pickupInstancedMesh.count = 0;
-    lavaMesh.position.y = -5;
+    lavaMesh.position.y = -4.5;
+    lavaLight.position.set(0, 6, 0);
+
+    if (typeof updateEnvironmentVisuals === 'function') {
+      updateEnvironmentVisuals(menuTime, frameDelta);
+    }
+
+    // Атмосферные частицы в меню
+    dustParticles.rotation.y += frameDelta * 0.08;
+
     camera.position.set(
-      Math.sin(timestamp * 0.0002) * 24,
-      20,
-      Math.cos(timestamp * 0.0002) * 24
+      Math.sin(timestamp * 0.00022) * 23,
+      16 + Math.sin(timestamp * 0.00015) * 6,
+      Math.cos(timestamp * 0.00022) * 23
     );
-    camera.lookAt(0, 12, 0);
+    camera.lookAt(0, 11 + Math.sin(timestamp * 0.00015) * 3, 0);
     renderer.render(scene, camera);
   }
 }
 
-// Генерируем башню для фона главного меню
-buildTower(hashString('lava' + getCurrentDateCode()));
+// Применяем тему выбранной башни и генерируем её для фона главного меню
+applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
+buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
 
 // Прогрев шейдеров: компилируем все типы мобов и боссов один раз на старте,
 // чтобы первый спавн во время игры не вызывал микрофриз

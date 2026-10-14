@@ -128,12 +128,28 @@ function selectTower(towerId) {
   saveNicknameFromInput();
   selectedTowerId = towerId;
   storage.set('lt_tower', towerId);
+  if (TOWERS[towerId]) {
+    applyTowerTheme(TOWERS[towerId]);
+    buildTower(hashString('lava' + getCurrentDateCode() + towerId));
+  }
+  showMainMenu();
+}
+
+function unlockAllTowersForPreview() {
+  saveNicknameFromInput();
+  metaProgress.unlockedTowers.ash = 1;
+  metaProgress.unlockedTowers.ice = 1;
+  metaProgress.unlockedTowers.void = 1;
+  metaProgress.save();
+  playSound('win');
+  showToast('🔓 Все 3 башни открыты!', 2.4);
   showMainMenu();
 }
 
 function buildTowerSelectHtml() {
   const buttonStyle = 'font-size:13px;padding:7px 14px;';
   const smallStyle = 'font-family:Rubik;font-weight:400';
+  const hasLockedTowers = TOWER_IDS.some((id) => !metaProgress.unlockedTowers[id]);
 
   return (
     '<h4>Башня (стандартный забег)</h4>' +
@@ -154,7 +170,10 @@ function buildTowerSelectHtml() {
         `🔒 ${tower.name}<br><small style="${smallStyle}">${tower.unlockCondition}</small>` +
         `</button>`
       );
-    }).join('')
+    }).join('') +
+    (hasLockedTowers
+      ? `<button onclick="unlockAllTowersForPreview()" style="font-size:12px;padding:5px 12px;opacity:.85">👁 Открыть все башни (осмотр и игра)</button>`
+      : '')
   );
 }
 
@@ -236,6 +255,8 @@ function quitToMenu() {
   getById('pauseHint').style.display = 'none';
   getById('bossHp').classList.remove('visible');
   state = null;
+  applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
+  buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
   showMainMenu();
 }
 
@@ -514,6 +535,7 @@ window.forge = openForgeMenu;
 window.buyF = buyForgeUpgrade;
 window.selH = selectHero;
 window.selT = selectTower;
+window.unlockAllTowersForPreview = unlockAllTowersForPreview;
 window.menu = showMainMenu;
 window.pick = pickUpgrade;
 window.pactPick = pickPact;

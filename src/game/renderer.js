@@ -54,6 +54,9 @@ function renderGameFrame(dt) {
   playerMesh.visible = state.invulnerabilityTimer > 0 ? ((time * 24) | 0) % 2 === 0 : true;
 
   lavaMesh.position.y = state.lavaY;
+  if (typeof updateEnvironmentVisuals === 'function') {
+    updateEnvironmentVisuals(time, dt);
+  }
   lavaLight.position.set(player.x * 0.3, Math.max(state.lavaY, player.y - 6) + 2, player.z * 0.3);
   rimLight.position.set(
     player.x - Math.sin(state.cameraYaw) * 3,
@@ -577,12 +580,20 @@ function renderGameFrame(dt) {
     }
   }
 
-  // Атмосферная пыль
-  dustParticles.rotation.y += dt * 0.05;
+  // Атмосферная пыль / пепел / искрящаяся снежная пыль / планктон Пустоты
+  const activeTowerId = state.towerId || 'ash';
+  dustParticles.rotation.y += dt * (activeTowerId === 'ice' ? 0.24 : activeTowerId === 'void' ? 0.03 : 0.06);
   const dustPosArr = dustParticles.geometry.attributes.position.array;
   for (let i = 0; i < DUST_PARTICLE_COUNT * 3; i += 3) {
-    dustPosArr[i + 1] += dt * 0.5;
+    if (activeTowerId === 'ice') {
+      dustPosArr[i + 1] += dt * 0.85;
+    } else if (activeTowerId === 'void') {
+      dustPosArr[i + 1] += Math.sin(time * 1.5 + i * 0.37) * dt * 0.28;
+    } else {
+      dustPosArr[i + 1] += dt * 0.55;
+    }
     if (dustPosArr[i + 1] > 180) dustPosArr[i + 1] = 0;
+    if (dustPosArr[i + 1] < 0) dustPosArr[i + 1] = 180;
   }
   dustParticles.geometry.attributes.position.needsUpdate = true;
 

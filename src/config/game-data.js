@@ -17,7 +17,7 @@ const WEAPONS = {
  */
 const ITEMS = {
   coal: {
-    name: 'Угольный сапаг',
+    name: 'Угольный сапог',
     tags: ['fire', 'kin'],
     description: 'Приземление: огненная волна 3 м'
   },
@@ -337,7 +337,7 @@ const PACTS = {
 };
 
 /**
- * Конфигурация трёх башен.
+ * Конфигурация трёх башен с индивидуальной атмосферой, палитрой и освещением.
  */
 const TOWERS = {
   ash: {
@@ -345,56 +345,78 @@ const TOWERS = {
     name: 'Пепельная башня',
     hazardGenitive: 'лавы',
     loseTitle: 'ЛАВА ПОБЕДИЛА',
-    description: 'Классика: снизу поднимается лава.',
+    description: 'Тёмно-багровый кирпич с магматическими трещинами, грубый базальт и бурлящее море лавы снизу.',
     unlockCondition: '',
-    fogColor: 0x140a18,
-    fogDensity: 0.012,
-    hemiSkyColor: 0x8a7bb0,
-    hemiGroundColor: 0x3a1408,
+    fogColor: 0x1a090d,
+    fogDensity: 0.0105,
+    hemiSkyColor: 0xb86b58,
+    hemiGroundColor: 0x4d1506,
+    dirLightColor: 0xffb878,
+    dirLightIntensity: 0.55,
     lavaLightColor: 0xff5a00,
-    blockColors: [0x7a5640, 0x66568a, 0x8a4656],
+    lavaLightIntensity: 3.1,
+    rimLightColor: 0xff7030,
+    blockColors: [0xb58d82, 0xa87e78, 0xba7c72],
     layoutWeights: [0.15, 0.4, 0.7],
-    islandRemoveProb: 0.32
+    islandRemoveProb: 0.32,
+    dustColor: 0xff9442,
+    dustSize: 0.34,
+    dustOpacity: 0.65,
+    backgroundGradient: ['#1a060a', '#3d0e14', '#6e1c0a']
   },
   ice: {
     id: 'ice',
     name: 'Ледяная башня',
     hazardGenitive: 'метели',
     loseTitle: 'МЕТЕЛЬ ПОБЕДИЛА',
-    description: 'Скользкий пол, нельзя стоять на месте (холод), мобы крепче на 15%, метель чуть медленнее.',
+    description: 'Полупрозрачный голубой лёд с вмёрзшими силуэтами, зеркальный скользкий пол, лютый холод и бездонный вихрь метели.',
     unlockCondition: 'Победить Лавового Колосса в Пепельной башне',
-    fogColor: 0x0d1a2b,
-    fogDensity: 0.014,
-    hemiSkyColor: 0x9fd0ff,
-    hemiGroundColor: 0x1a3550,
-    lavaLightColor: 0x58b8ff,
-    blockColors: [0x6f9ac0, 0x8fb4d8, 0x6a7fb8],
+    fogColor: 0x10253d,
+    fogDensity: 0.0115,
+    hemiSkyColor: 0xd4f0ff,
+    hemiGroundColor: 0x285680,
+    dirLightColor: 0xe6f7ff,
+    dirLightIntensity: 0.72,
+    lavaLightColor: 0x68c8ff,
+    lavaLightIntensity: 2.6,
+    rimLightColor: 0x90e0ff,
+    blockColors: [0xc2e4ff, 0xd4eeff, 0xb2d8f8],
     layoutWeights: [0.25, 0.45, 0.7],
     islandRemoveProb: 0.3,
     isSlipperyIce: 1,
     hasColdPenalty: 1,
     hazardSpeedMul: 0.85,
     enemyHpMul: 1.15,
-    backgroundGradient: ['#0a1830', '#17304f', '#2a5f8a']
+    dustColor: 0xdff6ff,
+    dustSize: 0.36,
+    dustOpacity: 0.78,
+    backgroundGradient: ['#0b1d36', '#1c426e', '#4b8ec2']
   },
   void: {
     id: 'void',
     name: 'Башня Пустоты',
     hazardGenitive: 'бездны',
     loseTitle: 'БЕЗДНА ПОБЕДИЛА',
-    description: 'Низкая гравитация, много пропастей, мобы телепортируются к вам.',
+    description: 'Тёмно-фиолетовый камень с мерцающими рунами, парящие в невесомости обломки, звёздный пол и бездна.',
     unlockCondition: 'Победить в Ледяной башне',
-    fogColor: 0x0b0616,
-    fogDensity: 0.011,
-    hemiSkyColor: 0xa070ff,
-    hemiGroundColor: 0x1a0830,
-    lavaLightColor: 0xb040ff,
-    blockColors: [0x4a3a7a, 0x6a3a8a, 0x3a2a6a],
+    fogColor: 0x080312,
+    fogDensity: 0.0095,
+    hemiSkyColor: 0xa868ff,
+    hemiGroundColor: 0x18042e,
+    dirLightColor: 0xc896ff,
+    dirLightIntensity: 0.48,
+    lavaLightColor: 0xa838ff,
+    lavaLightIntensity: 2.9,
+    rimLightColor: 0xd068ff,
+    blockColors: [0x9c82c8, 0xb084d8, 0x8a74bc],
     layoutWeights: [0.05, 0.3, 0.55],
     islandRemoveProb: 0.42,
     gravityMul: 0.62,
     canEnemiesBlink: 1,
-    backgroundGradient: ['#05020d', '#150a2a', '#2a0e45']
+    dustColor: 0xc888ff,
+    dustSize: 0.32,
+    dustOpacity: 0.72,
+    backgroundGradient: ['#030108', '#110626', '#280a48']
   }
 };
 
