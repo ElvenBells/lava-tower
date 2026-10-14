@@ -68,9 +68,14 @@ function gameLoop(timestamp) {
     const menuTime = timestamp * 0.001;
     playerMesh.visible = false;
     playerFireballInstancedMesh.count = 0;
+    playerFireballCrustInstancedMesh.count = 0;
     enemyProjectileInstancedMesh.count = 0;
     orbitalBladeInstancedMesh.count = 0;
+    orbitalBladeCoreInstancedMesh.count = 0;
+    orbitalBladeTrailInstancedMesh.count = 0;
     pickupInstancedMesh.count = 0;
+    healPickupInstancedMesh.count = 0;
+    goldPickupInstancedMesh.count = 0;
     lavaMesh.position.y = -4.5;
     lavaLight.position.set(0, 6, 0);
 

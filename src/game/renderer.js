@@ -1,7 +1,7 @@
 /* ==========================================================================
    Отрисовка игрового кадра:
    анимация героя «Угленосец», положение камеры, LOD-анимация 12 типов мобов
-   и 9 боссов, обновление буферов инстансинга, частиц и HUD
+   и 9 боссов, обновление 3D-буферов оружия, снарядов, лута, частиц и HUD
    ========================================================================== */
 
 const DOM_CACHE = {
@@ -127,7 +127,6 @@ function renderGameFrame(dt) {
         renderKolossBoss(enemy, ud, dt);
       }
     } else if (enemy.type === 's') {
-      // Рой: Огарёк ('ash') / Мерзлявка ('ice') / Теневой Мотылёк ('void')
       const hasWings = !!(ud.wingL && ud.wingR);
       const hoverBoost = hasWings ? 0.36 + Math.sin(time * 6.5 + enemy.x) * 0.14 : 0;
       enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius + hoverBoost, enemy.z);
@@ -180,7 +179,6 @@ function renderGameFrame(dt) {
         enemy.eyeFlickerTimer = 0.1;
       }
     } else if (enemy.type === 'r') {
-      // Стрелок: Пустотный Шип ('ash') / Инеевый Кристалл ('ice') / Фазовый Шип ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius, enemy.z);
       _tempVec3.set(dz / dist2D, 0, -dx / dist2D);
       _tempQuatA.setFromAxisAngle(_tempVec3, Math.PI / 2);
@@ -202,7 +200,6 @@ function renderGameFrame(dt) {
       );
       ud.glow.scale.setScalar(2.8 + surge * 0.8 + (enemy.flashIntensity || 0) * 0.08);
 
-      // Отображение фазового сдвига (полупрозрачность при неуязвимости) у Фазового Шипа
       ud.shellMat.opacity = enemy.shield ? 0.18 : ud.towerId === 'ice' ? 0.68 : 0.56;
       if (!enemy.tintState) {
         ud.shellMat.emissiveIntensity = 0.65 + surge * 0.7;
@@ -258,7 +255,6 @@ function renderGameFrame(dt) {
         updateBoltList(enemy.bolts, dt);
       }
     } else if (enemy.type === 'l') {
-      // Прыгун: Обсидиановый Прыгун ('ash') / Ледяной Волк ('ice') / Пустотный Прыгун ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius - 0.98 * 0.7, enemy.z);
       enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
 
@@ -369,7 +365,6 @@ function renderGameFrame(dt) {
         enemy.mesh.position.z += (Math.random() - 0.5) * ud.shake;
       }
     } else if (enemy.type === 't') {
-      // Танк: Каменный Страж ('ash') / Мерзлотный Голем ('ice') / Страж Бездны ('void')
       enemy.mesh.position.set(enemy.x, enemy.y + 0.02, enemy.z);
       enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
 
@@ -400,11 +395,9 @@ function renderGameFrame(dt) {
             if (dist2D < 4.5 && Math.abs(player.y - enemy.y) < 3) {
               damagePlayer(17 * (enemy.damageMultiplier || 1));
               if (state.towerId === 'ice') {
-                // Удар кулаком Мерзлотного Голема замораживает пол вокруг
                 state.chillTimer = Math.max(state.chillTimer, 2.2);
               }
             }
-            // Удар Стража Бездны создаёт кратковременную зону притяжения к точке удара
             if (state.towerId === 'void' && dist2D < 9 && !state.vortexPull) {
               state.vortexPull = {
                 x: enemy.x,
@@ -433,12 +426,11 @@ function renderGameFrame(dt) {
         let armRp = -0.08;
         let armLp = -0.08;
         let armRz = 0.06;
-        let armLz = -0.06;
+        const armLz = -0.06;
         let lean = 0.12;
         let headX = 0.16;
         let headY = Math.sin(time * 0.5) * 0.04;
 
-        // Мерзлотный Голем ниже 50% HP бьёт обеими руками!
         const doubleSlam = ud.towerId === 'ice' && enemy.hp <= enemy.maxHp * 0.5;
 
         if (ud.atkState === 'windup') {
@@ -529,29 +521,43 @@ function renderGameFrame(dt) {
     eliteMarkerSprites[q].visible = false;
   }
 
-  let pickupCount = 0;
-  for (let i = 0; i < state.pickups.length && pickupCount < MAX_PICKUPS; i++) {
+  // Детализированные 3D-модели лута: Кристаллы опыта (type 0), Сердца жизни (type 1), Золотые медальоны (type 2)
+  let xpPickupCount = 0;
+  let healPickupCount = 0;
+  let goldPickupCount = 0;
+  for (let i = 0; i < state.pickups.length; i++) {
     const pk = state.pickups[i];
-    const size =
-      pk.type === 0
-        ? pk.value >= 5
-          ? 1.6
-          : 0.8 + Math.min(0.5, pk.value * 0.1)
-        : pk.type === 1
-          ? 1.3
-          : 0.75;
-    _pickupDummyObj.position.set(pk.x, pk.y + Math.sin(time * 3 + pk.phase) * 0.12, pk.z);
-    _pickupDummyObj.rotation.set(0, time * 2 + pk.phase, 0);
-    _pickupDummyObj.scale.setScalar(size);
-    _pickupDummyObj.updateMatrix();
-    pickupInstancedMesh.setMatrixAt(pickupCount, _pickupDummyObj.matrix);
-    const colorIdx = pk.type === 0 ? (pk.value >= 5 ? 3 : 0) : pk.type === 1 ? 1 : 2;
-    pickupInstancedMesh.setColorAt(pickupCount, PICKUP_COLORS[colorIdx]);
-    pickupCount++;
+    const bobY = pk.y + Math.sin(time * 3.2 + pk.phase) * 0.14;
+    _pickupDummyObj.position.set(pk.x, bobY, pk.z);
+    _pickupDummyObj.rotation.set(0, time * 2.4 + pk.phase, 0);
+
+    if (pk.type === 0 && xpPickupCount < MAX_PICKUPS) {
+      const size = pk.value >= 5 ? 1.45 : 0.85 + Math.min(0.45, pk.value * 0.08);
+      _pickupDummyObj.scale.setScalar(size);
+      _pickupDummyObj.updateMatrix();
+      pickupInstancedMesh.setMatrixAt(xpPickupCount, _pickupDummyObj.matrix);
+      pickupInstancedMesh.setColorAt(xpPickupCount, PICKUP_COLORS[pk.value >= 5 ? 3 : 0]);
+      xpPickupCount++;
+    } else if (pk.type === 1 && healPickupCount < 120) {
+      const pulse = 1.2 + Math.sin(time * 6 + pk.phase) * 0.12;
+      _pickupDummyObj.scale.setScalar(pulse);
+      _pickupDummyObj.updateMatrix();
+      healPickupInstancedMesh.setMatrixAt(healPickupCount++, _pickupDummyObj.matrix);
+    } else if (pk.type === 2 && goldPickupCount < 200) {
+      _pickupDummyObj.scale.setScalar(0.95);
+      _pickupDummyObj.updateMatrix();
+      goldPickupInstancedMesh.setMatrixAt(goldPickupCount++, _pickupDummyObj.matrix);
+    }
   }
-  pickupInstancedMesh.count = pickupCount;
+  pickupInstancedMesh.count = xpPickupCount;
   pickupInstancedMesh.instanceMatrix.needsUpdate = true;
-  pickupInstancedMesh.instanceColor.needsUpdate = true;
+  if (pickupInstancedMesh.instanceColor) {
+    pickupInstancedMesh.instanceColor.needsUpdate = true;
+  }
+  healPickupInstancedMesh.count = healPickupCount;
+  if (healPickupCount) healPickupInstancedMesh.instanceMatrix.needsUpdate = true;
+  goldPickupInstancedMesh.count = goldPickupCount;
+  if (goldPickupCount) goldPickupInstancedMesh.instanceMatrix.needsUpdate = true;
 
   for (let i = 0; i < chests.length; i++) {
     const chest = chests[i];
@@ -560,52 +566,101 @@ function renderGameFrame(dt) {
     }
   }
 
+  // Снаряды игрока (Пылающий Метеор + Обсидиановая корка) и вражеские снаряды (Осколок/Веретено)
   let fireCount = 0;
   let enemyFireCount = 0;
   let bladeCount = 0;
 
   for (const proj of state.projectiles) {
+    const flyYaw = Math.atan2(proj.vx || 0, proj.vz || 1);
+    const spinRoll = time * 11 + proj.x * 1.7 + proj.z * 1.3;
+    const pulseScale = 1 + Math.sin(time * 22 + proj.x) * 0.1;
+
     if (proj.isHostile) {
       if (enemyFireCount >= 100) continue;
       _projectileDummyObj.position.set(proj.x, proj.y, proj.z);
-      _projectileDummyObj.rotation.set(time * 5 + proj.x, time * 4 + proj.y, time * 3 + proj.z);
-      _projectileDummyObj.scale.setScalar(1 + Math.sin(time * 20 + proj.x) * 0.1);
+      _projectileDummyObj.rotation.set(0, flyYaw, spinRoll);
+      _projectileDummyObj.scale.setScalar(pulseScale);
       _projectileDummyObj.updateMatrix();
       enemyProjectileInstancedMesh.setMatrixAt(enemyFireCount++, _projectileDummyObj.matrix);
     } else {
       if (fireCount >= 250) continue;
       _projectileDummyObj.position.set(proj.x, proj.y, proj.z);
-      _projectileDummyObj.rotation.set(time * 5 + proj.x, time * 4 + proj.y, time * 3 + proj.z);
-      _projectileDummyObj.scale.setScalar(1 + Math.sin(time * 20 + proj.x) * 0.1);
+      _projectileDummyObj.rotation.set(0, flyYaw, spinRoll);
+      _projectileDummyObj.scale.setScalar(pulseScale);
       _projectileDummyObj.updateMatrix();
-      playerFireballInstancedMesh.setMatrixAt(fireCount++, _projectileDummyObj.matrix);
+      playerFireballInstancedMesh.setMatrixAt(fireCount, _projectileDummyObj.matrix);
+
+      // Обсидиановая корка вращается в противофазе вокруг огненного ядра
+      _projectileDummyObj.rotation.set(0, flyYaw, -spinRoll * 0.75);
+      _projectileDummyObj.updateMatrix();
+      playerFireballCrustInstancedMesh.setMatrixAt(fireCount, _projectileDummyObj.matrix);
+      fireCount++;
     }
+  }
+
+  // Цветовой резонанс ядра и шлейфа Орбитальных клинков с собранными стихиями
+  const tags = state.tagCounts || {};
+  if (tags.fire > 0) {
+    orbitalBladeCoreMat.emissive.setHex(0xff6a15);
+    orbitalBladeTrailMat.color.setHex(0xff8c28);
+  } else if (tags.ice > 0) {
+    orbitalBladeCoreMat.emissive.setHex(0x40d8ff);
+    orbitalBladeTrailMat.color.setHex(0x88f2ff);
+  } else if (tags.elec > 0) {
+    orbitalBladeCoreMat.emissive.setHex(0xc858ff);
+    orbitalBladeTrailMat.color.setHex(0xd888ff);
+  } else {
+    orbitalBladeCoreMat.emissive.setHex(0x45e8ff);
+    orbitalBladeTrailMat.color.setHex(0x60f0ff);
   }
 
   for (let i = 0; i < (state.activeBladeCount || 0); i++) {
     const bladePos = state.bladePositions[i];
     if (bladeCount >= 50) break;
-    _projectileDummyObj.position.set(bladePos[0], player.y + 1, bladePos[1]);
+    const hoverWave = Math.sin(time * 7 + i * 1.4) * 0.08;
+    _projectileDummyObj.position.set(bladePos[0], player.y + 1.0 + hoverWave, bladePos[1]);
     const angle = Math.atan2(bladePos[1] - player.z, bladePos[0] - player.x);
-    _projectileDummyObj.rotation.set(0, -angle, Math.PI / 2);
-    _projectileDummyObj.scale.setScalar(1.5);
+    const bankTilt = Math.PI / 2 + Math.sin(time * 9 + i) * 0.14;
+    _projectileDummyObj.rotation.set(0, -angle, bankTilt);
+    _projectileDummyObj.scale.setScalar(1.45);
     _projectileDummyObj.updateMatrix();
-    orbitalBladeInstancedMesh.setMatrixAt(bladeCount++, _projectileDummyObj.matrix);
+    orbitalBladeInstancedMesh.setMatrixAt(bladeCount, _projectileDummyObj.matrix);
+    orbitalBladeCoreInstancedMesh.setMatrixAt(bladeCount, _projectileDummyObj.matrix);
+    orbitalBladeTrailInstancedMesh.setMatrixAt(bladeCount, _projectileDummyObj.matrix);
+    bladeCount++;
   }
 
   playerFireballInstancedMesh.count = fireCount;
+  playerFireballCrustInstancedMesh.count = fireCount;
   enemyProjectileInstancedMesh.count = enemyFireCount;
   orbitalBladeInstancedMesh.count = bladeCount;
+  orbitalBladeCoreInstancedMesh.count = bladeCount;
+  orbitalBladeTrailInstancedMesh.count = bladeCount;
 
-  if (fireCount) playerFireballInstancedMesh.instanceMatrix.needsUpdate = true;
+  if (fireCount) {
+    playerFireballInstancedMesh.instanceMatrix.needsUpdate = true;
+    playerFireballCrustInstancedMesh.instanceMatrix.needsUpdate = true;
+  }
   if (enemyFireCount) enemyProjectileInstancedMesh.instanceMatrix.needsUpdate = true;
-  if (bladeCount) orbitalBladeInstancedMesh.instanceMatrix.needsUpdate = true;
+  if (bladeCount) {
+    orbitalBladeInstancedMesh.instanceMatrix.needsUpdate = true;
+    orbitalBladeCoreInstancedMesh.instanceMatrix.needsUpdate = true;
+    orbitalBladeTrailInstancedMesh.instanceMatrix.needsUpdate = true;
+  }
 
+  // Анимация 3D Ударных волн (с короной зубцов и двойным тором)
   for (const ringMesh of waveEffectRings) {
     if (ringMesh.visible) {
-      ringMesh.lifeLeft -= 1 / 60;
-      ringMesh.scale.multiplyScalar(1.03);
-      ringMesh.material.opacity = Math.max(0, ringMesh.lifeLeft / 0.3);
+      ringMesh.lifeLeft -= dt;
+      const maxL = ringMesh.maxLife || 0.36;
+      const progress = Math.min(1, Math.max(0, 1 - ringMesh.lifeLeft / maxL));
+      const rTarget = ringMesh.targetRadius || 3;
+      const curRadius = rTarget * (0.38 + easeOutCubic(progress) * 0.68);
+      const curHeight = Math.max(0.5, rTarget * 0.28 * Math.sin(progress * Math.PI));
+      ringMesh.scale.set(curRadius, curHeight, curRadius);
+      ringMesh.rotation.y += dt * 2.6;
+      ringMesh.material.opacity = Math.max(0, (1 - progress) * 0.88);
       if (ringMesh.lifeLeft <= 0) ringMesh.visible = false;
     }
   }
@@ -686,8 +741,9 @@ function renderGameFrame(dt) {
       ring.visible = false;
       continue;
     }
-    ring.scale.setScalar(1 + ring.userData.life * 2.4);
-    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.65);
+    const rScale = 1 + ring.userData.life * 2.4;
+    ring.scale.set(rScale, 1 + (1 - ring.userData.life) * 0.8, rScale);
+    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.72);
   }
 
   for (const ring of voidLandingRings) {
@@ -697,8 +753,9 @@ function renderGameFrame(dt) {
       ring.visible = false;
       continue;
     }
-    ring.scale.setScalar(1 + ring.userData.life * 2.4);
-    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.65);
+    const rScale = 1 + ring.userData.life * 2.4;
+    ring.scale.set(rScale, 1 + (1 - ring.userData.life) * 0.8, rScale);
+    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.72);
   }
 
   updateGlobalBolts(dt);

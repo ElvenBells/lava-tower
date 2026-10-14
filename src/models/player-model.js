@@ -1,13 +1,14 @@
 /* ==========================================================================
    Модель главного героя «Угленосец» (Runner · Пепельная гильдия),
-   процедурные анимации перемещения, прыжков, двойного прыжка и подкатов,
-   а также базовое окружение башни и смена тем
+   3D-модели экипировки предметов (Угольный сапог, Ледяная подошва, Громовой пояс,
+   Лавовое сердце, Компас высоты, Плавильный кристалл), процедурные анимации
+   перемещения, прыжков, двойного прыжка и подкатов, а также базовое окружение
    ========================================================================== */
 
 const playerMesh = new THREE.Group();
 scene.add(playerMesh);
 
-/* ---------- 0. Детализированная 3D-модель героя «Угленосец» ---------- */
+/* ---------- 0. Детализированная 3D-модель героя «Угленосец» и его экипировки ---------- */
 
 const heroRig = (function buildCoalbearerHero() {
   const T = THREE;
@@ -25,6 +26,32 @@ const heroRig = (function buildCoalbearerHero() {
     emissive: 0xff4a10,
     emissiveIntensity: 1.35,
     flatShading: true
+  });
+  const magmaHot = L(0xffcf58, {
+    emissive: 0xff6200,
+    emissiveIntensity: 2.1,
+    roughness: 0.2,
+    flatShading: true
+  });
+  const frostMat = L(0xb8f2ff, {
+    emissive: 0x28a8ff,
+    emissiveIntensity: 1.45,
+    roughness: 0.12,
+    metalness: 0.35,
+    flatShading: true
+  });
+  const stormMat = L(0xd898ff, {
+    emissive: 0x7828ff,
+    emissiveIntensity: 1.65,
+    roughness: 0.18,
+    metalness: 0.4,
+    flatShading: true
+  });
+  const brassMat = L(0xd8a848, {
+    emissive: 0x583800,
+    emissiveIntensity: 0.45,
+    roughness: 0.28,
+    metalness: 0.72
   });
   const cr1 = L(0xffb347, {
     emissive: 0xc86a00,
@@ -56,6 +83,7 @@ const heroRig = (function buildCoalbearerHero() {
   const cy = (a, b, h, n = 10) => new T.CylinderGeometry(a, b, h, n);
   const sp = (r, w = 12, h = 9) => new T.SphereGeometry(r, w, h);
   const bx = (w, h, d) => new T.BoxGeometry(w, h, d);
+  const cn = (r, h, n = 5) => new T.ConeGeometry(r, h, n);
   const ico = (r) => new T.IcosahedronGeometry(r, 0);
   const oct = (r) => new T.OctahedronGeometry(r, 0);
 
@@ -63,7 +91,10 @@ const heroRig = (function buildCoalbearerHero() {
   const lean = makeGroup([0, 0.95, 0], hero);
   const up = makeGroup([0, -0.95, 0], lean);
 
-  // Ноги с тазобедренным ('h') и коленным ('k') суставами и ботинками
+  const coalBootMods = [];
+  const iceSoleMods = [];
+
+  // Ноги с тазобедренным ('h') и коленным ('k') суставами, детализированными сапогами и слотами предметов
   const legs = [1, -1].map((s) => {
     const h = makeGroup([s * 0.1, 0.95, 0], hero);
     makeMesh(cy(0.088, 0.066, 0.46), cu, [0, -0.23, 0], h);
@@ -73,8 +104,110 @@ const heroRig = (function buildCoalbearerHero() {
     makeMesh(cy(0.062, 0.048, 0.4), cu, [0, -0.2, 0], k);
     makeMesh(cy(0.068, 0.064, 0.16), lea, [0, -0.31, 0], k);
     makeMesh(cy(0.07, 0.07, 0.025), st, [0, -0.24, 0], k);
-    makeMesh(bx(0.115, 0.09, 0.22), leaD, [0, -0.445, 0.045], k);
-    makeMesh(sp(0.056), leaD, [0, -0.45, 0.15], k, [1, 0.8, 1]);
+
+    // Базовый кованый сапог Угленосца (с протектором, накладкой подъёма, стальным мыском и пяткой)
+    makeMesh(bx(0.116, 0.086, 0.22), leaD, [0, -0.442, 0.045], k);
+    makeMesh(bx(0.124, 0.022, 0.236), stD, [0, -0.482, 0.046], k);
+    makeMesh(sp(0.058), stD, [0, -0.448, 0.152], k, [1.02, 0.82, 1.05]);
+    makeMesh(bx(0.088, 0.036, 0.09), st, [0, -0.402, 0.065], k).rotation.x = 0.32;
+    makeMesh(bx(0.122, 0.042, 0.055), stD, [0, -0.445, -0.045], k);
+    // Тлеющий угольный глазок на базовом сапоге
+    makeMesh(oct(0.018), coal, [s * 0.062, -0.31, 0.02], k, [0.7, 1.3, 0.9]);
+
+    // 1. Экипировка «УГОЛЬНЫЙ САПОГ» (Огненный сапог Горна: латный наголенник с топкой, сопла, шпора и пламенные рёбра)
+    const coalBoot = makeGroup([0, 0, 0], k);
+    // Кованый латный щиток голени с огненной щелью-горном
+    makeMesh(cy(0.079, 0.073, 0.18, 8), stD, [0, -0.305, 0.012], coalBoot);
+    makeMesh(bx(0.058, 0.16, 0.035), cuD, [0, -0.305, 0.065], coalBoot);
+    makeMesh(bx(0.024, 0.135, 0.022), magmaHot, [0, -0.305, 0.078], coalBoot);
+    // Огненный наколенный шип-гребень
+    const kneeHorn = makeMesh(cn(0.034, 0.105, 5), coal, [0, -0.195, 0.078], coalBoot);
+    kneeHorn.rotation.x = 0.42;
+    // Расширенная магматическая подошва с зубьями-подковами
+    makeMesh(bx(0.142, 0.026, 0.262), stD, [0, -0.482, 0.05], coalBoot);
+    makeMesh(bx(0.148, 0.013, 0.268), magmaHot, [0, -0.474, 0.05], coalBoot);
+    // 3 боковых сопла Горна с раскалёнными углями
+    [-0.04, 0.025, 0.09].forEach((zOff, idx) => {
+      const vent = makeMesh(
+        cy(0.018, 0.022, 0.038, 6),
+        stD,
+        [s * 0.072, -0.442 + idx * 0.008, zOff],
+        coalBoot
+      );
+      vent.rotation.z = PI / 2;
+      const emberCore = makeMesh(
+        cy(0.012, 0.012, 0.042, 6),
+        magmaHot,
+        [s * 0.074, -0.442 + idx * 0.008, zOff],
+        coalBoot
+      );
+      emberCore.rotation.z = PI / 2;
+    });
+    // Боковые пламенные крылья-пластины на лодыжке
+    [-1, 1].forEach((sideSign) => {
+      const fin = makeMesh(
+        cn(0.032, 0.14, 4),
+        sideSign === s ? magmaHot : coal,
+        [sideSign * 0.075, -0.34, -0.01],
+        coalBoot,
+        [0.45, 1, 0.9]
+      );
+      fin.rotation.set(-0.35, 0, -sideSign * 0.38);
+    });
+    // Передний таранный коготь-мысок и задняя вулканическая шпора
+    const toeClaw = makeMesh(cn(0.038, 0.095, 4), magmaHot, [0, -0.455, 0.21], coalBoot);
+    toeClaw.rotation.x = PI * 0.46;
+    const heelSpur = makeMesh(cn(0.032, 0.11, 5), coal, [0, -0.425, -0.105], coalBoot);
+    heelSpur.rotation.x = -PI * 0.44;
+    // Тепловой ореол вокруг сапога
+    const bootGlow = new T.Sprite(
+      new T.SpriteMaterial({
+        map: TEXTURES.coal,
+        color: 0xff6a18,
+        transparent: true,
+        opacity: 0.65,
+        blending: T.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    bootGlow.position.set(0, -0.41, 0.05);
+    bootGlow.scale.setScalar(0.52);
+    coalBoot.add(bootGlow);
+    coalBoot.visible = false;
+    coalBootMods.push({ group: coalBoot, glow: bootGlow });
+
+    // 2. Экипировка «ЛЕДЯНАЯ ПОДОШВА» (кристаллические коньки-полозья и шипы инея)
+    const iceSole = makeGroup([0, 0, 0], k);
+    [-0.038, 0.038].forEach((xOff) => {
+      makeMesh(bx(0.015, 0.042, 0.295), frostMat, [xOff, -0.492, 0.058], iceSole);
+    });
+    const iceProw = makeMesh(cn(0.032, 0.12, 4), frostMat, [0, -0.455, 0.23], iceSole);
+    iceProw.rotation.x = PI * 0.36;
+    const iceHeel = makeMesh(oct(0.036), frostMat, [0, -0.43, -0.105], iceSole, [0.65, 1.7, 0.85]);
+    iceHeel.rotation.x = -0.45;
+    makeMesh(
+      oct(0.032),
+      frostMat,
+      [s * 0.078, -0.38, 0.02],
+      iceSole,
+      [0.6, 1.85, 0.65]
+    ).rotation.z = -s * 0.42;
+    const iceBootGlow = new T.Sprite(
+      new T.SpriteMaterial({
+        map: TEXTURES.glowIce,
+        color: 0x70e4ff,
+        transparent: true,
+        opacity: 0.6,
+        blending: T.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    iceBootGlow.position.set(0, -0.46, 0.05);
+    iceBootGlow.scale.setScalar(0.46);
+    iceSole.add(iceBootGlow);
+    iceSole.visible = false;
+    iceSoleMods.push({ group: iceSole, glow: iceBootGlow });
+
     return { h, k };
   });
 
@@ -145,6 +278,113 @@ const heroRig = (function buildCoalbearerHero() {
   beltGlow.scale.setScalar(0.65);
   up.add(beltGlow);
 
+  // 3. Экипировка «ГРОМОВОЙ ПОЯС» (катушки Теслы и грозовые электроды-кристаллы на поясе)
+  const thunderBeltGroup = makeGroup([0, 1.0, 0], up);
+  const thunderBeltCrystals = [];
+  [-1, 1].forEach((s) => {
+    const coilPod = makeGroup([s * 0.255, 0.02, 0.08], thunderBeltGroup);
+    coilPod.rotation.z = -s * 0.28;
+    makeMesh(cy(0.042, 0.048, 0.14, 8), stD, [0, 0, 0], coilPod);
+    [-0.038, 0, 0.038].forEach((ry) => {
+      makeMesh(new T.TorusGeometry(0.048, 0.009, 6, 14), brassMat, [0, ry, 0], coilPod).rotation.x =
+        PI / 2;
+    });
+    const crys = makeMesh(oct(0.046), stormMat, [0, 0.105, 0], coilPod, [0.75, 1.45, 0.75]);
+    thunderBeltCrystals.push(crys);
+  });
+  [-0.045, 0, 0.045].forEach((xOff, idx) => {
+    const prong = makeMesh(
+      cn(0.016, 0.085, 4),
+      stormMat,
+      [xOff, 0.055, 0.215],
+      thunderBeltGroup
+    );
+    prong.rotation.x = 0.35;
+    prong.rotation.z = (1 - idx) * 0.25;
+  });
+  const thunderBeltGlow = new T.Sprite(
+    new T.SpriteMaterial({
+      map: TEXTURES.glowPurple,
+      color: 0xc878ff,
+      transparent: true,
+      opacity: 0.7,
+      blending: T.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  thunderBeltGlow.position.set(0, 0.03, 0.25);
+  thunderBeltGlow.scale.setScalar(0.58);
+  thunderBeltGroup.add(thunderBeltGlow);
+  thunderBeltGroup.visible = false;
+
+  // 4. Экипировка «ЛАВОВОЕ СЕРДЦЕ» (кованая клетка на груди с бьющимся магматическим сердцем)
+  const lavaHeartGroup = makeGroup([0, 1.29, 0.175], up);
+  makeMesh(new T.TorusGeometry(0.072, 0.013, 6, 8), stD, [0, 0, 0], lavaHeartGroup);
+  for (let c = 0; c < 4; c++) {
+    const ang = (c / 4) * PI * 2 + PI / 4;
+    const claw = makeMesh(
+      cn(0.016, 0.06, 4),
+      st,
+      [Math.cos(ang) * 0.065, Math.sin(ang) * 0.065, 0.015],
+      lavaHeartGroup
+    );
+    claw.rotation.z = ang + PI / 2;
+  }
+  const lavaHeartCore = makeGroup([0, 0, 0.02], lavaHeartGroup);
+  makeMesh(ico(0.052), magmaHot, [0, -0.005, 0], lavaHeartCore, [1.0, 1.15, 0.85]);
+  makeMesh(oct(0.032), coal, [-0.026, 0.035, 0], lavaHeartCore, [0.9, 1.2, 0.8]);
+  makeMesh(oct(0.032), coal, [0.026, 0.035, 0], lavaHeartCore, [0.9, 1.2, 0.8]);
+  const lavaHeartGlow = new T.Sprite(
+    new T.SpriteMaterial({
+      map: TEXTURES.coal,
+      color: 0xff5a10,
+      transparent: true,
+      opacity: 0.75,
+      blending: T.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  lavaHeartGlow.position.set(0, 0, 0.05);
+  lavaHeartGlow.scale.setScalar(0.48);
+  lavaHeartGroup.add(lavaHeartGlow);
+  lavaHeartGroup.visible = false;
+
+  // 5. Экипировка «КОМПАС ВЫСОТЫ» (вращающийся гироскоп-астролябия над левым плечом)
+  const altCompassGroup = makeGroup([-0.23, 1.66, -0.14], up);
+  makeMesh(cy(0.014, 0.018, 0.16, 6), stD, [0.04, -0.09, 0], altCompassGroup).rotation.z = -0.45;
+  const compassOuterRing = makeMesh(
+    new T.TorusGeometry(0.088, 0.01, 6, 18),
+    brassMat,
+    [0, 0, 0],
+    altCompassGroup
+  );
+  const compassInnerRing = makeMesh(
+    new T.TorusGeometry(0.064, 0.008, 6, 16),
+    st,
+    [0, 0, 0],
+    altCompassGroup
+  );
+  const compassNeedle = makeMesh(
+    oct(0.038),
+    frostMat,
+    [0, 0, 0],
+    altCompassGroup,
+    [0.55, 2.05, 0.55]
+  );
+  altCompassGroup.visible = false;
+
+  // 6. Экипировка «ПЛАВИЛЬНЫЙ КРИСТАЛЛ» (орбитальное созвездие кристаллов вокруг плеч)
+  const smeltCrystalGroup = makeGroup([0, 1.38, -0.06], up);
+  const smeltCrystalNodes = [];
+  for (let i = 0; i < 3; i++) {
+    const node = makeGroup([0, 0, 0], smeltCrystalGroup);
+    makeMesh(oct(0.052), cr1, [0, 0, 0], node, [0.7, 1.85, 0.7]);
+    makeMesh(new T.TorusGeometry(0.042, 0.007, 5, 10), brassMat, [0, 0, 0], node).rotation.x =
+      PI / 2;
+    smeltCrystalNodes.push(node);
+  }
+  smeltCrystalGroup.visible = false;
+
   // Руки с плечевым ('a') и локтевым ('e') суставами
   const arms = [1, -1].map((s) => {
     const a = makeGroup([s * 0.29, 1.47, 0], up);
@@ -214,22 +454,50 @@ const heroRig = (function buildCoalbearerHero() {
   visorGlow.scale.set(0.55, 0.28, 1);
   hd.add(visorGlow);
 
-  // Тяжёлое угольное орудие за спиной
+  // Тяжёлое угольное орудие за спиной (с топкой, радиаторными кольцами, трёхзубой короной ствола и дульной вспышкой)
   const gn = makeGroup([0, 1.2, -0.27], up);
   gn.rotation.z = -0.42;
-  makeMesh(bx(0.1, 0.4, 0.13), stD, [0, 0, 0], gn);
-  makeMesh(cy(0.05, 0.05, 0.24, 10), st, [0, 0.3, 0], gn);
-  [0.22, 0.28, 0.34, 0.4].forEach((y) =>
-    makeMesh(cy(0.055, 0.055, 0.016, 10), stD, [0, y, 0], gn)
+  makeMesh(bx(0.11, 0.42, 0.14), stD, [0, 0, 0], gn);
+  makeMesh(bx(0.075, 0.22, 0.04), magmaHot, [0, 0.02, -0.06], gn);
+  makeMesh(cy(0.054, 0.054, 0.26, 10), st, [0, 0.3, 0], gn);
+  [0.2, 0.26, 0.32, 0.38, 0.44].forEach((y) =>
+    makeMesh(cy(0.062, 0.062, 0.016, 10), stD, [0, y, 0], gn)
   );
-  makeMesh(cy(0.022, 0.022, 0.3, 8), stD, [0, 0.5, 0], gn);
-  makeMesh(cy(0.036, 0.032, 0.06, 8), st, [0, 0.7, 0], gn);
-  makeMesh(cy(0.09, 0.09, 0.08, 14), stD, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
-  makeMesh(cy(0.045, 0.045, 0.09, 10), coal, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
-  makeMesh(bx(0.07, 0.2, 0.1), leaD, [0, -0.3, 0], gn);
+  makeMesh(cy(0.026, 0.028, 0.3, 8), stD, [0, 0.52, 0], gn);
+  makeMesh(cy(0.044, 0.036, 0.075, 8), st, [0, 0.71, 0], gn);
+  makeMesh(cy(0.024, 0.024, 0.08, 8), magmaHot, [0, 0.72, 0], gn);
+  for (let prongIdx = 0; prongIdx < 3; prongIdx++) {
+    const a = (prongIdx / 3) * PI * 2;
+    makeMesh(
+      cn(0.012, 0.07, 4),
+      stD,
+      [Math.cos(a) * 0.036, 0.76, Math.sin(a) * 0.036],
+      gn
+    );
+  }
+  makeMesh(cy(0.095, 0.095, 0.085, 14), stD, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
+  makeMesh(cy(0.05, 0.05, 0.095, 10), magmaHot, [0, 0.02, -0.1], gn).rotation.x = PI / 2;
+  makeMesh(bx(0.074, 0.22, 0.1), leaD, [0, -0.3, 0], gn);
   makeMesh(bx(0.03, 0.04, 0.06), st, [0.07, 0.12, -0.02], gn);
   makeMesh(bx(0.17, 0.78, 0.03), stD, [0, 0.12, 0.085], gn);
   [1, -1].forEach((s) => makeMesh(bx(0.02, 0.78, 0.1), stD, [s * 0.085, 0.12, 0.03], gn));
+
+  // Дульная вспышка на стволе угольного орудия
+  const muzzleFlashGroup = makeGroup([0, 0.8, 0], gn);
+  makeMesh(cn(0.065, 0.24, 6), magmaHot, [0, 0.08, 0], muzzleFlashGroup);
+  const muzzleGlow = new T.Sprite(
+    new T.SpriteMaterial({
+      map: TEXTURES.coal,
+      color: 0xffaa30,
+      transparent: true,
+      opacity: 0.9,
+      blending: T.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  muzzleGlow.scale.setScalar(0.45);
+  muzzleFlashGroup.add(muzzleGlow);
+  muzzleFlashGroup.visible = false;
 
   return {
     hero,
@@ -239,9 +507,25 @@ const heroRig = (function buildCoalbearerHero() {
     arms,
     hd,
     gn,
+    muzzleFlashGroup,
+    coalBootMods,
+    iceSoleMods,
+    thunderBeltGroup,
+    thunderBeltCrystals,
+    thunderBeltGlow,
+    lavaHeartGroup,
+    lavaHeartCore,
+    lavaHeartGlow,
+    altCompassGroup,
+    compassOuterRing,
+    compassInnerRing,
+    compassNeedle,
+    smeltCrystalGroup,
+    smeltCrystalNodes,
     cu,
     cuD,
     coal,
+    magmaHot,
     vis,
     visorGlow,
     beltGlow,
@@ -258,20 +542,24 @@ const heroRig = (function buildCoalbearerHero() {
     prevFacing: 0,
     turnBank: 0,
     slideSparkAccum: 0,
+    coalStepAccum: 0,
+    iceSlideAccum: 0,
     appliedHeroId: ''
   };
 })();
 
 /**
- * Обновляет процедурную анимацию главного героя «Угленосец»:
+ * Обновляет процедурную анимацию главного героя «Угленосец» и 3D-эффекты экипированных предметов:
  * - плавный переход Покой ↔ Бег с учётом реальной скорости и наклоном в виражах;
  * - фазы прыжка (отталкивание, полёт вверх, падение, сальто/крутка двойного прыжка и амортизация приземления);
- * - низкий боевой подкат (Shift) с вытянутой вперёд ногой, разворотом корпуса и снопом искр из-под подошв.
+ * - низкий боевой подкат (Shift) с вытянутой вперёд ногой, разворотом корпуса и снопом искр/кристаллов льда;
+ * - визуализация собранных предметов (Угольный сапог, Ледяная подошва, Громовой пояс, Лавовое сердце, Компас высоты, Плавильный кристалл).
  * @param {number} dt
  */
 function updatePlayerAnimation(dt) {
   if (!state || !state.player) return;
   const p = state.player;
+  const owned = state.itemsOwned || {};
   const time = state.elapsedTime;
   const rig = heroRig;
 
@@ -307,9 +595,9 @@ function updatePlayerAnimation(dt) {
   const horizSpeed = horizDist / safeDt;
   const isMovingHoriz = horizSpeed > 0.45 && state.slideTimer <= 0;
 
-  let facingDelta = angleDiff(state.facingAngle, rig.prevFacing);
+  const facingDelta = angleDiff(state.facingAngle, rig.prevFacing);
   rig.prevFacing = state.facingAngle;
-  const targetBank = Math.max(-0.26, Math.min(0.26, -facingDelta / safeDt * 0.032));
+  const targetBank = Math.max(-0.26, Math.min(0.26, (-facingDelta / safeDt) * 0.032));
   rig.turnBank += (targetBank - rig.turnBank) * Math.min(1, safeDt * 10);
 
   // Отслеживание приземления и двойного прыжка
@@ -388,15 +676,13 @@ function updatePlayerAnimation(dt) {
 
   // 3. Поза прыжка и полёта в воздухе (взлёт, вершина, падение и крутка двойного прыжка)
   if (wAir > 0.001) {
-    // vyFactor: +1 на взлёте, -1 при падении
     const vyFactor = Math.max(-1, Math.min(1, p.vy / 8.5));
-    const riseBlend = (vyFactor + 1) * 0.5; // 1 = взлёт, 0 = падение
+    const riseBlend = (vyFactor + 1) * 0.5;
 
     const airLeanX = lerp(0.28, -0.14, riseBlend) + Math.sin(rig.doubleJumpSpin * Math.PI) * 0.55;
     const airLeanY = Math.sin(rig.doubleJumpSpin * TWO_PI) * 0.65;
     const airHeadX = lerp(0.26, -0.18, riseBlend);
 
-    // Ведущая нога согнута в колене на взлёте, задняя вытянута; при падении обе готовятся к опоре
     const airLeg0HipX = lerp(-0.55, -0.95, riseBlend);
     const airLeg0KneeX = lerp(0.85, 1.55, riseBlend);
     const airLeg1HipX = lerp(-0.35, 0.38, riseBlend);
@@ -436,7 +722,6 @@ function updatePlayerAnimation(dt) {
     headY = lerp(headY, -0.34, wSlide);
     headZ = lerp(headZ, 0.14, wSlide);
 
-    // Правая нога вытянута вперёд скользящим клином, левая подогнута под корпус
     leg0HipX = lerp(leg0HipX, -1.22, wSlide);
     leg0HipZ = lerp(leg0HipZ, 0.14, wSlide);
     leg0KneeX = lerp(leg0KneeX, 0.18, wSlide);
@@ -445,7 +730,6 @@ function updatePlayerAnimation(dt) {
     leg1HipZ = lerp(leg1HipZ, -0.34, wSlide);
     leg1KneeX = lerp(leg1KneeX, 2.08, wSlide);
 
-    // Правая рука уходит назад к полу для баланса, левая сгруппирована спереди
     arm0X = lerp(arm0X, 0.72, wSlide);
     arm0Z = lerp(arm0Z, 0.46, wSlide);
     elb0X = lerp(elb0X, -0.32, wSlide);
@@ -454,14 +738,22 @@ function updatePlayerAnimation(dt) {
     arm1Z = lerp(arm1Z, -0.32, wSlide);
     elb1X = lerp(elb1X, -1.25, wSlide);
 
-    // Искры из-под подкованных сапог во время подката
+    // Искры из-под подкованных сапог и 3D-кристаллы льда во время подката
     rig.slideSparkAccum += safeDt * 35;
     if (rig.slideSparkAccum >= 1) {
       rig.slideSparkAccum -= 1;
-      spawnSparkBurst(p.x, p.y + 0.08, p.z, 2, 'land');
+      spawnSparkBurst(p.x, p.y + 0.08, p.z, owned.coal ? 4 : 2, 'land');
+    }
+    if (owned.ice && typeof spawnFrostSlideCrystal === 'function') {
+      rig.iceSlideAccum += safeDt * 18;
+      if (rig.iceSlideAccum >= 1) {
+        rig.iceSlideAccum -= 1;
+        spawnFrostSlideCrystal(p.x, p.y, p.z, state.facingAngle);
+      }
     }
   } else {
     rig.slideSparkAccum = 0;
+    rig.iceSlideAccum = 0;
   }
 
   // Применяем вычисленные углы и смещения к скелету Угленосца
@@ -480,10 +772,102 @@ function updatePlayerAnimation(dt) {
   rig.arms[1].a.rotation.set(arm1X, 0, arm1Z);
   rig.arms[1].e.rotation.x = elb1X;
 
-  // Вторичное покачивание наспинного орудия и мерцание углей/визора
+  // 5. Анимация 3D-экипировки предметов на Угленосце
+  const coalStacks = owned.coal | 0;
+  for (let i = 0; i < rig.coalBootMods.length; i++) {
+    const mod = rig.coalBootMods[i];
+    mod.group.visible = coalStacks > 0;
+    if (coalStacks > 0) {
+      const bootPulse = 0.55 + 0.22 * Math.sin(time * 9 + i * 1.7) + Math.min(0.25, coalStacks * 0.05);
+      mod.glow.material.opacity = bootPulse;
+      mod.glow.scale.setScalar(0.48 + Math.min(0.24, coalStacks * 0.04));
+    }
+  }
+  if (coalStacks > 0 && wRun > 0.35 && p.isGrounded) {
+    rig.coalStepAccum += safeDt * (10 + coalStacks * 2);
+    if (rig.coalStepAccum >= 1) {
+      rig.coalStepAccum -= 1;
+      spawnSparkBurst(p.x, p.y + 0.05, p.z, 2, 'land');
+    }
+  }
+
+  const iceStacks = owned.ice | 0;
+  for (let i = 0; i < rig.iceSoleMods.length; i++) {
+    const mod = rig.iceSoleMods[i];
+    mod.group.visible = iceStacks > 0;
+    if (iceStacks > 0) {
+      mod.glow.material.opacity = 0.48 + 0.18 * Math.sin(time * 6 + i);
+    }
+  }
+
+  const beltStacks = owned.belt | 0;
+  rig.thunderBeltGroup.visible = beltStacks > 0;
+  if (beltStacks > 0) {
+    const isCharged = (state.totalHitCount || 0) % 5 === 4;
+    for (let i = 0; i < rig.thunderBeltCrystals.length; i++) {
+      const c = rig.thunderBeltCrystals[i];
+      c.rotation.y = time * (isCharged ? 8 : 3) * (i % 2 ? -1 : 1);
+      c.position.y = 0.105 + Math.sin(time * 5 + i * 2) * 0.015;
+    }
+    rig.thunderBeltGlow.material.opacity = isCharged
+      ? 0.85 + 0.15 * Math.sin(time * 24)
+      : 0.45 + 0.15 * Math.sin(time * 6);
+  }
+
+  const heartStacks = owned.heart | 0;
+  rig.lavaHeartGroup.visible = heartStacks > 0;
+  if (heartStacks > 0) {
+    const nearLava = p.y - state.lavaY < 6;
+    const beatSpeed = nearLava ? 14 : 6.5;
+    const beatScale = 1 + (nearLava ? 0.26 : 0.12) * Math.pow(Math.max(0, Math.sin(time * beatSpeed)), 2);
+    rig.lavaHeartCore.scale.setScalar(beatScale);
+    rig.lavaHeartGlow.material.opacity = nearLava ? 0.88 : 0.52;
+    rig.lavaHeartGlow.scale.setScalar(nearLava ? 0.68 : 0.45);
+  }
+
+  const compStacks = owned.comp | 0;
+  rig.altCompassGroup.visible = compStacks > 0;
+  if (compStacks > 0) {
+    const altFactor = 1 + Math.min(3, Math.max(0, (p.y - state.lavaY) / 15));
+    rig.compassOuterRing.rotation.y = time * 1.8 * altFactor;
+    rig.compassOuterRing.rotation.x = Math.sin(time * 1.2) * 0.35;
+    rig.compassInnerRing.rotation.x = time * 2.6 * altFactor;
+    rig.compassInnerRing.rotation.z = time * 1.4;
+    rig.compassNeedle.rotation.y = -time * 3.2;
+  }
+
+  const crysStacks = owned.crys | 0;
+  rig.smeltCrystalGroup.visible = crysStacks > 0;
+  if (crysStacks > 0) {
+    for (let i = 0; i < rig.smeltCrystalNodes.length; i++) {
+      const node = rig.smeltCrystalNodes[i];
+      const ang = time * 2.2 + (i * TWO_PI) / 3;
+      node.position.set(
+        Math.cos(ang) * 0.36,
+        Math.sin(time * 3.5 + i * 2) * 0.06,
+        Math.sin(ang) * 0.22 - 0.08
+      );
+      node.rotation.y = -ang;
+      node.rotation.z = 0.25 * Math.sin(time * 2.5 + i);
+    }
+  }
+
+  // Вторичное покачивание наспинного орудия, отдача при выстреле и мерцание углей/визора
+  const recoil = state.fireMuzzleFlash || 0;
+  if (state.fireMuzzleFlash > 0) {
+    state.fireMuzzleFlash = Math.max(0, state.fireMuzzleFlash - safeDt * 7.5);
+  }
+  rig.muzzleFlashGroup.visible = recoil > 0.15;
+  if (rig.muzzleFlashGroup.visible) {
+    rig.muzzleFlashGroup.scale.setScalar(0.6 + recoil * 0.75);
+    rig.muzzleFlashGroup.rotation.y = time * 25;
+  }
+
+  rig.gn.position.y = 1.2 - recoil * 0.06;
   rig.gn.rotation.z = -0.42 + Math.sin(ph * 2) * 0.025 * wRun + wSlide * 0.18;
-  rig.gn.rotation.x = wSlide * 0.15;
+  rig.gn.rotation.x = wSlide * 0.15 - recoil * 0.12;
   rig.coal.emissiveIntensity = 1.25 + 0.42 * Math.sin(time * 7) * Math.sin(time * 3.1);
+  rig.magmaHot.emissiveIntensity = 1.85 + 0.55 * Math.sin(time * 9.5) + recoil * 0.8;
 
   const visorPulse = Math.sin(time * 2.5);
   rig.vis.color.setHSL(0.49, 1, 0.64 + 0.08 * visorPulse);

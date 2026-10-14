@@ -143,6 +143,7 @@ function initializeRun(mode) {
     bladeTickTimer: 0,
     bladeOrbitAngle: 0,
     bladeTickId: 0,
+    fireMuzzleFlash: 0,
     pauseState: 0,
     isGameOver: 0,
     mutatorName: null,
@@ -620,6 +621,13 @@ function updateGameStep(dt) {
               Math.abs(enemy.y + enemyRadius - player.y - 1) < enemyRadius + verticalTolerance
             ) {
               damageEnemy(enemy, 0.5 * BASE_DAMAGE * (1 + 0.25 * weaponLv), ['kin']);
+              spawnSparkBurst(
+                bx,
+                player.y + 1.0,
+                bz,
+                4,
+                state.tagCounts && state.tagCounts.fire ? 'fire' : 'land'
+              );
               enemy._lastBladeTickId = tickId;
             }
           }
@@ -637,6 +645,7 @@ function updateGameStep(dt) {
       state.weaponCooldowns.fire = 0.2;
       if (target && state.projectiles.length < 200) {
         state.weaponCooldowns.fire = 1.1 / (1 + 0.08 * weaponLv);
+        state.fireMuzzleFlash = 1.0;
         const shotCount = 1 + ((weaponLv / 3) | 0);
         const baseAngle = Math.atan2(target.z - player.z, target.x - player.x);
         playSound('shoot');
@@ -676,6 +685,10 @@ function updateGameStep(dt) {
     proj.lifetime -= dt;
     let isExpired = proj.lifetime <= 0;
 
+    if (!proj.isHostile && Math.random() < 0.28) {
+      spawnSparkBurst(proj.x, proj.y, proj.z, 1, 'fire');
+    }
+
     if (proj.isHostile) {
       if (
         (proj.x - player.x) * (proj.x - player.x) + (proj.z - player.z) * (proj.z - player.z) < 0.81 &&
@@ -699,6 +712,8 @@ function updateGameStep(dt) {
           Math.abs(proj.y - (enemy.y + enemyRadius)) < enemyRadius + verticalTolerance
         ) {
           damageEnemy(enemy, proj.damage, ['fire'], proj.isFire);
+          spawnSparkBurst(proj.x, proj.y, proj.z, 7, 'fire');
+          spawnSlagBurst(proj.x, proj.y - 0.25, proj.z, 2, 0.55);
           isExpired = 1;
           break;
         }
@@ -763,9 +778,6 @@ function updateGameStep(dt) {
               : 0
             : 1;
 
-    // Уникальные бонусы скорости:
-    // - Ледяной Волк ('ice' + 'l') быстрее скользит по льду (+18%)
-    // - Мерзлотный Голем ('ice' + 't') трескается и ускоряется ниже 50% HP (+32%)
     let towerMobSpeedBonus = 1;
     if (state.towerId === 'ice') {
       if (enemy.type === 'l') towerMobSpeedBonus = 1.18;
@@ -781,7 +793,6 @@ function updateGameStep(dt) {
       (state.enemySpeedMultiplier || 1);
     const radialSpeed = baseMoveSpeed * moveDirFactor;
 
-    // В Башне Пустоты мобы периодически телепортируются (Страж Бездны ниже 50% HP — вдвое чаще, Теневой Мотылёк делает короткие рывки)
     if (
       state.towerConfig.canEnemiesBlink &&
       enemy.type !== 'b' &&
@@ -794,7 +805,6 @@ function updateGameStep(dt) {
       if ((enemy.blinkCooldown -= dt * blinkRateMul) <= 0) {
         enemy.blinkCooldown = enemy.type === 's' ? 2.5 + Math.random() * 2.5 : 5.5 + Math.random() * 5;
         if (enemy.type === 's' && dist > 3.5 && dist < 24) {
-          // Теневой Мотылёк совершает короткий рывок-телепорт на 2.5 м
           const step = 2.4;
           const nx = enemy.x + (dx / dist) * step + (Math.random() - 0.5) * 1.4;
           const nz = enemy.z + (dz / dist) * step + (Math.random() - 0.5) * 1.4;
@@ -958,7 +968,6 @@ function updateGameStep(dt) {
         enemy.surgeActiveTimer = 1.4;
         enemy.surgeTimer = 4.5 + Math.random() * 3;
       }
-      // Фазовый Шип ('void' + 'r') в фазовом сдвиге неуязвим на 0.5 с
       enemy.shield =
         state.towerId === 'void' && enemy.surgeActiveTimer > 0.45 && enemy.surgeActiveTimer < 0.95
           ? 1
@@ -976,7 +985,6 @@ function updateGameStep(dt) {
             spawnShypOuterBolt(enemy);
             spawnShypOuterBolt(enemy);
 
-            // Инеевый Кристалл ('ice' + 'r') создаёт вокруг себя зону заморозки при разряде
             if (state.towerId === 'ice' && dist < 4.5) {
               state.chillTimer = Math.max(state.chillTimer, 1.8);
             }
@@ -1080,7 +1088,6 @@ function updateGameStep(dt) {
       enemy.hp -= BASE_DAMAGE * 0.3 * dt;
     }
 
-    // Контактный урон моба по игроку (Мерзлявка также накладывает замедление при касании!)
     const enemyRadius = enemy.radius !== undefined ? enemy.radius : baseStats.radius;
     const contactDmg =
       enemy.contactDamage !== undefined ? enemy.contactDamage : baseStats.contactDamage;
@@ -1097,7 +1104,6 @@ function updateGameStep(dt) {
       enemy.attackCooldown = 0.6;
     }
 
-    // Выстрел Стрелка ('r'): в Ледяной башне Инеевый Кристалл даёт двойной залп ледяных игл
     if (
       enemy.type === 'r' &&
       enemy.attackCooldown <= 0 &&
@@ -1259,6 +1265,8 @@ function updateGameStep(dt) {
         (bomb.radius || 4.5) + 0.5,
         bomb.applyChill ? 0x90ecff : state.towerId === 'void' ? 0xd878ff : 0xffa040
       );
+      spawnSlagBurst(bomb.x, bomb.y, bomb.z, 6, 0.85);
+      spawnSparkBurst(bomb.x, bomb.y + 0.3, bomb.z, 16, bomb.applyChill ? 'steam' : 'fire');
       triggerScreenShake(0.35);
       if (
         hypot2D(player.x - bomb.x, player.z - bomb.z) < (bomb.radius || 4.5) &&

@@ -138,6 +138,9 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
     dmg *= 2;
     enemy.burnTimer = 0;
     spawnWaveRingEffect(enemy.x, enemy.y, enemy.z, 2.5, 0xdddddd);
+    if (typeof spawnSteamBurstEffect === 'function') {
+      spawnSteamBurstEffect(enemy.x, enemy.y, enemy.z);
+    }
   }
   if (isFire) {
     enemy.burnTimer = 3;
@@ -148,12 +151,30 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit) {
   if (!isChainHit && state.itemsOwned.belt && ++state.totalHitCount % 5 === 0) {
     let chainCount = 0;
     const maxTargets = 3 * state.itemsOwned.belt;
+    let prevX = state.player.x;
+    let prevY = state.player.y + 1.0;
+    let prevZ = state.player.z;
+    const enemyHitY = enemy.y + (enemy.radius || 0.8);
+    if (typeof spawnThunderChainEffect === 'function') {
+      spawnThunderChainEffect(prevX, prevY, prevZ, enemy.x, enemyHitY, enemy.z);
+    }
+    prevX = enemy.x;
+    prevY = enemyHitY;
+    prevZ = enemy.z;
+
     for (const other of state.enemies) {
       if (
         other !== enemy &&
         chainCount < maxTargets &&
         hypot2D(other.x - enemy.x, other.z - enemy.z) < 12
       ) {
+        const otherY = other.y + (other.radius || 0.8);
+        if (typeof spawnThunderChainEffect === 'function') {
+          spawnThunderChainEffect(prevX, prevY, prevZ, other.x, otherY, other.z);
+        }
+        prevX = other.x;
+        prevY = otherY;
+        prevZ = other.z;
         damageEnemy(other, baseDmg * 0.6, ['elec'], 0, 1);
         chainCount++;
       }
@@ -185,6 +206,14 @@ function triggerShockwave(x, z, radius, damage, isFire, tags) {
 
 function emitCombatEvent(eventName) {
   if (eventName === 'onLand' && state.itemsOwned.coal) {
+    if (typeof spawnCoalBootEruption === 'function') {
+      spawnCoalBootEruption(
+        state.player.x,
+        state.player.y,
+        state.player.z,
+        state.itemsOwned.coal
+      );
+    }
     triggerShockwave(
       state.player.x,
       state.player.z,
@@ -504,9 +533,11 @@ function killEnemy(enemyIndex) {
   const baseStats = ENEMY_TYPES[enemy.type];
   playSound('pickup');
 
-  // При гибели Мерзлявки в Ледяной башне она разлетается ледяной крошкой
   if (enemy.type === 's' && state.towerId === 'ice') {
     spawnSparkBurst(enemy.x, enemy.y + 0.4, enemy.z, 12, 'land');
+  }
+  if (enemy.burnTimer > 0 && state.itemsOwned.crys && typeof spawnSmeltCrystalBurst === 'function') {
+    spawnSmeltCrystalBurst(enemy.x, enemy.y, enemy.z);
   }
 
   if (enemy.mesh) {

@@ -98,6 +98,48 @@ function resetBossEffects() {
   }
   dripInstancedMesh.instanceMatrix.needsUpdate = true;
 
+  if (typeof coalBootEruptions !== "undefined") {
+    for (const er of coalBootEruptions) {
+      er.active = 0;
+      er.group.visible = false;
+    }
+  }
+  if (typeof frostSlideCrystals !== "undefined") {
+    for (const fc of frostSlideCrystals) {
+      fc.active = 0;
+      fc.mesh.visible = false;
+    }
+  }
+  if (typeof steamBurstEffects !== "undefined") {
+    for (const sb of steamBurstEffects) {
+      sb.active = 0;
+      sb.mesh.visible = false;
+    }
+  }
+  if (typeof thunderStrikeEffects !== "undefined") {
+    for (const ts of thunderStrikeEffects) {
+      ts.active = 0;
+      ts.mesh.visible = false;
+    }
+  }
+  if (typeof smeltCrystalBursts !== "undefined") {
+    for (const sc of smeltCrystalBursts) {
+      sc.active = 0;
+      sc.mesh.visible = false;
+    }
+  }
+  if (typeof bombVisualPool !== "undefined") {
+    for (const bMesh of bombVisualPool) {
+      bMesh.visible = false;
+    }
+  }
+  if (typeof waveEffectRings !== "undefined") {
+    for (const wMesh of waveEffectRings) {
+      wMesh.visible = false;
+      wMesh.lifeLeft = 0;
+    }
+  }
+
   bossLight.intensity = 0;
   bossLight.position.set(0, -500, 0);
 
