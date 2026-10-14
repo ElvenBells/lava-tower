@@ -1,0 +1,267 @@
+/* ==========================================================================
+   Lava Tower — Стили интерфейса (HUD, оверлеи, меню, полоса здоровья босса)
+   ========================================================================== */
+
+:root {
+  --bg: #0d0710;
+  --fg: #efe6d8;
+  --panel-bg: rgba(22, 10, 18, 0.94);
+  --accent: #ff6a1f;
+  --button-bg: #2a120d;
+  --border-warm: #6b2f1c;
+  --border-button: #8a4a22;
+
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.45 'Rubik', sans-serif;
+  overflow: hidden;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: 'Russo One', sans-serif;
+  letter-spacing: 0.04em;
+  margin: 0.2em 0;
+  color: var(--accent);
+}
+
+/* Оверлей и панель меню */
+.ov {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(120% 90% at 50% 110%, #57150790 0%, transparent 55%),
+    radial-gradient(90% 60% at 50% -10%, #2a123f90 0%, transparent 60%),
+    #0d0710ee;
+  padding: 12px;
+  z-index: 10;
+}
+
+.pn {
+  background: var(--panel-bg);
+  color: var(--fg);
+  padding: 34px 42px;
+  max-width: 480px;
+  max-height: 92%;
+  overflow: auto;
+  box-shadow: 0 30px 80px #000c;
+  clip-path: polygon(
+    22px 0,
+    100% 0,
+    100% calc(100% - 22px),
+    calc(100% - 22px) 100%,
+    0 100%,
+    0 22px
+  );
+  border: 1px solid var(--border-warm);
+}
+
+button {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  padding: 11px 26px;
+  border: 1px solid var(--border-button);
+  background: var(--button-bg);
+  color: var(--fg);
+  font-family: 'Russo One', sans-serif;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  transition: 0.15s;
+}
+
+button:hover,
+button:focus-visible {
+  background: #4a1d0f;
+  color: #fff;
+  box-shadow: 0 0 18px #ff6a1f55;
+  outline: none;
+}
+
+input {
+  font: inherit;
+  padding: 4px 8px;
+  width: 10em;
+  background: #1c0f18;
+  border: 1px solid var(--border-button);
+  color: #fff;
+}
+
+/* Игровой интерфейс (HUD) */
+#hud {
+  position: fixed;
+  left: 16px;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  width: 230px;
+  font-size: 13px;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+  display: none;
+  z-index: 5;
+}
+
+.bar {
+  height: 14px;
+  background: #1b0d14;
+  margin: 4px 0;
+  border: 1px solid var(--border-warm);
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  transition: width 0.15s;
+}
+
+#hb {
+  background: linear-gradient(90deg, #ff3d2e, #ff8a3d);
+}
+
+#xb {
+  background: linear-gradient(90deg, #7fe8d8, #e8fbff);
+}
+
+/* Экранные эффекты и уведомления */
+#vignette {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+#flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  background: rgba(22, 10, 18, 0.85);
+  border: 1px solid var(--border-button);
+  color: #ffd040;
+  font-family: 'Russo One', sans-serif;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+  z-index: 6;
+  white-space: normal;
+  max-width: 88vw;
+  text-align: center;
+}
+
+#pauseHint {
+  position: fixed;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  font-size: 11px;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 5;
+  display: none;
+}
+
+/* Полоса здоровья босса */
+#bossHp {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 320px;
+  max-width: 90vw;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+#bossHp.visible {
+  opacity: 1;
+}
+
+#bossHp .boss-name {
+  font-family: 'Russo One', sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: #ffd040;
+  text-shadow: 0 2px 8px rgba(255, 90, 0, 0.8), 0 0 20px rgba(255, 90, 0, 0.4);
+  text-align: center;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+#bossHp .boss-bar {
+  height: 20px;
+  background: #1b0d14;
+  border: 2px solid var(--border-button);
+  border-radius: 2px;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+#bossHp .boss-bar-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff3d2e 0%, #ff6a1f 40%, #ffd040 100%);
+  transition: width 0.2s ease;
+  position: relative;
+}
+
+#bossHp .boss-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 100%);
+}
+
+#bossHp .boss-hp-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Russo One', sans-serif;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  z-index: 1;
+}

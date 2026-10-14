@@ -1,0 +1,734 @@
+/* ==========================================================================
+   Отрисовка игрового кадра:
+   положение героя и камеры, LOD-анимация мобов и боссов, обновление буферов
+   инстансинга, частиц и HUD
+   ========================================================================== */
+
+const DOM_CACHE = {
+  healthBar: getById('hb'),
+  xpBar: getById('xb'),
+  statsText: getById('st'),
+  bossBarFill: getById('bossBarFill'),
+  bossHpText: getById('bossHpText'),
+  bossHpContainer: getById('bossHp')
+};
+
+const _projectileDummyObj = new THREE.Object3D();
+const _tempVec3 = new THREE.Vector3();
+const _tempQuatA = new THREE.Quaternion();
+const _tempQuatB = new THREE.Quaternion();
+const _tempEuler = new THREE.Euler();
+
+const _leaperPose = {
+  hipY: 0,
+  lean: 0,
+  legB: 0,
+  shin: 0,
+  foot: 0,
+  legF: 0,
+  foreF: 0,
+  tail: 0,
+  headX: 0,
+  jaw: 0.12
+};
+
+const LOD_DISTANCE = 32; // дальше этой дистанции детальная анимация мобов отключается
+
+let lastBossWidthText = '';
+let lastBossHpText = '';
+let lastBossNameText = '';
+let lastBossShownState = 0;
+
+/**
+ * Отрисовывает один кадр активного забега.
+ * @param {number} dt шаг времени кадра (с)
+ */
+function renderGameFrame(dt) {
+  const player = state.player;
+  const time = state.elapsedTime;
+
+  // Герой и источники света вокруг него
+  playerMesh.position.set(player.x, player.y, player.z);
+  playerMesh.rotation.y = state.facingAngle;
+  playerMesh.scale.y = state.slideTimer > 0 ? 0.6 : 1;
+  playerMesh.visible = state.invulnerabilityTimer > 0 ? ((time * 24) | 0) % 2 === 0 : true;
+
+  lavaMesh.position.y = state.lavaY;
+  lavaLight.position.set(player.x * 0.3, Math.max(state.lavaY, player.y - 6) + 2, player.z * 0.3);
+  rimLight.position.set(
+    player.x - Math.sin(state.cameraYaw) * 3,
+    player.y + 2,
+    player.z - Math.cos(state.cameraYaw) * 3
+  );
+
+  // Камера с защитой от выхода за стены башни и тряской экрана
+  const cosPitch = Math.cos(state.cameraPitch);
+  let camX = player.x + Math.sin(state.cameraYaw) * cosPitch * 6;
+  let camZ = player.z + Math.cos(state.cameraYaw) * cosPitch * 6;
+  const camRadial = hypot2D(camX, camZ);
+  if (camRadial > 29.6) {
+    camX *= 29.6 / camRadial;
+    camZ *= 29.6 / camRadial;
+  }
+  camera.position.set(camX, player.y + 1 + Math.sin(state.cameraPitch) * 6, camZ);
+
+  if (state.screenShake > 0) {
+    camera.position.x += Math.sin(time * 30) * state.screenShake * 0.3;
+    camera.position.y += Math.cos(time * 30) * state.screenShake * 0.2;
+    state.screenShake *= 0.9;
+  }
+  camera.lookAt(player.x, player.y + 1, player.z);
+
+  // Отрисовка и анимация всех активных врагов
+  let activeEliteMarkers = 0;
+
+  for (let ei = 0; ei < state.enemies.length; ei++) {
+    const enemy = state.enemies[ei];
+    const baseStats = ENEMY_TYPES[enemy.type];
+    if (!enemy.mesh) continue;
+
+    const ud = enemy.mesh.userData;
+    const dx = player.x - enemy.x;
+    const dz = player.z - enemy.z;
+    const dist2D = Math.sqrt(dx * dx + dz * dz) || 1;
+    const dy = player.y - enemy.y;
+    const dist3D = Math.sqrt(dx * dx + dz * dz + dy * dy);
+
+    // Подкраска статуса (ожог / замедление) применяется только при смене состояния
+    const newTintState = enemy.burnTimer > 0 ? 2 : enemy.slowTimer > 0 ? 1 : 0;
+    if (newTintState !== enemy.tintState) {
+      enemy.tintState = newTintState;
+      ud.tintState = newTintState;
+      applyStatusTint(ud.tintMats, newTintState);
+    }
+
+    // Переключение LOD-яруса (скрытие мелких деталей вдали)
+    const lodTier = dist3D > LOD_DISTANCE ? 1 : 0;
+    if (lodTier !== enemy.lodTier) {
+      enemy.lodTier = lodTier;
+      for (const lodObj of ud.lodObjs) {
+        lodObj.visible = !lodTier;
+      }
+    }
+
+    if (enemy.type === 'b') {
+      if (enemy.bolts && enemy.bolts.length) {
+        updateBoltList(enemy.bolts, dt);
+      }
+      if (enemy.bkind === 'golem') {
+        renderGolemBoss(enemy, ud, dt);
+      } else if (enemy.bkind === 'womb') {
+        renderWombBoss(enemy, ud, dt, lodTier);
+      } else {
+        renderKolossBoss(enemy, ud, dt);
+      }
+    } else if (enemy.type === 's') {
+      // Огарёк
+      enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius, enemy.z);
+      enemy.mesh.scale.set(
+        baseStats.scale * (enemy.scaleXZ || 1),
+        baseStats.scale * (enemy.scaleY || 1),
+        baseStats.scale * (enemy.scaleXZ || 1)
+      );
+      enemy.mesh.rotation.y = time * 0.3 + enemy.x * 0.5;
+      ud.core.rotation.y = -time * 0.12;
+
+      if (lodTier === 0) {
+        ud.chunks.scale.setScalar(1 + Math.sin(time * 1.8 + ud.chunksPhase) * 0.02);
+        ud.burg.scale.copy(ud.chunks.scale);
+
+        if (!enemy.eyeFlickerTimer) enemy.eyeFlickerTimer = 0;
+        if (!enemy.eyeFlicker) enemy.eyeFlicker = 1;
+        enemy.eyeFlickerTimer -= dt;
+        if (enemy.eyeFlickerTimer <= 0) {
+          enemy.eyeFlicker = Math.random() < 0.12 ? 0.35 : 0.9 + Math.random() * 0.1;
+          enemy.eyeFlickerTimer = 0.05 + Math.random() * 0.25;
+        }
+        ud.eyeMatO.color.copy(ud.eyeBaseO).multiplyScalar(enemy.eyeFlicker);
+        ud.eyeMatI.color.copy(ud.eyeBaseI).multiplyScalar(enemy.eyeFlicker);
+        ud.haloMat.opacity = 0.45 + 0.45 * enemy.eyeFlicker;
+
+        for (const piece of ud.debris) {
+          const pieceData = piece.userData;
+          pieceData.angle += dt * pieceData.speed;
+          piece.position.set(
+            Math.cos(pieceData.angle) * pieceData.radius,
+            pieceData.height + Math.sin(time * 1.5 + pieceData.angle) * 0.2,
+            Math.sin(pieceData.angle) * pieceData.radius
+          );
+          piece.rotation.x += dt;
+          piece.rotation.y += dt * 0.7;
+        }
+      } else {
+        enemy.eyeFlickerTimer = 0.1;
+      }
+    } else if (enemy.type === 'r') {
+      // Пустотный Шип
+      enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius, enemy.z);
+      _tempVec3.set(dz / dist2D, 0, -dx / dist2D);
+      _tempQuatA.setFromAxisAngle(_tempVec3, Math.PI / 2);
+      _tempEuler.set(
+        Math.sin(time * 0.7 + enemy.x) * 0.05,
+        0,
+        Math.cos(time * 0.9 + enemy.z) * 0.06
+      );
+      _tempQuatB.setFromEuler(_tempEuler);
+      enemy.mesh.quaternion.copy(_tempQuatA).multiply(_tempQuatB);
+
+      const surge = enemy.surgeLevel || 0;
+      const pulse = 1 + Math.sin(time * 4.2) * 0.08 + surge * 0.35;
+      ud.core.scale.setScalar(pulse);
+      ud.core.rotation.y = -time * 0.8;
+      ud.glow.material.opacity = Math.min(
+        1,
+        0.32 + surge * 0.3 + (enemy.flashIntensity || 0) * 0.02
+      );
+      ud.glow.scale.setScalar(2.8 + surge * 0.8 + (enemy.flashIntensity || 0) * 0.08);
+      if (!enemy.tintState) {
+        ud.shellMat.emissiveIntensity = 0.55 + surge * 0.7;
+      }
+      ud.edgesMat.opacity = 0.45 + surge * 0.35 + Math.sin(time * 6) * 0.1;
+
+      if (lodTier === 0) {
+        const posAttr = ud.stGeo.attributes.position;
+        const colAttr = ud.stGeo.attributes.color;
+        const stData = ud.stData;
+
+        for (let i = 0; i < stData.length; i++) {
+          const sd = stData[i];
+          sd.theta += dt * sd.swirlSpeed * (1.4 - sd.radius) * (1 + 1.2 * surge);
+          sd.y += Math.sin(time * sd.freqY + sd.phase) * dt * 0.35;
+          if (sd.y > 1.05) sd.y = 1.05;
+          if (sd.y < -1.05) sd.y = -1.05;
+
+          const maxR = 0.6 * (1 - Math.abs(sd.y) / 1.45);
+          sd.radius += Math.sin(time * 1.3 + sd.phase) * dt * 0.06;
+          if (sd.radius > maxR) sd.radius = maxR;
+          if (sd.radius < 0.05) sd.radius = 0.05;
+
+          posAttr.array[i * 3] = Math.cos(sd.theta) * sd.radius;
+          posAttr.array[i * 3 + 1] = sd.y;
+          posAttr.array[i * 3 + 2] = Math.sin(sd.theta) * sd.radius;
+
+          const brightness = 0.65 + 0.35 * Math.sin(time * 3 + sd.phase) + surge * 0.4;
+          colAttr.array[i * 3] = Math.min(1, sd.color.r * brightness);
+          colAttr.array[i * 3 + 1] = Math.min(1, sd.color.g * brightness);
+          colAttr.array[i * 3 + 2] = Math.min(1, sd.color.b * brightness);
+        }
+        posAttr.needsUpdate = colAttr.needsUpdate = true;
+
+        for (const shard of ud.shards) {
+          const shardData = shard.userData;
+          shardData.angle += dt * shardData.speed;
+          shard.position.set(
+            Math.cos(shardData.angle) * shardData.radius,
+            Math.sin(shardData.angle * 0.7 + shardData.phase) * 0.6,
+            Math.sin(shardData.angle) * shardData.radius
+          );
+          shard.rotation.x += dt * 1.4;
+          shard.rotation.y += dt;
+        }
+      }
+      if (enemy.bolts && enemy.bolts.length) {
+        updateBoltList(enemy.bolts, dt);
+      }
+    } else if (enemy.type === 'l') {
+      // Обсидиановый Прыгун
+      enemy.mesh.position.set(enemy.x, enemy.y + baseStats.radius - 0.98 * 0.7, enemy.z);
+      enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
+
+      if (lodTier === 0) {
+        const breath = Math.sin(time * 2.6);
+        const P = _leaperPose;
+        P.hipY = 0.98;
+        P.lean = 0.06;
+        P.legB = -0.95;
+        P.shin = 1.9;
+        P.foot = -0.95;
+        P.legF = -0.25;
+        P.foreF = 0.55;
+        P.tail = 0;
+        P.headX = 0;
+        P.jaw = enemy.jawAngle || 0.12;
+
+        if (enemy.jumpState === 'idle') {
+          P.hipY += breath * 0.015;
+          P.lean += breath * 0.01;
+          P.tail = Math.sin(time * 2.1) * 0.1;
+        } else if (enemy.jumpState === 'crouch') {
+          const k = easeInOutQuad(Math.min(1, enemy.jumpTimer / 0.28));
+          P.hipY = lerp(0.98, 0.72, k);
+          P.lean = lerp(0.06, 0.26, k);
+          P.legB = lerp(-0.95, -1.32, k);
+          P.shin = lerp(1.9, 2.4, k);
+          P.foot = lerp(-0.95, -1.08, k);
+          P.legF = lerp(-0.25, -0.6, k);
+          P.foreF = lerp(0.55, 0.9, k);
+          P.tail = lerp(0, -0.75, k);
+          P.headX = lerp(0, 0.18, k);
+        } else if (enemy.jumpState === 'air') {
+          const k = smoothStep(
+            Math.max(0, Math.min(1, 0.5 - enemy.jumpVelocityY / ENEMY_TYPES.l.jumpVelocity))
+          );
+          P.lean = lerp(-0.24, 0.1, k);
+          P.legB = lerp(-0.55, -1.5, k);
+          P.shin = lerp(1.2, 2.5, k);
+          P.foot = lerp(-0.4, -1.0, k);
+          P.legF = lerp(-1.15, -1.35, k);
+          P.foreF = lerp(0.3, 0.5, k);
+          P.tail = lerp(-0.95, -0.5, k);
+          P.headX = -0.18;
+        } else if (enemy.jumpState === 'land') {
+          const k =
+            enemy.jumpTimer < 0.16
+              ? easeInOutQuad(enemy.jumpTimer / 0.16)
+              : 1 - easeInOutQuad((enemy.jumpTimer - 0.16) / 0.34);
+          P.hipY = lerp(0.98, 0.66, k);
+          P.lean = lerp(0.06, 0.32, k);
+          P.legB = lerp(-0.95, -1.38, k);
+          P.shin = lerp(1.9, 2.45, k);
+          P.foot = lerp(-0.95, -1.07, k);
+          P.legF = lerp(-0.25, -0.95, k);
+          P.foreF = lerp(0.55, 1.15, k);
+          P.tail = lerp(0, 0.55, k);
+          P.headX = lerp(0, 0.26, k);
+        }
+
+        ud.hips.position.y = P.hipY - 0.98;
+        ud.hips.rotation.x = P.lean;
+        ud.legBL.g.rotation.x = P.legB;
+        ud.legBR.g.rotation.x = P.legB;
+        ud.legBL.shin.rotation.x = P.shin;
+        ud.legBR.shin.rotation.x = P.shin;
+        ud.legBL.foot.rotation.x = P.foot;
+        ud.legBR.foot.rotation.x = P.foot;
+        ud.legFL.g.rotation.x = P.legF;
+        ud.legFR.g.rotation.x = P.legF;
+        ud.legFL.fore.rotation.x = P.foreF;
+        ud.legFR.fore.rotation.x = P.foreF;
+
+        for (let i = 0; i < ud.tailSegs.length; i++) {
+          ud.tailSegs[i].rotation.x =
+            P.tail * (1 - i * 0.15) + Math.sin(time * 2.1 + i * 0.7) * 0.08;
+        }
+
+        const targetYaw = Math.max(-0.7, Math.min(0.7, Math.atan2(dx, dz)));
+        ud.headYaw += (targetYaw - ud.headYaw) * Math.min(1, dt * 5);
+        ud.head.rotation.y = ud.headYaw;
+        ud.head.rotation.x = P.headX - P.lean * 0.55;
+
+        enemy.jawTimer -= dt;
+        if (enemy.jawTimer <= 0 && enemy.jumpState === 'idle') {
+          enemy.jawAngle = 0.5;
+          enemy.jawTimer = 2 + Math.random() * 3;
+          ud.flare = Math.max(ud.flare, 0.5);
+        }
+        enemy.jawAngle +=
+          ((enemy.jumpState === 'idle' ? 0.12 : enemy.jawAngle || 0.12) -
+            (enemy.jawAngle || 0.12)) *
+          Math.min(1, dt * 6);
+        ud.jaw.rotation.x = enemy.jawAngle || 0.12;
+
+        ud.flare *= Math.exp(-dt * 3.5);
+        const coalBrightness =
+          0.85 +
+          Math.sin(time * 9) * 0.08 +
+          (Math.sin(time * 37) > 0.96 ? -0.4 : 0) +
+          ud.flare * 0.9;
+        ud.eyeMat.color.copy(ud.eyeBase).multiplyScalar(coalBrightness);
+        ud.haloMat.opacity = Math.min(1, 0.45 + 0.4 * coalBrightness);
+        ud.glow.material.opacity = Math.min(1, 0.28 + 0.14 * coalBrightness + ud.flare * 0.25);
+        ud.mawMat.color.setHSL(
+          0.05,
+          1,
+          0.45 + 0.15 * Math.sin(time * 6) + (enemy.jawAngle || 0.12) * 0.2
+        );
+
+        ud.shake *= Math.exp(-dt * 9);
+        enemy.mesh.position.x += (Math.random() - 0.5) * ud.shake;
+        enemy.mesh.position.z += (Math.random() - 0.5) * ud.shake;
+      }
+    } else if (enemy.type === 't') {
+      // Каменный Страж
+      enemy.mesh.position.set(enemy.x, enemy.y + 0.02, enemy.z);
+      enemy.mesh.rotation.y = Math.atan2(dx, dz) + Math.PI;
+
+      if (lodTier === 0 || dist2D < 45) {
+        const walkPhase = time * baseStats.speed * 2.5;
+        const legSwing = Math.sin(walkPhase) * 0.25;
+        ud.legR.rotation.x = legSwing;
+        ud.legL.rotation.x = -legSwing;
+
+        const breath = Math.sin(time * 1.1);
+        ud.torso.scale.setScalar(1 + breath * 0.012);
+        ud.hips.position.y = 1.5 + breath * 0.02;
+
+        ud.atkTimer -= dt;
+        ud.atkT += dt;
+
+        if (ud.atkState === 'idle' && ud.atkTimer <= 0 && dist2D < 12) {
+          ud.atkState = 'windup';
+          ud.atkT = 0;
+          ud.flare = Math.max(ud.flare, 0.45);
+        } else if (ud.atkState === 'windup' && ud.atkT > 0.55) {
+          ud.atkState = 'slam';
+          ud.atkT = 0;
+          ud.impacted = false;
+        } else if (ud.atkState === 'slam') {
+          if (!ud.impacted && ud.atkT > 0.12) {
+            ud.impacted = true;
+            if (dist2D < 4.5 && Math.abs(player.y - enemy.y) < 3) {
+              damagePlayer(17 * (enemy.damageMultiplier || 1));
+            }
+            spawnFireLandingRing(enemy.x, enemy.y + 0.05, enemy.z);
+            triggerScreenShake(0.35);
+            ud.flare = 1;
+            ud.shake = 0.15;
+          }
+          if (ud.atkT > 0.22) {
+            ud.atkState = 'recover';
+            ud.atkT = 0;
+          }
+        } else if (ud.atkState === 'recover' && ud.atkT > 0.7) {
+          ud.atkState = 'idle';
+          ud.atkT = 0;
+          ud.atkTimer = 2.5 + Math.random() * 2;
+        }
+
+        let armRp = -0.08;
+        let armLp = -0.08;
+        let armRz = 0.06;
+        let armLz = -0.06;
+        let lean = 0.12;
+        let headX = 0.16;
+        let headY = Math.sin(time * 0.5) * 0.04;
+
+        if (ud.atkState === 'windup') {
+          const k = easeInOutQuad(Math.min(1, ud.atkT / 0.55));
+          armRp = lerp(armRp, -2.5, k);
+          armLp = lerp(armLp, -0.5, k);
+          armRz = lerp(armRz, 0.25, k);
+          lean = lerp(lean, -0.14, k);
+          headX = lerp(headX, 0.02, k);
+          headY = lerp(headY, 0, k);
+        } else if (ud.atkState === 'slam') {
+          const k = Math.min(1, ud.atkT / 0.22);
+          const ee = k * k;
+          armRp = lerp(-2.5, -0.55, ee);
+          armLp = lerp(-0.5, -0.9, ee);
+          armRz = lerp(0.25, 0.1, ee);
+          lean = lerp(-0.14, 0.42, ee);
+          headX = lerp(0.02, 0.42, ee);
+          headY = 0;
+        } else if (ud.atkState === 'recover') {
+          const k = easeInOutQuad(Math.min(1, ud.atkT / 0.7));
+          armRp = lerp(-0.55, -0.08, k);
+          armLp = lerp(-0.9, -0.08, k);
+          lean = lerp(0.42, 0.12, k);
+          headX = lerp(0.42, 0.16, k);
+        }
+
+        ud.torso.rotation.x = lean + breath * 0.015;
+        ud.head.rotation.x = headX;
+        ud.head.rotation.y = headY;
+        ud.armR.g.rotation.x = armRp + Math.sin(time * 1.3) * 0.02;
+        ud.armL.g.rotation.x = armLp + Math.sin(time * 1.3 + 3) * 0.02;
+        ud.armR.g.rotation.z = armRz;
+        ud.armL.g.rotation.z = armLz;
+
+        ud.shake *= Math.exp(-dt * 8);
+        enemy.mesh.position.x += (Math.random() - 0.5) * ud.shake;
+        enemy.mesh.position.z += (Math.random() - 0.5) * ud.shake;
+
+        ud.flare *= Math.exp(-dt * 3.5);
+        ud.coalT -= dt;
+        if (ud.coalT <= 0) {
+          ud.coal = 0.8 + Math.random() * 0.25 + (Math.random() < 0.1 ? -0.45 : 0);
+          ud.coalT = 0.06 + Math.random() * 0.2;
+        }
+        const coalBrightness = ud.coal + ud.flare * 0.9;
+        ud.eyeMat.color.copy(ud.eyeBase).multiplyScalar(coalBrightness);
+        ud.haloMat.opacity = Math.min(1, 0.45 + 0.4 * coalBrightness);
+        for (const halo of ud.eyeHalos) {
+          halo.scale.setScalar(0.6 + ud.flare * 0.25);
+        }
+
+        const crackOpacity = 0.5 + Math.sin(time * 1.7) * 0.12 + ud.flare * 0.45;
+        for (const mat of ud.crackMats) {
+          mat.opacity = Math.min(1, crackOpacity);
+        }
+      }
+    }
+
+    // Масштаб и маркер элитных мобов
+    if (enemy.type !== 'b') {
+      const eliteScale = enemy.eliteScale || 1;
+      if (enemy.type !== 's') {
+        if (!ud.baseScaleVec) ud.baseScaleVec = enemy.mesh.scale.clone();
+        if (eliteScale !== ud.appliedEliteScale) {
+          ud.appliedEliteScale = eliteScale;
+          enemy.mesh.scale.copy(ud.baseScaleVec).multiplyScalar(eliteScale);
+        }
+      } else if (eliteScale !== 1) {
+        enemy.mesh.scale.multiplyScalar(eliteScale);
+        enemy.mesh.position.y += (eliteScale - 1) * baseStats.scale;
+      }
+
+      if (enemy.eliteType && activeEliteMarkers < eliteMarkerSprites.length) {
+        const marker = eliteMarkerSprites[activeEliteMarkers++];
+        marker.visible = true;
+        marker.material = ELITE_MARKER_MATERIALS[enemy.eliteType];
+        marker.position.set(
+          enemy.x,
+          enemy.y + baseStats.radius * 2 * eliteScale + 1.4,
+          enemy.z
+        );
+        marker.scale.setScalar(2 + Math.sin(time * 6) * 0.25);
+      }
+    }
+  }
+
+  for (let q = activeEliteMarkers; q < eliteMarkerSprites.length; q++) {
+    eliteMarkerSprites[q].visible = false;
+  }
+
+  // Отрисовка лута (кристаллы опыта, сферы лечения, монеты золота)
+  let pickupCount = 0;
+  for (let i = 0; i < state.pickups.length && pickupCount < MAX_PICKUPS; i++) {
+    const pk = state.pickups[i];
+    const size =
+      pk.type === 0
+        ? pk.value >= 5
+          ? 1.6
+          : 0.8 + Math.min(0.5, pk.value * 0.1)
+        : pk.type === 1
+          ? 1.3
+          : 0.75;
+    _pickupDummyObj.position.set(pk.x, pk.y + Math.sin(time * 3 + pk.phase) * 0.12, pk.z);
+    _pickupDummyObj.rotation.set(0, time * 2 + pk.phase, 0);
+    _pickupDummyObj.scale.setScalar(size);
+    _pickupDummyObj.updateMatrix();
+    pickupInstancedMesh.setMatrixAt(pickupCount, _pickupDummyObj.matrix);
+    const colorIdx = pk.type === 0 ? (pk.value >= 5 ? 3 : 0) : pk.type === 1 ? 1 : 2;
+    pickupInstancedMesh.setColorAt(pickupCount, PICKUP_COLORS[colorIdx]);
+    pickupCount++;
+  }
+  pickupInstancedMesh.count = pickupCount;
+  pickupInstancedMesh.instanceMatrix.needsUpdate = true;
+  pickupInstancedMesh.instanceColor.needsUpdate = true;
+
+  // Вращение закрытых сундуков
+  for (let i = 0; i < chests.length; i++) {
+    const chest = chests[i];
+    if (!chest.isOpen) {
+      chest.group.rotation.y = time * 0.8;
+    }
+  }
+
+  // Отрисовка снарядов и орбитальных клинков
+  let fireCount = 0;
+  let enemyFireCount = 0;
+  let bladeCount = 0;
+
+  for (const proj of state.projectiles) {
+    if (proj.isHostile) {
+      if (enemyFireCount >= 100) continue;
+      _projectileDummyObj.position.set(proj.x, proj.y, proj.z);
+      _projectileDummyObj.rotation.set(time * 5 + proj.x, time * 4 + proj.y, time * 3 + proj.z);
+      _projectileDummyObj.scale.setScalar(1 + Math.sin(time * 20 + proj.x) * 0.1);
+      _projectileDummyObj.updateMatrix();
+      enemyProjectileInstancedMesh.setMatrixAt(enemyFireCount++, _projectileDummyObj.matrix);
+    } else {
+      if (fireCount >= 250) continue;
+      _projectileDummyObj.position.set(proj.x, proj.y, proj.z);
+      _projectileDummyObj.rotation.set(time * 5 + proj.x, time * 4 + proj.y, time * 3 + proj.z);
+      _projectileDummyObj.scale.setScalar(1 + Math.sin(time * 20 + proj.x) * 0.1);
+      _projectileDummyObj.updateMatrix();
+      playerFireballInstancedMesh.setMatrixAt(fireCount++, _projectileDummyObj.matrix);
+    }
+  }
+
+  for (let i = 0; i < (state.activeBladeCount || 0); i++) {
+    const bladePos = state.bladePositions[i];
+    if (bladeCount >= 50) break;
+    _projectileDummyObj.position.set(bladePos[0], player.y + 1, bladePos[1]);
+    const angle = Math.atan2(bladePos[1] - player.z, bladePos[0] - player.x);
+    _projectileDummyObj.rotation.set(0, -angle, Math.PI / 2);
+    _projectileDummyObj.scale.setScalar(1.5);
+    _projectileDummyObj.updateMatrix();
+    orbitalBladeInstancedMesh.setMatrixAt(bladeCount++, _projectileDummyObj.matrix);
+  }
+
+  playerFireballInstancedMesh.count = fireCount;
+  enemyProjectileInstancedMesh.count = enemyFireCount;
+  orbitalBladeInstancedMesh.count = bladeCount;
+
+  if (fireCount) playerFireballInstancedMesh.instanceMatrix.needsUpdate = true;
+  if (enemyFireCount) enemyProjectileInstancedMesh.instanceMatrix.needsUpdate = true;
+  if (bladeCount) orbitalBladeInstancedMesh.instanceMatrix.needsUpdate = true;
+
+  // Кольца волн игрока
+  for (const ringMesh of waveEffectRings) {
+    if (ringMesh.visible) {
+      ringMesh.lifeLeft -= 1 / 60;
+      ringMesh.scale.multiplyScalar(1.03);
+      ringMesh.material.opacity = Math.max(0, ringMesh.lifeLeft / 0.3);
+      if (ringMesh.lifeLeft <= 0) ringMesh.visible = false;
+    }
+  }
+
+  // Атмосферная пыль
+  dustParticles.rotation.y += dt * 0.05;
+  const dustPosArr = dustParticles.geometry.attributes.position.array;
+  for (let i = 0; i < DUST_PARTICLE_COUNT * 3; i += 3) {
+    dustPosArr[i + 1] += dt * 0.5;
+    if (dustPosArr[i + 1] > 180) dustPosArr[i + 1] = 0;
+  }
+  dustParticles.geometry.attributes.position.needsUpdate = true;
+
+  // Обновление искр
+  const sparkPosAttr = sparkGeo.attributes.position;
+  const sparkColAttr = sparkGeo.attributes.color;
+  let anySparkActive = false;
+  for (let i = 0; i < SPARK_PARTICLE_COUNT; i++) {
+    const sp = sparkData[i];
+    if (!sp.active) continue;
+    anySparkActive = true;
+    sp.life += dt;
+    if (sp.life >= sp.max) {
+      sp.active = false;
+      sparkPosAttr.array[i * 3 + 1] = -100;
+      continue;
+    }
+    sp.velocity.y -= 1.4 * dt;
+    sparkPosAttr.array[i * 3] += sp.velocity.x * dt;
+    sparkPosAttr.array[i * 3 + 1] += sp.velocity.y * dt;
+    sparkPosAttr.array[i * 3 + 2] += sp.velocity.z * dt;
+    const fade = 1 - sp.life / sp.max;
+    sparkColAttr.array[i * 3] = sp.color.r * fade;
+    sparkColAttr.array[i * 3 + 1] = sp.color.g * fade;
+    sparkColAttr.array[i * 3 + 2] = sp.color.b * fade;
+  }
+  if (anySparkActive) {
+    sparkPosAttr.needsUpdate = sparkColAttr.needsUpdate = true;
+  }
+
+  // Обновление клубов дыма
+  const smokePosAttr = smokeGeo.attributes.position;
+  const smokeColAttr = smokeGeo.attributes.color;
+  let anySmokeActive = false;
+  for (let i = 0; i < SMOKE_PARTICLE_COUNT; i++) {
+    const sm = smokeData[i];
+    if (!sm.active) continue;
+    anySmokeActive = true;
+    sm.life += dt;
+    if (sm.life >= sm.max) {
+      sm.active = false;
+      smokePosAttr.array[i * 3 + 1] = -100;
+      continue;
+    }
+    smokePosAttr.array[i * 3] += sm.velocity.x * dt;
+    smokePosAttr.array[i * 3 + 1] += sm.velocity.y * dt;
+    smokePosAttr.array[i * 3 + 2] += sm.velocity.z * dt;
+    const ratio = sm.life / sm.max;
+    smokeColAttr.array[i * 3] = smokeStartColor.r + (smokeEndColor.r - smokeStartColor.r) * ratio;
+    smokeColAttr.array[i * 3 + 1] =
+      smokeStartColor.g + (smokeEndColor.g - smokeStartColor.g) * ratio;
+    smokeColAttr.array[i * 3 + 2] =
+      smokeStartColor.b + (smokeEndColor.b - smokeStartColor.b) * ratio;
+  }
+  if (anySmokeActive) {
+    smokePosAttr.needsUpdate = smokeColAttr.needsUpdate = true;
+  }
+
+  // Кольца приземлений мобов
+  for (const ring of fireLandingRings) {
+    if (!ring.visible) continue;
+    ring.userData.life += dt / 0.45;
+    if (ring.userData.life >= 1) {
+      ring.visible = false;
+      continue;
+    }
+    ring.scale.setScalar(1 + ring.userData.life * 2.4);
+    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.65);
+  }
+
+  for (const ring of voidLandingRings) {
+    if (!ring.visible) continue;
+    ring.userData.life += dt / 0.45;
+    if (ring.userData.life >= 1) {
+      ring.visible = false;
+      continue;
+    }
+    ring.scale.setScalar(1 + ring.userData.life * 2.4);
+    ring.material.opacity = Math.max(0, (1 - ring.userData.life) * 0.65);
+  }
+
+  updateGlobalBolts(dt);
+  syncBossVisualEffects(dt);
+
+  // Полоса здоровья босса (обновляем DOM только при изменении текста/ширины)
+  const activeBoss = state.enemies.find((e) => e.type === 'b');
+  if (activeBoss) {
+    const currentHp = Math.max(0, activeBoss.hp);
+    const widthPercent = Math.max(0, (currentHp / activeBoss.maxHp) * 100).toFixed(1) + '%';
+    const hpText = Math.ceil(currentHp) + ' / ' + activeBoss.maxHp;
+
+    if (widthPercent !== lastBossWidthText) {
+      lastBossWidthText = widthPercent;
+      DOM_CACHE.bossBarFill.style.width = widthPercent;
+    }
+    if (hpText !== lastBossHpText) {
+      lastBossHpText = hpText;
+      DOM_CACHE.bossHpText.textContent = hpText;
+    }
+
+    let statusSuffix = '';
+    if (activeBoss.bkind === 'womb') {
+      statusSuffix = activeBoss.shield ? ' · ЩИТ' : activeBoss.weak ? ' · ЯДРО ОТКРЫТО ×2' : '';
+    } else if (activeBoss.phase === 2) {
+      statusSuffix = activeBoss.bkind === 'koloss' ? ' · ЯРОСТЬ ЛАВЫ' : ' · ЯРОСТЬ';
+    } else if (activeBoss.bkind === 'koloss' && activeBoss.bossState === 'exhaust') {
+      statusSuffix = ' · ИСТОЩЕНИЕ ×2';
+    }
+
+    const fullBossTitle = activeBoss.bossName + statusSuffix;
+    if (fullBossTitle !== lastBossNameText) {
+      lastBossNameText = fullBossTitle;
+      getById('bossName').textContent = fullBossTitle;
+    }
+    if (!lastBossShownState) {
+      lastBossShownState = 1;
+      DOM_CACHE.bossHpContainer.classList.add('visible');
+    }
+  } else if (lastBossShownState) {
+    lastBossShownState = 0;
+    lastBossWidthText = '';
+    lastBossHpText = '';
+    lastBossNameText = '';
+    DOM_CACHE.bossHpContainer.classList.remove('visible');
+  }
+
+  // Текстовый HUD обновляется раз в 6 кадров
+  if (state.frameCount++ % 6 === 0) {
+    DOM_CACHE.healthBar.style.width = Math.max(0, (player.hp / state.maxHp) * 100) + '%';
+    DOM_CACHE.xpBar.style.width = (state.xp / (6 + 5 * state.level)) * 100 + '%';
+
+    const inventorySummary = [
+      ...Object.entries(state.weaponLevels).map(([k, v]) => WEAPONS[k].name + ' ' + v),
+      ...Object.entries(state.itemsOwned).map(([k, v]) => ITEMS[k].name + ' ×' + v)
+    ].join(', ');
+
+    DOM_CACHE.statsText.innerHTML =
+      `${HEROES[state.heroId].name}<br>` +
+      `Этаж ${state.maxFloorReached + 1}/12 · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
+      `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м · золото: ${state.gold | 0}<br>` +
+      `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
+      `${state.chosenRoute ? '<br>Путь: ' + (state.chosenRoute === 1 ? 'тихий' : 'опасный') : ''}` +
+      `${state.activeEvent ? '<br>Событие: ' + FLOOR_EVENTS[state.activeEvent.key].name + ' · ' + (state.activeEvent.timeLeft | 0) + ' с' : ''}` +
+      `${state.mutatorName ? '<br>' + state.mutatorName : ''}` +
+      `<br>${inventorySummary}`;
+  }
+
+  renderer.render(scene, camera);
+}
