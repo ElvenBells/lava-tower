@@ -901,5 +901,76 @@ function renderGameFrame(dt) {
       `<br>${inventorySummary}`;
   }
 
-  renderer.render(scene, camera);
+  if (typeof updateVfxStatusBanner === 'function') {
+    updateVfxStatusBanner();
+  }
+  renderSceneWithPostProcessing();
+}
+
+/**
+ * Обновляет информационную панель параметров VFX и статуса Бури текущей башни.
+ */
+function updateVfxStatusBanner() {
+  const bannerEl = getById('vfxBanner');
+  if (!bannerEl) return;
+
+  const towerId = (state && state.towerId) || selectedTowerId || 'ash';
+  const stormActive =
+    state && !state.isGameOver && state.towerStorm
+      ? state.towerStorm.active || state.towerStorm.blend > 0.08
+      : !!window.menuStormPreviewActive;
+  const stormBlend = activeVFXState.stormFactor || 0;
+  const stormLeft =
+    state && !state.isGameOver && state.towerStorm && state.towerStorm.active
+      ? Math.ceil(state.towerStorm.timer) + ' с'
+      : window.menuStormPreviewActive
+        ? 'ТЕСТ'
+        : '';
+
+  bannerEl.classList.toggle('storm-active', stormBlend > 0.15);
+
+  let titleHtml = '';
+  let paramsHtml = '';
+
+  if (towerId === 'ash') {
+    titleHtml = stormActive
+      ? `<span class="vfx-storm-badge">🔥 ПЕПЕЛЬНАЯ БУРЯ ${stormLeft ? '· ' + stormLeft : ''}</span>`
+      : `<span class="vfx-normal-badge">🔥 Пепельная башня · Норма</span>`;
+    paramsHtml =
+      `Bloom: <b>${activeVFXState.bloomStrength.toFixed(2)}</b> · ` +
+      `Порог: <b>${activeVFXState.bloomThreshold.toFixed(2)}</b> · ` +
+      `Искажение: <b>${activeVFXState.heatDistortion.toFixed(3)}</b> · ` +
+      `Магма: <b>${activeVFXState.lavaSpeed.toFixed(2)}</b> · ` +
+      `Туман: <b>${activeVFXState.fogDensityParam.toFixed(3)}</b>`;
+  } else if (towerId === 'ice') {
+    titleHtml = stormActive
+      ? `<span class="vfx-storm-badge ice">❄ ЛЕДЯНОЙ БУРАН ${stormLeft ? '· ' + stormLeft : ''}</span>`
+      : `<span class="vfx-normal-badge ice">❄ Ледяная башня · Норма</span>`;
+    paramsHtml =
+      `Bloom: <b>${activeVFXState.bloomStrength.toFixed(2)}</b> · ` +
+      `Трещины: <b>${activeVFXState.crackEmissive.toFixed(2)}</b> · ` +
+      `Взвесь: <b>${activeVFXState.fogDensityParam.toFixed(3)}</b> · ` +
+      `Метель: <b>${activeVFXState.blizzardSpeed.toFixed(2)}</b>`;
+  } else {
+    titleHtml = stormActive
+      ? `<span class="vfx-storm-badge void">🌀 ШТОРМ ПУСТОТЫ ${stormLeft ? '· ' + stormLeft : ''}</span>`
+      : `<span class="vfx-normal-badge void">🌀 Башня Пустоты · Норма</span>`;
+    paramsHtml =
+      `Руны: <b>${activeVFXState.bloomStrength.toFixed(2)}</b> · ` +
+      `Искажение: <b>${activeVFXState.rgbShift.toFixed(4)}</b> · ` +
+      `Аномалия грав.: <b>${activeVFXState.gravityAnomaly.toFixed(2)}</b> · ` +
+      `Растворение: <b>${activeVFXState.dissolveThreshold.toFixed(2)}</b>`;
+  }
+
+  const nextHtml = `${titleHtml}<div class="vfx-params-line">${paramsHtml}</div>`;
+  if (bannerEl._lastHtml !== nextHtml) {
+    bannerEl._lastHtml = nextHtml;
+    bannerEl.innerHTML = nextHtml;
+  }
+
+  const stormBtn = getById('stormToggleBtn');
+  if (stormBtn) {
+    stormBtn.textContent = stormActive ? '🌪 Буря: ВКЛ (B)' : '🌪 Буря: Авто / B';
+    stormBtn.classList.toggle('active-storm', !!stormActive);
+  }
 }

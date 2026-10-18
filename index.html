@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Lava Tower</title>
+  <title>Lava Tower — Три Башни (Three.js + GLSL)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -24,7 +24,16 @@
     <div id="st"></div>
   </div>
 
-  <div id="pauseHint">ESC — пауза</div>
+  <!-- Панель параметров шейдеров/VFX, фонового звука и управления Бурей -->
+  <div id="topVfxBar">
+    <div id="vfxBanner" class="vfx-banner"></div>
+    <div class="vfx-actions">
+      <button id="audioToggleBtn" type="button" class="vfx-btn" onclick="toggleGameAudioMute()">🔊 Горн: Вкл</button>
+      <button id="stormToggleBtn" type="button" class="vfx-btn" onclick="triggerOrToggleStorm()">🌪 Буря: Авто / B</button>
+    </div>
+  </div>
+
+  <div id="pauseHint">ESC — пауза · B — вызвать бурю</div>
   <div id="toast"></div>
 
   <div id="ov" class="ov">
@@ -39,7 +48,7 @@
   <script src="src/audio/sound-engine.js"></script>
   <script src="src/config/game-data.js"></script>
 
-  <!-- Сцена, освещение и генератор процедурных текстур -->
+  <!-- Сцена, освещение, пост-обработка и генератор процедурных текстур/шейдеров -->
   <script src="src/graphics/scene-setup.js"></script>
   <script src="src/graphics/procedural-textures.js"></script>
 

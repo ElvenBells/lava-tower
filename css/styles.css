@@ -1,11 +1,11 @@
 /* ==========================================================================
-   Lava Tower — Стили интерфейса (HUD, оверлеи, меню, полоса здоровья босса)
+   Lava Tower — Стили интерфейса (HUD, оверлеи, меню, панель VFX и Бурь)
    ========================================================================== */
 
 :root {
   --bg: #0d0710;
   --fg: #efe6d8;
-  --panel-bg: rgba(22, 10, 18, 0.94);
+  --panel-bg: rgba(22, 10, 18, 0.92);
   --accent: #ff6a1f;
   --button-bg: #2a120d;
   --border-warm: #6b2f1c;
@@ -22,7 +22,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 14px/1.45 'Rubik', sans-serif;
+  font: 14px/1.45 'Rubik', system-ui, -apple-system, sans-serif;
   overflow: hidden;
 }
 
@@ -38,13 +38,13 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: 'Russo One', sans-serif;
+  font-family: 'Russo One', system-ui, sans-serif;
   letter-spacing: 0.04em;
   margin: 0.2em 0;
   color: var(--accent);
 }
 
-/* Оверлей и панель меню */
+/* Оверлей и панель меню (полупрозрачный фон, чтобы 3D-рендер башни за меню был отлично виден) */
 .ov {
   position: fixed;
   inset: 0;
@@ -52,19 +52,21 @@ h4 {
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(120% 90% at 50% 110%, #57150790 0%, transparent 55%),
-    radial-gradient(90% 60% at 50% -10%, #2a123f90 0%, transparent 60%),
-    #0d0710ee;
+    radial-gradient(120% 90% at 50% 110%, rgba(87, 21, 7, 0.42) 0%, transparent 55%),
+    radial-gradient(90% 60% at 50% -10%, rgba(42, 18, 63, 0.42) 0%, transparent 60%),
+    rgba(10, 5, 14, 0.58);
   padding: 12px;
   z-index: 10;
 }
 
 .pn {
   background: var(--panel-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: var(--fg);
-  padding: 34px 42px;
-  max-width: 480px;
-  max-height: 92%;
+  padding: 28px 36px;
+  max-width: 500px;
+  max-height: 90%;
   overflow: auto;
   box-shadow: 0 30px 80px #000c;
   clip-path: polygon(
@@ -82,11 +84,11 @@ button {
   display: block;
   width: 100%;
   margin: 8px 0;
-  padding: 11px 26px;
+  padding: 11px 24px;
   border: 1px solid var(--border-button);
   background: var(--button-bg);
   color: var(--fg);
-  font-family: 'Russo One', sans-serif;
+  font-family: 'Russo One', system-ui, sans-serif;
   font-size: 15px;
   text-align: left;
   cursor: pointer;
@@ -111,12 +113,115 @@ input {
   color: #fff;
 }
 
+/* Верхняя правая панель параметров шейдеров/VFX, звука и Бури */
+#topVfxBar {
+  position: fixed;
+  right: 14px;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100vw - 28px);
+  pointer-events: none;
+}
+
+.vfx-banner {
+  background: rgba(16, 8, 16, 0.84);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 115, 40, 0.35);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 11.5px;
+  color: #f3e8e2;
+  text-align: right;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.vfx-banner.storm-active {
+  border-color: #ff9838;
+  box-shadow: 0 0 22px rgba(255, 110, 20, 0.55);
+}
+
+.vfx-normal-badge {
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 12px;
+  color: #ffb878;
+  letter-spacing: 0.04em;
+}
+.vfx-normal-badge.ice {
+  color: #88ddff;
+}
+.vfx-normal-badge.void {
+  color: #c084fc;
+}
+
+.vfx-storm-badge {
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 12.5px;
+  color: #ffdd68;
+  text-shadow: 0 0 10px #ff5500;
+  letter-spacing: 0.05em;
+}
+.vfx-storm-badge.ice {
+  color: #e8f9ff;
+  text-shadow: 0 0 10px #38b8ff;
+}
+.vfx-storm-badge.void {
+  color: #f3d8ff;
+  text-shadow: 0 0 10px #a855f7;
+}
+
+.vfx-params-line {
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.9;
+}
+.vfx-params-line b {
+  color: #ffd480;
+  font-family: monospace;
+}
+
+.vfx-actions {
+  display: flex;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.vfx-btn {
+  display: inline-block;
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+  clip-path: none;
+  background: rgba(28, 12, 18, 0.88);
+  border: 1px solid rgba(255, 120, 50, 0.45);
+  color: #f5e9e2;
+  text-align: center;
+}
+
+.vfx-btn:hover {
+  background: rgba(90, 30, 15, 0.95);
+}
+
+.vfx-btn.active-storm {
+  background: linear-gradient(135deg, #b83208, #6e1404);
+  border-color: #ffaa40;
+  color: #fff;
+  box-shadow: 0 0 14px rgba(255, 106, 0, 0.6);
+}
+
 /* Игровой интерфейс (HUD) */
 #hud {
   position: fixed;
   left: 16px;
   top: calc(env(safe-area-inset-top, 0px) + 16px);
-  width: 230px;
+  width: 240px;
   font-size: 13px;
   text-shadow: 0 1px 2px #000;
   pointer-events: none;
@@ -153,7 +258,7 @@ input {
   inset: 0;
   pointer-events: none;
   z-index: 3;
-  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0, 0, 0, 0.6) 100%);
+  background: radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0, 0, 0, 0.62) 100%);
 }
 
 #flash {
@@ -170,11 +275,11 @@ input {
   left: 50%;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
   transform: translateX(-50%);
-  padding: 6px 16px;
-  background: rgba(22, 10, 18, 0.85);
+  padding: 7px 18px;
+  background: rgba(22, 10, 18, 0.88);
   border: 1px solid var(--border-button);
   color: #ffd040;
-  font-family: 'Russo One', sans-serif;
+  font-family: 'Russo One', system-ui, sans-serif;
   font-size: 14px;
   opacity: 0;
   transition: opacity 0.25s;
@@ -190,7 +295,7 @@ input {
   right: 16px;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
   font-size: 11px;
-  opacity: 0.5;
+  opacity: 0.65;
   pointer-events: none;
   z-index: 5;
   display: none;
@@ -215,7 +320,7 @@ input {
 }
 
 #bossHp .boss-name {
-  font-family: 'Russo One', sans-serif;
+  font-family: 'Russo One', system-ui, sans-serif;
   font-size: 16px;
   letter-spacing: 0.08em;
   color: #ffd040;
@@ -259,7 +364,7 @@ input {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-family: 'Russo One', sans-serif;
+  font-family: 'Russo One', system-ui, sans-serif;
   font-size: 12px;
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);

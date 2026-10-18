@@ -24,6 +24,8 @@ if (!rawMeta || typeof rawMeta !== 'object' || !rawMeta.u) {
 rawMeta.u.wan = 1;
 if (!rawMeta.tu) rawMeta.tu = {};
 rawMeta.tu.ash = 1;
+rawMeta.tu.ice = 1;
+rawMeta.tu.void = 1;
 if (!rawMeta.f) rawMeta.f = {};
 if (!rawMeta.a) rawMeta.a = 0;
 
@@ -228,6 +230,8 @@ function pauseGame() {
   getById('pn').innerHTML = `
     <h2>ПАУЗА</h2>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
+    <button onclick="triggerOrToggleStorm()">🌪 ВЫЗВАТЬ / ПЕРЕКЛЮЧИТЬ БУРЮ (B)</button>
+    <button onclick="toggleGameAudioMute()">🔊 ПЕРЕКЛЮЧИТЬ ЗВУК БАШНИ</button>
     <button onclick="quitToMenu()">✕ ВЫЙТИ В ГЛАВНОЕ МЕНЮ</button>
   `;
   getById('ov').style.display = 'flex';

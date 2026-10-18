@@ -15,6 +15,11 @@ window.addEventListener('keydown', (event) => {
   if (event.code.startsWith('Shift')) {
     keysPressed.slide = 1;
   }
+  if (event.code === 'KeyB') {
+    if (typeof triggerOrToggleStorm === 'function') {
+      triggerOrToggleStorm();
+    }
+  }
   if (event.code === 'Escape' && state && !state.isGameOver && !state.pauseState) {
     event.preventDefault();
     pauseGame();
@@ -47,7 +52,10 @@ window.addEventListener('mousemove', (event) => {
 
 function requestPointerLock() {
   try {
-    canvas.requestPointerLock();
+    const p = canvas.requestPointerLock();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {});
+    }
   } catch (err) {
     // Игнорируем отказ блокировки курсора
   }
@@ -182,9 +190,22 @@ function initializeRun(mode) {
   state.standingStillTime = 0;
   state.chosenRoute = 0;
 
+  state.unscaledBaseGravity = state.gravity;
   if (state.towerConfig.gravityMul) {
     state.gravity *= state.towerConfig.gravityMul;
   }
+  state.baseGravity = state.gravity;
+  state.puddleSizzleCooldown = 0;
+  state.isStandingInLavaPuddle = 0;
+  state.towerStorm = {
+    active: 0,
+    blend: 0,
+    timer: 0,
+    duration: 11,
+    cooldown: 18
+  };
+  window.menuStormPreviewActive = 0;
+  window.menuStormPreviewFactor = 0;
 
   state.maxExtraJumps = heroId === 'pil' ? 2 : 1;
   state.chestCostMultiplier = heroId === 'smi' ? 0.7 : 1;
@@ -392,6 +413,35 @@ function updateGameStep(dt) {
     }
   }
 
+  // Обновление периодической Бури башни (усложняет видимость поля и меняет физику в Пустоте)
+  if (state.towerStorm) {
+    const ts = state.towerStorm;
+    if (ts.active) {
+      ts.timer -= dt;
+      ts.blend = Math.min(1, ts.blend + dt * 0.65);
+      if (ts.timer <= 0) {
+        ts.active = 0;
+        ts.cooldown = 24 + Math.random() * 10;
+        showToast('Погода проясняется — буря стихла', 2.0);
+      }
+    } else {
+      ts.blend = Math.max(0, ts.blend - dt * 0.5);
+      ts.cooldown -= dt;
+      if (ts.cooldown <= 0) {
+        triggerTowerStorm(11);
+      }
+    }
+
+    // В Башне Пустоты во время Бури гравитация уменьшается ещё сильнее (ещё более долгое приземление после прыжка)
+    if (state.towerId === 'void') {
+      const baseMul = state.towerConfig.vfxBase.gravityMul || 0.62;
+      const stormMul = state.towerConfig.vfxStorm.gravityMul || 0.35;
+      const curMul = lerp(baseMul, stormMul, ts.blend);
+      const descentSlow = player.vy < 0 ? lerp(1.0, 0.72, ts.blend) : 1.0;
+      state.gravity = (state.unscaledBaseGravity || 24) * curMul * descentSlow;
+    }
+  }
+
   player.vy -= state.gravity * dt;
   const fallVelocity = player.vy;
   const oldY = player.y;
@@ -464,6 +514,29 @@ function updateGameStep(dt) {
   state.lavaY += lavaRiseRate * dt;
   if (isInLava) {
     damagePlayer(state.maxHp * 0.15 * dt, 1);
+  }
+
+  // Постоянный небольшой урон при нахождении в лавовой луже на полу или под ступенью (Пепельная башня)
+  state.isStandingInLavaPuddle = 0;
+  state.puddleSizzleCooldown = Math.max(0, (state.puddleSizzleCooldown || 0) - dt);
+  if (state.towerId === 'ash' && !isInLava && typeof getActiveLavaPuddleUnderPlayer === 'function') {
+    const activePuddle = getActiveLavaPuddleUnderPlayer(player.x, player.y, player.z);
+    if (activePuddle) {
+      state.isStandingInLavaPuddle = 1;
+      const puddleDps = state.maxHp * 0.048 * dt;
+      player.hp -= puddleDps;
+      state.timeSinceLastHit = 0;
+      if (state.puddleSizzleCooldown <= 0) {
+        state.puddleSizzleCooldown = 0.24;
+        playSound('sizzle');
+        spawnSparkBurst(player.x, player.y + 0.08, player.z, 3, 'fire');
+        triggerScreenFlash('radial-gradient(circle, rgba(255,90,0,.22) 0%, transparent 72%)');
+        if (state.hintCooldown <= 0) {
+          state.hintCooldown = 2.6;
+          showToast('🔥 Лавовая лужа! Вы получаете ожог, пока стоите в лаве', 1.5);
+        }
+      }
+    }
   }
 
   if (state.timeSinceLastHit > 3 && !isInLava && player.hp < state.maxHp) {
@@ -1311,3 +1384,45 @@ function updateGameStep(dt) {
     finishRun(0);
   }
 }
+
+/**
+ * Запускает периодическую Бурю в текущей башне на указанное время (с).
+ */
+function triggerTowerStorm(duration = 11) {
+  if (!state || state.isGameOver) return;
+  const ts = state.towerStorm;
+  if (!ts) return;
+  ts.active = 1;
+  ts.duration = duration;
+  ts.timer = duration;
+  playSound('storm');
+  const stormTitle =
+    (state.towerConfig && state.towerConfig.vfxStorm && state.towerConfig.vfxStorm.stormName) ||
+    'БУРЯ БАШНИ';
+  if (state.towerId === 'ash') {
+    showToast('🌪 ' + stormTitle + '! Свечение, марево и пепел усилены!', 3.0);
+  } else if (state.towerId === 'ice') {
+    showToast('❄ ' + stormTitle + '! Бездонная метель и снежная взвесь сгущаются!', 3.0);
+  } else {
+    showToast('🌀 ' + stormTitle + '! Сияние рун, искажение реальности и невесомость усилены!', 3.0);
+  }
+}
+
+/**
+ * Переключает Бурю по кнопке UI или клавише B (работает и в забеге, и в меню для осмотра).
+ */
+function triggerOrToggleStorm() {
+  if (state && !state.isGameOver && state.towerStorm) {
+    if (state.towerStorm.active) {
+      state.towerStorm.active = 0;
+      state.towerStorm.cooldown = 25;
+      showToast('Буря остановлена', 1.4);
+    } else {
+      triggerTowerStorm(12);
+    }
+  } else {
+    window.menuStormPreviewActive = !window.menuStormPreviewActive;
+    playSound('storm');
+  }
+}
+window.triggerOrToggleStorm = triggerOrToggleStorm;

@@ -82,11 +82,11 @@ function gameLoop(timestamp) {
     lavaMesh.position.y = -4.5;
     lavaLight.position.set(0, 6, 0);
 
-    if (typeof updateEnvironmentVisuals === 'function') {
-      updateEnvironmentVisuals(menuTime, frameDelta);
-    }
-
-    dustParticles.rotation.y += frameDelta * 0.08;
+    // Плавный переход предпросмотра Бури в меню
+    const targetMenuStorm = window.menuStormPreviewActive ? 1.0 : 0.0;
+    window.menuStormPreviewFactor =
+      (window.menuStormPreviewFactor || 0) +
+      (targetMenuStorm - (window.menuStormPreviewFactor || 0)) * Math.min(1, frameDelta * 2.5);
 
     camera.position.set(
       Math.sin(timestamp * 0.00022) * 23,
@@ -94,7 +94,15 @@ function gameLoop(timestamp) {
       Math.cos(timestamp * 0.00022) * 23
     );
     camera.lookAt(0, 11 + Math.sin(timestamp * 0.00015) * 3, 0);
-    renderer.render(scene, camera);
+
+    if (typeof updateEnvironmentVisuals === 'function') {
+      updateEnvironmentVisuals(menuTime, frameDelta);
+    }
+    if (typeof updateVfxStatusBanner === 'function') {
+      updateVfxStatusBanner();
+    }
+
+    renderSceneWithPostProcessing();
   }
 }
 

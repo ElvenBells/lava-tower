@@ -532,39 +532,50 @@ const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
 
 const TOWER_SLAB_MATERIALS = {
   ash: new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#7c7e84'),
     map: TOWER_FLOOR_TEXTURES.ash.map,
-    bumpMap: TOWER_FLOOR_TEXTURES.ash.bump,
-    bumpScale: 0.32,
-    emissive: 0xff5210,
+    normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
+    normalScale: new THREE.Vector2(2.8, 2.8),
+    roughnessMap: TOWER_FLOOR_TEXTURES.ash.roughnessMap,
+    roughness: 0.9,
+    metalness: 0.1,
+    emissive: new THREE.Color('#ff3b00'),
     emissiveMap: TOWER_FLOOR_TEXTURES.ash.emissive,
-    emissiveIntensity: 0.9,
-    vertexColors: true,
-    roughness: 0.8,
-    metalness: 0.15
+    emissiveIntensity: 1.1,
+    vertexColors: true
   }),
-  ice: new THREE.MeshStandardMaterial({
+  ice: new THREE.MeshPhysicalMaterial({
+    color: 0x8bc9eb,
     map: TOWER_FLOOR_TEXTURES.ice.map,
-    bumpMap: TOWER_FLOOR_TEXTURES.ice.bump,
-    bumpScale: 0.22,
-    emissive: 0x4cb8ff,
+    emissive: new THREE.Color(0x88ddff),
     emissiveMap: TOWER_FLOOR_TEXTURES.ice.emissive,
-    emissiveIntensity: 0.85,
-    vertexColors: true,
-    roughness: 0.14,
-    metalness: 0.38
+    emissiveIntensity: 1.95,
+    roughness: 0.05,
+    roughnessMap: TOWER_FLOOR_TEXTURES.ice.roughnessMap,
+    metalness: 0.1,
+    ior: 1.31,
+    reflectivity: 0.95,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.03,
+    envMap: ICE_ENV_CUBEMAP,
+    envMapIntensity: 2.1,
+    bumpMap: TOWER_FLOOR_TEXTURES.ice.bump,
+    bumpScale: 0.06,
+    vertexColors: true
   }),
   void: new THREE.MeshStandardMaterial({
+    color: 0x06040a,
     map: TOWER_FLOOR_TEXTURES.void.map,
     bumpMap: TOWER_FLOOR_TEXTURES.void.bump,
-    bumpScale: 0.28,
-    emissive: 0xa845ff,
-    emissiveMap: TOWER_FLOOR_TEXTURES.void.emissive,
-    emissiveIntensity: 1.15,
-    vertexColors: true,
-    roughness: 0.45,
-    metalness: 0.3
+    bumpScale: 0.25,
+    roughness: 0.42,
+    metalness: 0.35,
+    vertexColors: true
   })
 };
+
+applyWorldStoneShader(TOWER_SLAB_MATERIALS.ash, { crackRarity: 0.48, charStrength: 0.92 });
+applyVoidFloorStardustShader(TOWER_SLAB_MATERIALS.void);
 
 let blocks = [];
 let jumpPads = [];
@@ -759,6 +770,14 @@ function buildFrozenSilhouetteBaseGeometry() {
 
 const frozenSilhouetteBaseGeo = buildFrozenSilhouetteBaseGeometry();
 
+// Динамические массивы для новых механик и 3D-эффектов трёх башен
+let ashFloorLavaPuddles = [];
+let ashWallStreamGlobs = [];
+let ashFallingDrops = [];
+let voidFloatingDebrisMeshes = [];
+let voidMistBillboards = [];
+let voidDissolvedStairStepSet = new Set();
+
 function clearTowerDecorGroup() {
   for (let i = towerDecorGroup.children.length - 1; i >= 0; i--) {
     const child = towerDecorGroup.children[i];
@@ -774,15 +793,48 @@ function clearTowerDecorGroup() {
   activeVoidFloatingData = [];
   activeAshLavaStreamMat = null;
   activeVoidRunePillarMat = null;
+
+  ashFloorLavaPuddles = [];
+  ashWallStreamGlobs = [];
+  ashFallingDrops = [];
+  voidFloatingDebrisMeshes = [];
+  voidMistBillboards = [];
+
+  TOWER_SHADER_UNIFORMS.ashFlows.length = 0;
+  TOWER_SHADER_UNIFORMS.ashPuddles.length = 0;
+  TOWER_SHADER_UNIFORMS.iceCreepingFog.length = 0;
 }
 
 /**
- * Строит уникальное 3D-окружение башни по референсам мудбордов:
- * - Пепельная: контрфорсы, стрельчатые арки, жаровни Горна, цепи, водопады магмы и базальтовые пики
- * - Ледяная: готические ледяные своды, 3D вмёрзшие в лёд силуэты монахов Ордена Инея, каскады сосулек и друзы льда
- * - Пустота: изгибающиеся щупальца/ленты тёмной материи, рунные обелиски, парящие обломки лестниц и руин в невесомости
+ * Проверяет, стоит ли игрок в лавовой луже на полу или ступени Пепельной башни.
+ * Возвращает объект лужи или null.
  */
-function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor) {
+function getActiveLavaPuddleUnderPlayer(px, py, pz) {
+  if (!ashFloorLavaPuddles.length) return null;
+  for (let i = 0; i < ashFloorLavaPuddles.length; i++) {
+    const p = ashFloorLavaPuddles[i];
+    if (Math.abs(py - p.y) < 0.68) {
+      const dx = px - p.x;
+      const dz = pz - p.z;
+      if (dx * dx + dz * dz < p.hitRadiusSq) {
+        return p;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Строит детализированное 3D-окружение башни, перенесённое из 3D-макетов
+ * (ash tower.html, ice tower.html, void tower.html) с сохранением архитектуры этажей игры:
+ * - Пепельная: каменные контрфорсы с обугливанием, 3D-ручьи текущей по стенам лавы (с ветвлением и сгустками),
+ *   наносящие урон лавовые лужи на полу, стекающая и капающая со ступеней лава с небольшими лужицами
+ * - Ледяная: полупрозрачные ледяные колонны (IOR 1.31), вмёрзшие в толщу льда силуэты погибших странников,
+ *   толстая морозная корка и свисающие со ступеней/краёв сосульки, стелющийся морозный пар над трещинами
+ * - Пустота: готические пилястры с рунами, ленты абсолютной тьмы из трещин, визуально растворившиеся ступени
+ *   (на которые можно встать!), парящие в невесомости осколки и клубы фиолетового эфира
+ */
+function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor, floorValidCellsByFloor) {
   clearTowerDecorGroup();
   const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
 
@@ -795,16 +847,16 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
   const pillarPrimaryColor =
     towerId === 'ash'
-      ? new THREE.Color(0x361318)
+      ? new THREE.Color(0x6e7076)
       : towerId === 'ice'
-        ? new THREE.Color(0x5da8dc)
-        : new THREE.Color(0x1f0f38);
+        ? new THREE.Color(0x88c8ec)
+        : new THREE.Color(0x180b2c);
   const pillarSecondaryColor =
     towerId === 'ash'
-      ? new THREE.Color(0x220a0d)
+      ? new THREE.Color(0x28282c)
       : towerId === 'ice'
-        ? new THREE.Color(0x98dcff)
-        : new THREE.Color(0x34195e);
+        ? new THREE.Color(0xb8e6ff)
+        : new THREE.Color(0x28124a);
   const accentGlowColor =
     towerId === 'ash'
       ? new THREE.Color(0xff6a15)
@@ -816,7 +868,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
   const capitalGeo = new THREE.CylinderGeometry(1.5, 1.08, 1.35, 6);
   const archSegmentGeo = new THREE.BoxGeometry(5.6, 0.95, 0.95);
 
-  // 1. Периметральные контрфорсы, капители и стрельчатые арки
+  // 1. Периметральные контрфорсы, капители и стрельчатые арки по всем 12 этажам
   for (let p = 0; p < pillarCount; p++) {
     const angle = (p / pillarCount) * TWO_PI;
     const px = Math.cos(angle) * wallRadius;
@@ -840,7 +892,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         color: pillarSecondaryColor
       });
 
-      // Двойные стрельчатые арки между колоннами
       if (floor % 2 === 1) {
         for (const side of [-0.22, 0.22]) {
           const aAngle = ((p + 0.5 + side) / pillarCount) * TWO_PI;
@@ -858,23 +909,27 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     }
   }
 
-  // 2. Детализация винтовых лестниц (карнизы ступеней, опорные колонны, балюстрады с огнями)
+  // 2. Карнизы и опорные элементы лестниц (для нерастворённых ступеней)
   const stairStepTrimGeo = new THREE.BoxGeometry(4.18, 0.34, 4.18);
   const stairPostGeo = new THREE.CylinderGeometry(0.25, 0.34, 1.4, 6);
 
   for (let floor = 0; floor < 11; floor++) {
     const stairs = stairPositionsByFloor[floor] || [];
     for (let s = 0; s < stairs.length; s++) {
-      const [sx, sz, topY] = stairs[s];
-      computeTransformMatrix(sx, topY - 0.14, sz, 0, 0, 0, 1, 1, 1, tempMat);
-      structureParts.push({
-        geo: stairStepTrimGeo,
-        matrix: tempMat.clone(),
-        color: pillarSecondaryColor
-      });
+      const [sx, sz, topY, stepBlockIdx] = stairs[s];
+      const isDissolvedVoidStep = towerId === 'void' && voidDissolvedStairStepSet.has(stepBlockIdx);
+
+      if (!isDissolvedVoidStep) {
+        computeTransformMatrix(sx, topY - 0.14, sz, 0, 0, 0, 1, 1, 1, tempMat);
+        structureParts.push({
+          geo: stairStepTrimGeo,
+          matrix: tempMat.clone(),
+          color: pillarSecondaryColor
+        });
+      }
 
       const colH = Math.max(0.5, topY - floor * 14 - 1.1);
-      if (colH > 0.8) {
+      if (colH > 0.8 && !isDissolvedVoidStep && towerId !== 'void') {
         computeTransformMatrix(
           sx,
           floor * 14 + colH * 0.5,
@@ -882,9 +937,9 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           0,
           s * 0.5,
           0,
-          1.12,
+          1.05,
           colH / 14,
-          1.12,
+          1.05,
           tempMat
         );
         structureParts.push({
@@ -923,113 +978,354 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     }
   }
 
-  // 3. Специфические для каждой башни 3D-детали (по мудбордам)
+  // =========================================================================
+  // 3A. ПЕПЕЛЬНАЯ БАШНЯ (ASH): 3D-ручьи лавы по стенам, лужи лавы на полу,
+  //     стекающая и капающая со ступеней лава (из ash tower.html)
+  // =========================================================================
   if (towerId === 'ash') {
-    const slitGeo = new THREE.BoxGeometry(0.9, 5.2, 0.38);
-    const lavaFallGeo = new THREE.CylinderGeometry(0.22, 0.48, 7.0, 6);
-    const stalactiteGeo = new THREE.ConeGeometry(0.45, 2.4, 5);
-    const chainLinkGeo = new THREE.CylinderGeometry(0.14, 0.14, 6.2, 5);
-    const cragGeo = jitterGeometry(new THREE.ConeGeometry(1.1, 3.4, 5), 0.18);
+    const sharedStreamMat = createFlowingLavaMaterial(11.3);
+    const sharedStairLavaMat = createFlowingLavaMaterial(105.5);
 
+    const charredRockMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#18181b'),
+      map: TOWER_FLOOR_TEXTURES.ash.map,
+      normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
+      normalScale: new THREE.Vector2(2.8, 2.8),
+      roughness: 0.96,
+      metalness: 0.05
+    });
+    const charredRockParts = [];
+    const dodoGeo = new THREE.DodecahedronGeometry(0.42, 0);
+
+    // 1) Стекающая по стенам лава (извилистые 3D-ручьи с переменным сечением, боковыми ответвлениями и сгустками)
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
-      for (let p = 0; p < pillarCount; p++) {
-        const midAngle = ((p + 0.5) / pillarCount) * TWO_PI;
-        const wx = Math.cos(midAngle) * 30.35;
-        const wz = Math.sin(midAngle) * 30.35;
-        const rotY = -midAngle + Math.PI / 2;
+      const streamCountOnFloor = 2;
 
-        if ((floor + p) % 2 === 0) {
-          computeTransformMatrix(wx, floorY + 7.5, wz, 0, rotY, 0, 1, 1, 1, tempMat);
-          accentParts.push({
-            geo: slitGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0xff7818)
-          });
+      for (let sIdx = 0; sIdx < streamCountOnFloor; sIdx++) {
+        const streamSeed = floor * 31.7 + sIdx * 17.3 + 11.3;
+        const baseAngle =
+          ((floor * 3 + sIdx * 4 + 0.5) / pillarCount) * TWO_PI +
+          (seededRandom(seed, 'ashWA', floor * 10 + sIdx) - 0.5) * 0.28;
+        const topY = floorY + 12.8;
+        const botY = floorY + 0.04;
+        const startR = 30.15;
+        const endR = 28.1;
+        const baseRadius = 0.38 + seededRandom(seed, 'ashWR', floor * 10 + sIdx) * 0.16;
 
-          computeTransformMatrix(wx * 0.99, floorY + 3.4, wz * 0.99, 0, rotY, 0, 1, 1, 0.55, tempMat);
-          accentParts.push({
-            geo: lavaFallGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0xffaa30)
-          });
-        } else {
-          computeTransformMatrix(wx * 0.98, floorY + 9.2, wz * 0.98, 0.1, rotY, 0.14, 1, 1, 1, tempMat);
-          structureParts.push({
-            geo: chainLinkGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0x1c080a)
-          });
-        }
-      }
-
-      const edgeCells = floorEdgeCellsByFloor[floor] || [];
-      for (let e = 0; e < edgeCells.length; e += 3) {
-        const [ex, ez] = edgeCells[e];
-        const dropH = 1.7 + (e % 3) * 0.65;
-        computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.45, ez, Math.PI, e * 0.7, 0, 1, dropH / 2.4, 1, tempMat);
-        structureParts.push({
-          geo: stalactiteGeo,
-          matrix: tempMat.clone(),
-          color: new THREE.Color(0x2d0f12)
-        });
-        if (e % 6 === 0) {
-          computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.92, ez, Math.PI, 0, 0, 0.58, 0.55, 0.58, tempMat);
-          accentParts.push({
-            geo: stalactiteGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0xff6a10)
-          });
-        }
-      }
-
-      // Зубчатые обсидиановые скалы у стен на этажах боссов
-      if (floor % 4 === 3) {
-        for (let c = 0; c < 6; c++) {
-          const ca = (c / 6) * TWO_PI + 0.3;
+        // Обугленное каменное жерло-разлом в стене, откуда вырывается лава
+        for (let c = 0; c < 4; c++) {
+          const ca = baseAngle + (c - 1.5) * 0.025;
           computeTransformMatrix(
-            Math.cos(ca) * 28.4,
-            floorY + 1.4,
-            Math.sin(ca) * 28.4,
-            -0.18,
+            Math.cos(ca) * (startR - 0.15),
+            topY + (texSeededRandom(streamSeed + c) - 0.5) * 1.1,
+            Math.sin(ca) * (startR - 0.15),
+            c * 0.4,
             -ca,
-            0,
-            1,
-            1 + (c % 2) * 0.35,
-            1,
+            0.2,
+            1.4,
+            1.8,
+            1.0,
             tempMat
           );
-          structureParts.push({
-            geo: cragGeo,
-            matrix: tempMat.clone(),
-            color: new THREE.Color(0x280c10)
+          charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
+        }
+
+        // Главный извилистый 3D-ручей лавы по стене
+        const ptsCount = 10;
+        const mainPoints = [];
+        for (let p = 0; p <= ptsCount; p++) {
+          const t = p / ptsCount;
+          const curY = topY + (botY - topY) * t;
+          const meanderAngle =
+            baseAngle +
+            Math.sin(t * Math.PI * 3.0 + streamSeed) * 0.032 +
+            Math.cos(t * 7.0 + streamSeed) * 0.014;
+          const easeOut = Math.pow(t, 2.3);
+          const curR = startR + (endR - startR) * easeOut + Math.sin(t * 14.0 + streamSeed) * 0.22;
+          mainPoints.push(new THREE.Vector3(Math.cos(meanderAngle) * curR, curY, Math.sin(meanderAngle) * curR));
+        }
+
+        const mainCurve = new THREE.CatmullRomCurve3(mainPoints);
+        const streamGeo = createVariableTubeGeometry(mainCurve, 28, baseRadius, streamSeed);
+        const streamMesh = new THREE.Mesh(streamGeo, sharedStreamMat);
+        towerDecorGroup.add(streamMesh);
+
+        // Остывшие чёрные шлаковые берега вдоль ручья на стене
+        for (let cl = 1; cl < ptsCount; cl += 2) {
+          const pt = mainPoints[cl];
+          computeTransformMatrix(pt.x * 1.008, pt.y, pt.z * 1.008, cl * 0.3, cl * 0.5, 0, 1.1, 1.5, 1.1, tempMat);
+          charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
+        }
+
+        // Боковое ответвление ручья лавы
+        const branchPts = [];
+        const splitT = 0.32;
+        const sideSign = sIdx % 2 === 0 ? 1 : -1;
+        for (let bp = 0; bp <= 6; bp++) {
+          const bt = splitT + (bp / 6) * 0.52;
+          const basePt = mainCurve.getPointAt(bt);
+          const spread = (bp / 6) * 0.045 * sideSign;
+          const ba = Math.atan2(basePt.z, basePt.x) + spread;
+          const br = Math.sqrt(basePt.x * basePt.x + basePt.z * basePt.z);
+          branchPts.push(new THREE.Vector3(Math.cos(ba) * br, basePt.y, Math.sin(ba) * br));
+        }
+        const branchCurve = new THREE.CatmullRomCurve3(branchPts);
+        const branchGeo = createVariableTubeGeometry(branchCurve, 16, baseRadius * 0.58, streamSeed + 7.1);
+        const branchMesh = new THREE.Mesh(branchGeo, sharedStreamMat);
+        towerDecorGroup.add(branchMesh);
+
+        // Анимированные сгустки лавы, стекающие вдоль настенного ручья
+        for (let g = 0; g < 2; g++) {
+          const globGeo = new THREE.SphereGeometry(baseRadius * 0.72, 8, 8);
+          globGeo.scale(0.85, 1.65, 0.85);
+          const globMesh = new THREE.Mesh(globGeo, sharedStreamMat);
+          towerDecorGroup.add(globMesh);
+          ashWallStreamGlobs.push({
+            mesh: globMesh,
+            curve: mainCurve,
+            phase: g * 0.5 + texSeededRandom(streamSeed + g) * 0.25,
+            speed: 0.18 + texSeededRandom(streamSeed * 2 + g) * 0.08
           });
         }
       }
 
+      // 2) Лавовые лужи на полу этажа (если встать на лужу — игрок получает небольшой постоянный урон!)
+      const validFloorCells = floorValidCellsByFloor[floor] || [];
+      if (validFloorCells.length > 0) {
+        const puddleTargetCount = floor % 4 === 3 ? 2 : 3;
+        let placedPuddles = 0;
+        for (let attempt = 0; attempt < 18 && placedPuddles < puddleTargetCount; attempt++) {
+          const pickIdx = Math.floor(
+            seededRandom(seed, 'ashPud' + floor, attempt * 7) * validFloorCells.length
+          );
+          const [cellX, cellZ] = validFloorCells[pickIdx];
+          // На 0-м этаже оставляем центр (0,0) безопасным для старта игрока
+          if (floor === 0 && cellX * cellX + cellZ * cellZ < 32) continue;
+          if (jumpPads.some((jp) => jp.y === floorY && hypot2D(jp.x - cellX, jp.z - cellZ) < 3.5)) continue;
+          if (chests.some((ch) => ch.y === floorY && hypot2D(ch.x - cellX, ch.z - cellZ) < 3.5)) continue;
+          if (altars.some((al) => al.y === floorY && hypot2D(al.x - cellX, al.z - cellZ) < 3.5)) continue;
+          if (
+            ashFloorLavaPuddles.some(
+              (p) => Math.abs(p.y - floorY) < 1 && hypot2D(p.x - cellX, p.z - cellZ) < 5.2
+            )
+          ) {
+            continue;
+          }
+
+          const jitterX = (seededRandom(seed, 'ashPx' + floor, attempt) - 0.5) * 1.1;
+          const jitterZ = (seededRandom(seed, 'ashPz' + floor, attempt) - 0.5) * 1.1;
+          const px = cellX + jitterX;
+          const pz = cellZ + jitterZ;
+          const puddleRadius = 1.45 + seededRandom(seed, 'ashPr' + floor, attempt) * 0.65;
+          const puddleSeed = floor * 19.3 + placedPuddles * 5.7 + 1.1;
+
+          const puddleMeshGroup = createOrganicPuddleMesh(
+            puddleRadius,
+            puddleSeed,
+            placedPuddles % 2 === 0
+          );
+          puddleMeshGroup.position.set(px, floorY + 0.015, pz);
+          towerDecorGroup.add(puddleMeshGroup);
+
+          // Обугленные чёрные камни шлака по краям лужи
+          const slagCount = 5;
+          for (let k = 0; k < slagCount; k++) {
+            const sa = (k / slagCount) * TWO_PI + texSeededRandom(puddleSeed + k) * 0.4;
+            const sr = puddleRadius * (0.88 + texSeededRandom(puddleSeed * 2 + k) * 0.2);
+            computeTransformMatrix(
+              px + Math.cos(sa) * sr,
+              floorY + 0.04,
+              pz + Math.sin(sa) * sr,
+              0,
+              sa,
+              0,
+              0.7,
+              0.22,
+              0.6,
+              tempMat
+            );
+            charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
+          }
+
+          ashFloorLavaPuddles.push({
+            x: px,
+            y: floorY,
+            z: pz,
+            radius: puddleRadius,
+            hitRadiusSq: (puddleRadius * 0.88) * (puddleRadius * 0.88)
+          });
+          placedPuddles++;
+        }
+      }
+
+      // 3) Стекающая и капающая со ступеней лава + небольшие лужицы под ними (из addStepLavaFlowAndDrip в ash tower.html)
       const stairs = stairPositionsByFloor[floor] || [];
-      for (let s = 1; s < stairs.length; s += 2) {
+      for (let s = 0; s < stairs.length; s++) {
+        // На каждой лестнице выбираем несколько ступеней, с которых стекает и капает лава
+        if (s % 3 !== 1) continue;
         const [sx, sz, topY] = stairs[s];
-        computeTransformMatrix(sx + 1.85, topY - 1.2, sz, 0, 0, 0.08, 0.68, 0.48, 0.68, tempMat);
-        accentParts.push({
-          geo: lavaFallGeo,
-          matrix: tempMat.clone(),
-          color: new THREE.Color(0xff8420)
+        const dripSeed = 200 + floor * 41.3 + s * 7.3;
+        const sideSign = s % 2 === 0 ? 1 : -1;
+        const stepAngle = Math.atan2(sz, sx);
+        const cosA = Math.cos(-stepAngle);
+        const sinA = Math.sin(-stepAngle);
+
+        const localOffsetX = sideSign * 1.15;
+        const localOffsetZ = 1.65;
+
+        const toWorld = (lx, ly, lz) =>
+          new THREE.Vector3(
+            sx + lx * cosA + lz * sinA,
+            topY + ly,
+            sz - lx * sinA + lz * cosA
+          );
+
+        // Небольшая лужица лавы на верхней грани самой ступени, откуда лава переливается через край
+        const topMiniPuddle = createOrganicPuddleMesh(0.55, dripSeed + 1.1, false);
+        topMiniPuddle.position.set(sx + localOffsetX * 0.35, topY + 0.015, sz + localOffsetZ * 0.25);
+        towerDecorGroup.add(topMiniPuddle);
+
+        // 3D-язык лавы, перетекающий через край ступени и свисающий вниз вязкой сосулькой
+        const overhangLen = 0.95 + texSeededRandom(dripSeed * 5.3) * 0.85;
+        const tongueCurve = new THREE.CatmullRomCurve3([
+          toWorld(localOffsetX * 0.35, 0.02, localOffsetZ * 0.35),
+          toWorld(localOffsetX * 0.72, -0.02, localOffsetZ * 0.82),
+          toWorld(localOffsetX * 0.92, -0.22, localOffsetZ * 1.04),
+          toWorld(localOffsetX * 0.96, -0.58 - overhangLen * 0.45, localOffsetZ * 1.08),
+          toWorld(localOffsetX * 0.98, -0.58 - overhangLen, localOffsetZ * 1.10)
+        ]);
+
+        const tongueGeo = createVariableTubeGeometry(tongueCurve, 16, 0.16, dripSeed);
+        const tongueMesh = new THREE.Mesh(tongueGeo, sharedStairLavaMat);
+        towerDecorGroup.add(tongueMesh);
+
+        // Обугленная каменная корка вокруг места перелива на ступени
+        const lipPos = toWorld(localOffsetX * 0.82, -0.05, localOffsetZ * 0.92);
+        computeTransformMatrix(lipPos.x, lipPos.y, lipPos.z, 0, stepAngle, 0, 0.85, 0.32, 0.85, tempMat);
+        charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
+
+        // Точка отрыва капли и поверхность внизу (нижняя ступень или пол этажа)
+        const dripTipPos = tongueCurve.getPointAt(1.0);
+        const impactY = s > 0 ? stairs[s - 1][2] : floorY;
+
+        // Небольшая лавовая лужица под ступенью (с концентрическими кругами от падающих капель!)
+        const smallPuddleRadius = 0.68 + texSeededRandom(dripSeed * 19.3) * 0.35;
+        const smallPuddle = createOrganicPuddleMesh(smallPuddleRadius, dripSeed + 4.7, true);
+        smallPuddle.position.set(dripTipPos.x, impactY + 0.015, dripTipPos.z);
+        towerDecorGroup.add(smallPuddle);
+
+        ashFloorLavaPuddles.push({
+          x: dripTipPos.x,
+          y: impactY,
+          z: dripTipPos.z,
+          radius: smallPuddleRadius,
+          hitRadiusSq: (smallPuddleRadius * 0.85) * (smallPuddleRadius * 0.85)
+        });
+
+        // Анимированная 3D-капля лавы (набухает, срывается вниз и расплющивается в лужице)
+        const dropGeo = new THREE.SphereGeometry(0.14, 8, 8);
+        dropGeo.scale(0.8, 1.7, 0.8);
+        const dropMesh = new THREE.Mesh(dropGeo, sharedStairLavaMat);
+        dropMesh.position.copy(dripTipPos);
+        towerDecorGroup.add(dropMesh);
+
+        ashFallingDrops.push({
+          mesh: dropMesh,
+          startX: dripTipPos.x,
+          startY: dripTipPos.y,
+          startZ: dripTipPos.z,
+          endY: impactY + 0.03,
+          phase: texSeededRandom(dripSeed * 29.1),
+          speed: 0.52 + texSeededRandom(dripSeed * 31.7) * 0.25
         });
       }
     }
-  } else if (towerId === 'ice') {
-    const icicleGeo = new THREE.ConeGeometry(0.32, 2.4, 5);
-    const crystalSpikeGeo = new THREE.CylinderGeometry(0.06, 0.44, 2.9, 6);
+
+    if (charredRockParts.length) {
+      const mergedCharredGeo = mergeGeometryParts(charredRockParts);
+      const charredMesh = new THREE.Mesh(mergedCharredGeo, charredRockMaterial);
+      charredMesh.userData.disposeMaterial = true;
+      towerDecorGroup.add(charredMesh);
+    }
+  }
+
+  // =========================================================================
+  // 3B. ЛЕДЯНАЯ БАШНЯ (ICE): вмёрзшие в толщу льда силуэты, морозная корка
+  //     и свисающие со ступеней сосульки, стелющийся морозный пар (из ice tower.html)
+  // =========================================================================
+  else if (towerId === 'ice') {
+    const icicleGeo = new THREE.ConeGeometry(0.24, 2.2, 5);
+    const crystalSpikeGeo = new THREE.ConeGeometry(0.38, 2.8, 6);
+    const frostCrustParts = [];
     const silhouetteParts = [];
+
+    // Материал толстой белой морозной корки (frost-глазурь) на ступенях
+    const frostCrustMat = new THREE.MeshPhysicalMaterial({
+      color: 0xe6f7ff,
+      emissive: 0x3b8ab8,
+      emissiveIntensity: 0.25,
+      roughness: 0.22,
+      metalness: 0.05,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.12,
+      envMap: ICE_ENV_CUBEMAP
+    });
+
+    // Шейдер стелющегося морозного пара над трещинами зеркального пола (из ice tower.html)
+    const CREEPING_FOG_VERTEX = `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    const CREEPING_FOG_FRAGMENT = `
+      uniform float uTime;
+      uniform float uSeed;
+      varying vec2 vUv;
+
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+      }
+
+      float valueNoise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+          f.y
+        );
+      }
+
+      void main() {
+        vec2 centered = (vUv - 0.5) * 2.0;
+        float r = length(centered);
+        if (r > 1.0) discard;
+
+        vec2 flowUv = vUv * 3.2 + vec2(uTime * 0.14 + uSeed, -uTime * 0.09 + uSeed * 1.7);
+        float n1 = valueNoise(flowUv);
+        float n2 = valueNoise(flowUv * 2.1 - vec2(uTime * 0.18, uTime * 0.11));
+        float vapor = n1 * 0.6 + n2 * 0.4;
+
+        float mask = pow(1.0 - r, 1.6) * smoothstep(0.28, 0.78, vapor);
+        vec3 mistColor = mix(vec3(0.53, 0.87, 1.0), vec3(0.90, 0.97, 1.0), vapor);
+        gl_FragColor = vec4(mistColor, mask * 0.34);
+      }
+    `;
+
+    const fogPatchGeo = new THREE.PlaneGeometry(8.5, 8.5);
+    fogPatchGeo.rotateX(-Math.PI / 2);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
 
-      // 3D-силуэты замёрзших монахов и воинов Ордена Инея в толще ледяных стен (между r=30.8 и внутренним слоем r=29.85)
+      // 1) Вмёрзшие в толщу льда силуэты погибших странников и воинов (как 3D-фигуры, так и теневые силуэты за линзами льда из ice tower.html)
       for (let s = 0; s < 4; s++) {
         const angle = ((s + 0.5) / 4) * TWO_PI + (floor % 2) * 0.38;
-        const silRadius = 30.25;
+        const silRadius = 31.15;
         const sx = Math.cos(angle) * silRadius;
         const sz = Math.sin(angle) * silRadius;
         const rotY = -angle - Math.PI / 2;
@@ -1053,13 +1349,37 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           matrix: tempMat.clone()
         });
 
-        // Кристаллические ледяные рёбра по бокам вмёрзшего силуэта
+        // Силуэтная декаль странника из ice tower.html в толще стены
+        if ((floor + s) % 2 === 0 && ICE_SILHOUETTE_TEXTURES.length) {
+          const silPlaneAngle = angle + 0.32;
+          const silPlaneGeo = new THREE.PlaneGeometry(4.2, 8.4);
+          const silPlaneMat = new THREE.MeshBasicMaterial({
+            map: ICE_SILHOUETTE_TEXTURES[(floor + s) % ICE_SILHOUETTE_TEXTURES.length],
+            transparent: true,
+            opacity: 0.84,
+            depthWrite: false,
+            side: THREE.DoubleSide
+          });
+          const silPlaneMesh = new THREE.Mesh(silPlaneGeo, silPlaneMat);
+          const py = floorY + 6.5;
+          silPlaneMesh.position.set(
+            Math.cos(silPlaneAngle) * 31.3,
+            py,
+            Math.sin(silPlaneAngle) * 31.3
+          );
+          silPlaneMesh.lookAt(0, py, 0);
+          silPlaneMesh.rotation.z += (s % 2 ? 1 : -1) * 0.1;
+          silPlaneMesh.userData.disposeMaterial = true;
+          towerDecorGroup.add(silPlaneMesh);
+        }
+
+        // Кристаллические ледяные рёбра и глыбы вокруг вмёрзшего силуэта
         for (const ribOffset of [-0.12, 0.12]) {
           const rAng = angle + ribOffset;
           computeTransformMatrix(
-            Math.cos(rAng) * 30.08,
+            Math.cos(rAng) * 30.1,
             floorY + 6.8,
-            Math.sin(rAng) * 30.08,
+            Math.sin(rAng) * 30.1,
             0,
             -rAng + Math.PI / 2,
             ribOffset > 0 ? -0.14 : 0.14,
@@ -1076,12 +1396,13 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
+      // 2) Кристаллические наросты льда по периметру стен
       for (let p = 0; p < pillarCount; p++) {
         if ((floor + p) % 2 !== 0) continue;
         const angle = (p / pillarCount) * TWO_PI + 0.18;
-        const cx = Math.cos(angle) * 29.75;
-        const cz = Math.sin(angle) * 29.75;
-        computeTransformMatrix(cx, floorY + 1.4, cz, -0.25, -angle, 0.15, 1.1, 1.15, 1.1, tempMat);
+        const cx = Math.cos(angle) * 29.65;
+        const cz = Math.sin(angle) * 29.65;
+        computeTransformMatrix(cx, floorY + 1.4, cz, -0.25, -angle, 0.15, 1.15, 1.25, 1.15, tempMat);
         accentParts.push({
           geo: crystalSpikeGeo,
           matrix: tempMat.clone(),
@@ -1089,19 +1410,20 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
+      // 3) Каскады сосулек, свисающие с обрывов и краёв плит пола
       const edgeCells = floorEdgeCellsByFloor[floor] || [];
       for (let e = 0; e < edgeCells.length; e += 2) {
         const [ex, ez] = edgeCells[e];
-        const len = 1.4 + (e % 4) * 0.55;
+        const len = 1.4 + (e % 4) * 0.65;
         computeTransformMatrix(
           ex + ((e % 3) - 1) * 0.7,
           floorY - 1.0 - len * 0.48,
           ez + (((e + 1) % 3) - 1) * 0.7,
           Math.PI,
           e * 0.5,
-          0,
+          ((e % 3) - 1) * 0.08,
           0.85,
-          len / 2.4,
+          len / 2.2,
           0.85,
           tempMat
         );
@@ -1112,21 +1434,36 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
+      // 4) Толстая морозная корка сверху ступеней + густые кластеры свисающих со ступеней сосулек (из createBrokenStairs в ice tower.html)
       const stairs = stairPositionsByFloor[floor] || [];
+      const crustBoxGeo = jitterGeometry(new THREE.BoxGeometry(4.12, 0.18, 4.12, 3, 1, 3), 0.06);
       for (let s = 0; s < stairs.length; s++) {
         const [sx, sz, topY] = stairs[s];
-        for (const side of [-1.4, 1.4]) {
-          const icicleLen = 1.8 + ((s + (side > 0 ? 1 : 0)) % 3) * 0.7;
+
+        // Морозная frost-корка на верхней грани ступени
+        computeTransformMatrix(sx, topY + 0.04, sz, 0, s * 0.3, 0, 1, 1, 1, tempMat);
+        frostCrustParts.push({
+          geo: crustBoxGeo,
+          matrix: tempMat.clone(),
+          color: new THREE.Color(0xe6f7ff)
+        });
+
+        // Группы заострённых сосулек, свисающих вниз с краёв каждой ступени
+        const iciclesPerStep = 5;
+        for (let k = 0; k < iciclesPerStep; k++) {
+          const icicleLen = 1.35 + ((s + k) % 4) * 0.65;
+          const offX = ((k % 3) - 1) * 1.45 + (k % 2 ? 0.25 : -0.25);
+          const offZ = (k < 2 ? -1 : 1) * 1.55;
           computeTransformMatrix(
-            sx + side,
-            topY - 1.2,
-            sz - side * 0.5,
-            Math.PI,
-            s * 0.4,
-            0,
-            0.75,
-            icicleLen / 2.4,
-            0.75,
+            sx + offX,
+            topY - 1.05 - icicleLen * 0.42,
+            sz + offZ,
+            Math.PI + (k - 2) * 0.05,
+            s * 0.4 + k,
+            (k % 2 ? 1 : -1) * 0.08,
+            0.78,
+            icicleLen / 2.2,
+            0.78,
             tempMat
           );
           accentParts.push({
@@ -1137,32 +1474,46 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
+      // 5) Стелющийся морозный пар над трещинами ледяного пола
       if (edgeCells.length > 0) {
         for (let m = 0; m < 2; m++) {
           const [mx, mz] = edgeCells[(m * 7 + floor * 3) % edgeCells.length];
-          const mistSprite = new THREE.Sprite(
-            new THREE.SpriteMaterial({
-              map: TEXTURES.glowIce,
-              color: 0xb8ecff,
-              transparent: true,
-              opacity: 0.32,
-              blending: THREE.AdditiveBlending,
-              depthWrite: false
-            })
-          );
-          mistSprite.scale.set(6.5, 2.2, 1);
-          mistSprite.position.set(mx * 0.75, floorY + 0.35, mz * 0.75);
-          towerDecorGroup.add(mistSprite);
+          const fogUniforms = {
+            uTime: { value: 0 },
+            uSeed: { value: floor * 3.1 + m * 1.7 }
+          };
+          TOWER_SHADER_UNIFORMS.iceCreepingFog.push(fogUniforms);
+
+          const fogMat = new THREE.ShaderMaterial({
+            vertexShader: CREEPING_FOG_VERTEX,
+            fragmentShader: CREEPING_FOG_FRAGMENT,
+            uniforms: fogUniforms,
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide
+          });
+          const fogQuad = new THREE.Mesh(fogPatchGeo, fogMat);
+          fogQuad.position.set(mx * 0.72, floorY + 0.08 + m * 0.04, mz * 0.72);
+          fogQuad.rotation.y = floor + m * 1.5;
+          fogQuad.userData.disposeMaterial = true;
+          towerDecorGroup.add(fogQuad);
         }
       }
+    }
+
+    if (frostCrustParts.length) {
+      const mergedCrustGeo = mergeGeometryParts(frostCrustParts);
+      const crustMesh = new THREE.Mesh(mergedCrustGeo, frostCrustMat);
+      crustMesh.userData.disposeMaterial = true;
+      towerDecorGroup.add(crustMesh);
     }
 
     if (silhouetteParts.length) {
       const mergedSilGeo = mergeGeometryParts(silhouetteParts);
       const silMat = new THREE.MeshStandardMaterial({
-        color: 0x16385e,
-        emissive: 0x2468a8,
-        emissiveIntensity: 0.75,
+        color: 0x0b1e36,
+        emissive: 0x1d588f,
+        emissiveIntensity: 0.82,
         roughness: 0.35,
         metalness: 0.25
       });
@@ -1170,12 +1521,178 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       silMesh.userData.disposeMaterial = true;
       towerDecorGroup.add(silMesh);
     }
-  } else if (towerId === 'void') {
+  }
+
+  // =========================================================================
+  // 3C. БАШНЯ ПУСТОТЫ (VOID): ленты абсолютной тьмы из трещин, визуально
+  //     растворившиеся ступени (с сохранением коллизии!), парящие осколки и эфир
+  // =========================================================================
+  else if (towerId === 'void') {
     const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.4, 0.34);
-    const tendrilSegGeo = new THREE.CylinderGeometry(0.18, 0.38, 4.6, 6);
+
+    // 1) Шейдер полупрозрачных лент абсолютной тьмы и клубов эфира (из void tower.html)
+    const VOID_MIST_VERTEX = `
+      uniform float uTime;
+      attribute float aPhase;
+      varying vec2 vUv;
+      varying float vPhase;
+      void main() {
+        vUv = uv;
+        vPhase = aPhase;
+        vec3 pos = position;
+        pos.x += sin(uTime * 1.2 + pos.y * 0.5 + aPhase) * 0.22;
+        pos.z += cos(uTime * 1.0 + pos.y * 0.5 + aPhase) * 0.22;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+      }
+    `;
+    const VOID_MIST_FRAGMENT = `
+      uniform float uTime;
+      uniform float uIsDarkRibbon;
+      varying vec2 vUv;
+      varying float vPhase;
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        vec2 centered = vUv - 0.5;
+        float dist = length(centered);
+        float n = snoise(vec3(vUv * 3.5, uTime * 0.45 + vPhase)) * 0.5 + 0.5;
+        float mask = smoothstep(0.5, 0.08, dist) * n;
+
+        vec3 darkRibbonCol = mix(vec3(0.01, 0.0, 0.02), vec3(0.45, 0.12, 0.78), pow(n, 2.2) * 0.75);
+        vec3 mistCol = mix(vec3(0.04, 0.01, 0.08), vec3(0.66, 0.33, 0.97), n * 1.35);
+
+        vec3 finalCol = mix(mistCol, darkRibbonCol, uIsDarkRibbon);
+        float alpha = mask * mix(0.68, 0.85, uIsDarkRibbon);
+        if (alpha < 0.02) discard;
+        gl_FragColor = vec4(finalCol, alpha);
+      }
+    `;
+
+    const ribbonUniforms = {
+      uTime: { value: 0 },
+      uIsDarkRibbon: { value: 1.0 }
+    };
+    const mistUniforms = {
+      uTime: { value: 0 },
+      uIsDarkRibbon: { value: 0.0 }
+    };
+    TOWER_SHADER_UNIFORMS.voidList.push(ribbonUniforms, mistUniforms);
+
+    const ribbonMat = new THREE.ShaderMaterial({
+      uniforms: ribbonUniforms,
+      vertexShader: VOID_MIST_VERTEX,
+      fragmentShader: VOID_MIST_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    const mistMat = new THREE.ShaderMaterial({
+      uniforms: mistUniforms,
+      vertexShader: VOID_MIST_VERTEX,
+      fragmentShader: VOID_MIST_FRAGMENT,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide
+    });
+
+    // 2) Шейдер 3D Simplex Noise растворения ступеней (из STAIR_DISSOLVE_FRAGMENT_SHADER в void tower.html)
+    const stairDissolveUniforms = {
+      uTime: { value: 0 },
+      uDissolveLevel: { value: 0.39 },
+      uEdgeIntensity: { value: 1.45 },
+      uBrokenEnd: { value: 1.0 }
+    };
+    const stairPartialDissolveUniforms = {
+      uTime: { value: 0 },
+      uDissolveLevel: { value: 0.39 },
+      uEdgeIntensity: { value: 1.2 },
+      uBrokenEnd: { value: 0.55 }
+    };
+    TOWER_SHADER_UNIFORMS.voidList.push(stairDissolveUniforms, stairPartialDissolveUniforms);
+
+    const STAIR_DISSOLVE_VERTEX = `
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `;
+    const STAIR_DISSOLVE_FRAGMENT = `
+      uniform float uTime;
+      uniform float uDissolveLevel;
+      uniform float uEdgeIntensity;
+      uniform float uBrokenEnd;
+      varying vec2 vUv;
+      varying vec3 vWorldPos;
+      varying vec3 vNormal;
+      ${GLSL_SIMPLEX_NOISE}
+
+      void main() {
+        float grain = snoise(vWorldPos * 2.4) * 0.5 + 0.5;
+        vec3 stoneBase = mix(vec3(0.035, 0.018, 0.062), vec3(0.095, 0.045, 0.15), grain);
+
+        vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4));
+        float diff = max(dot(vNormal, lightDir), 0.15);
+        vec3 color = stoneBase * (0.45 + 0.75 * diff);
+
+        float noiseVal = snoise(vWorldPos * 0.85 + vec3(0.0, uTime * 0.35, 0.0)) * 0.5 + 0.5;
+        float fineNoise = snoise(vWorldPos * 2.8 - vec3(uTime * 0.5)) * 0.22;
+        float combinedNoise = noiseVal + fineNoise;
+
+        float edgeFactor = max(abs(vUv.x - 0.5), abs(vUv.y - 0.5)) * 2.0;
+        float threshold = uBrokenEnd * (uDissolveLevel + edgeFactor * 0.34);
+
+        if (combinedNoise < threshold) {
+          discard;
+        }
+
+        float burnWidth = 0.15 * uBrokenEnd;
+        float edgeGlow = 1.0 - smoothstep(threshold, threshold + burnWidth, combinedNoise);
+        vec3 voidEdgeColor = vec3(0.659, 0.333, 0.969) * 2.6;
+
+        color = mix(color, voidEdgeColor, edgeGlow * uBrokenEnd * uEdgeIntensity);
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `;
+
+    const dissolvedStairMat = new THREE.ShaderMaterial({
+      uniforms: stairDissolveUniforms,
+      vertexShader: STAIR_DISSOLVE_VERTEX,
+      fragmentShader: STAIR_DISSOLVE_FRAGMENT,
+      side: THREE.DoubleSide
+    });
+
+    const partialDissolveStairMat = new THREE.ShaderMaterial({
+      uniforms: stairPartialDissolveUniforms,
+      vertexShader: STAIR_DISSOLVE_VERTEX,
+      fragmentShader: STAIR_DISSOLVE_FRAGMENT,
+      side: THREE.DoubleSide
+    });
+
+    const phantomStepOutlineMat = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const stepBoxGeo = new THREE.BoxGeometry(3.92, 0.85, 3.92, 4, 2, 4);
+    const stepTopFrameGeo = new THREE.BoxGeometry(3.96, 0.08, 3.96, 2, 1, 2);
+    const shardGeo = new THREE.DodecahedronGeometry(0.36, 0);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
+
+      // Рунические панели на пилястрах
       for (let p = 0; p < pillarCount; p++) {
         const angle = (p / pillarCount) * TWO_PI;
         const rx = Math.cos(angle) * 29.45;
@@ -1190,70 +1707,93 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             color: new THREE.Color(0xd478ff)
           });
         }
-
-        // Изгибающиеся ленты/щупальца тёмной материи («пространство складывается, как бумага»)
-        if ((floor + p) % 2 === 1) {
-          for (let seg = 0; seg < 2; seg++) {
-            const tAngle = angle + 0.18 + seg * 0.08;
-            const tx = Math.cos(tAngle) * (29.5 - seg * 0.4);
-            const tz = Math.sin(tAngle) * (29.5 - seg * 0.4);
-            computeTransformMatrix(
-              tx,
-              floorY + 4.2 + seg * 3.6,
-              tz,
-              0.38 * (seg ? -1 : 1),
-              -tAngle,
-              0.45,
-              1,
-              1,
-              1,
-              tempMat
-            );
-            structureParts.push({
-              geo: tendrilSegGeo,
-              matrix: tempMat.clone(),
-              color: new THREE.Color(0x120624)
-            });
-          }
-        }
       }
 
+      // Извилистые полупрозрачные ленты абсолютной тьмы, выходящие из трещин в стенах (из createDarkVoidRibbons в void tower.html)
+      for (let rIdx = 0; rIdx < 2; rIdx++) {
+        const baseAngle = ((floor * 3 + rIdx * 4) / 8) * TWO_PI + 0.25;
+        const startY = floorY + 2.0 + rIdx * 5.0;
+        const points = [];
+        for (let pt = 0; pt <= 7; pt++) {
+          const t = pt / 7;
+          const r = 30.2 - t * 8.5;
+          const ang = baseAngle + Math.sin(t * Math.PI * 1.5 + floor + rIdx) * 0.18;
+          const y = startY + t * 8.5 + Math.cos(t * Math.PI * 2.0) * 1.2;
+          points.push(new THREE.Vector3(Math.cos(ang) * r, y, Math.sin(ang) * r));
+        }
+        const curve = new THREE.CatmullRomCurve3(points);
+        const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.44 - rIdx * 0.08, 6, false);
+        const vCount = tubeGeo.attributes.position.count;
+        const phases = new Float32Array(vCount);
+        for (let k = 0; k < vCount; k++) phases[k] = floor * 1.7 + rIdx;
+        tubeGeo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+        const ribbonMesh = new THREE.Mesh(tubeGeo, ribbonMat);
+        towerDecorGroup.add(ribbonMesh);
+      }
+
+      // Ступени лестниц Башни Пустоты: часть ступеней визуально «растворившиеся» (но на них можно встать!),
+      // а остальные имеют неоново-фиолетовую растворяющуюся кромку (#a855f7)
       const stairs = stairPositionsByFloor[floor] || [];
-      for (let s = 0; s < stairs.length; s += 2) {
-        const [sx, sz, topY] = stairs[s];
-        computeTransformMatrix(
-          sx * 1.06,
-          topY + 0.9,
-          sz * 1.06,
-          0.3 * s,
-          0.5 * s,
-          0.2,
-          0.65,
-          1.3,
-          0.65,
-          tempMat
-        );
-        accentParts.push({
-          geo: new THREE.OctahedronGeometry(0.45, 0),
-          matrix: tempMat.clone(),
-          color: new THREE.Color(0xc868ff)
-        });
+      for (let s = 0; s < stairs.length; s++) {
+        const [sx, sz, topY, stepBlockIdx] = stairs[s];
+        const isFullyDissolvedStep = voidDissolvedStairStepSet.has(stepBlockIdx);
+
+        if (isFullyDissolvedStep) {
+          // 1. Растворяющееся ядро ступени с 3D Simplex Noise и неоновой кромкой #a855f7
+          const dissolvedMesh = new THREE.Mesh(stepBoxGeo, dissolvedStairMat);
+          dissolvedMesh.position.set(sx, topY - 0.45, sz);
+          towerDecorGroup.add(dissolvedMesh);
+
+          // 2. Тонкий призрачный рунный каркас верхней плоскости, чтобы игрок видел опору, на которую можно встать
+          const phantomFrame = new THREE.Mesh(stepTopFrameGeo, phantomStepOutlineMat);
+          phantomFrame.position.set(sx, topY - 0.04, sz);
+          towerDecorGroup.add(phantomFrame);
+
+          // 3. Парящие вокруг растворившейся ступени каменные осколки в аномальной гравитации
+          for (let sh = 0; sh < 4; sh++) {
+            const shard = new THREE.Mesh(shardGeo, dissolvedStairMat);
+            const ang = (sh / 4) * TWO_PI + s;
+            shard.position.set(
+              sx + Math.cos(ang) * 1.55,
+              topY - 0.35 + (sh - 1.5) * 0.32,
+              sz + Math.sin(ang) * 1.55
+            );
+            shard.scale.set(0.75, 0.45, 0.65);
+            shard.rotation.set(sh * 0.7, sh * 1.2, sh * 0.5);
+            shard.userData = {
+              basePos: shard.position.clone(),
+              phase: floor * 2.1 + s * 0.9 + sh * 0.6,
+              amp: 0.48,
+              rotSpeed: 0.55
+            };
+            voidFloatingDebrisMeshes.push(shard);
+            towerDecorGroup.add(shard);
+          }
+
+          // 4. Клубы фиолетово-чёрного эфира Пустоты на месте растворения
+          const mistPlaneGeo = new THREE.PlaneGeometry(3.4, 3.4, 3, 3);
+          const mCount = mistPlaneGeo.attributes.position.count;
+          const mPhases = new Float32Array(mCount);
+          for (let k = 0; k < mCount; k++) mPhases[k] = floor + s + k * 0.2;
+          mistPlaneGeo.setAttribute('aPhase', new THREE.BufferAttribute(mPhases, 1));
+          const mistBill = new THREE.Mesh(mistPlaneGeo, mistMat);
+          mistBill.position.set(sx, topY - 0.2, sz);
+          mistBill.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+          towerDecorGroup.add(mistBill);
+          voidMistBillboards.push(mistBill);
+        } else {
+          // Обычная ступень Пустоты с частично растворяющимися неоновыми кромками
+          const edgeStepMesh = new THREE.Mesh(stepBoxGeo, partialDissolveStairMat);
+          edgeStepMesh.position.set(sx, topY - 0.48, sz);
+          towerDecorGroup.add(edgeStepMesh);
+        }
       }
     }
 
-    // Парящие в невесомости обломки ступеней и рунные монолиты
-    const floatingCount = 84;
-    const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.25, 0.85, 1.25), 0.12);
-    const floatingMat = new THREE.MeshStandardMaterial({
-      map: TOWER_FLOOR_TEXTURES.void.map,
-      emissive: 0x9030ff,
-      emissiveMap: TOWER_FLOOR_TEXTURES.void.emissive,
-      emissiveIntensity: 1.4,
-      roughness: 0.5,
-      metalness: 0.3
-    });
-    activeVoidFloatingMesh = new THREE.InstancedMesh(floatingGeo, floatingMat, floatingCount);
-    activeVoidFloatingMesh.userData.disposeMaterial = true;
+    // Парящие в невесомости обломки ступеней и рунные монолиты по всей высоте башни
+    const floatingCount = 96;
+    const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.25, 0.85, 1.25), 0.14);
+    activeVoidFloatingMesh = new THREE.InstancedMesh(floatingGeo, dissolvedStairMat, floatingCount);
     activeVoidFloatingData = [];
 
     const dummy = new THREE.Object3D();
@@ -1263,7 +1803,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       const radius =
         i % 3 === 0
           ? 6 + seededRandom(seed, 'vfltR', i) * 14
-          : 26.6 + seededRandom(seed, 'vfltR', i) * 2.5;
+          : 25.8 + seededRandom(seed, 'vfltR', i) * 3.0;
       const baseY =
         i % 3 === 0
           ? floor * 14 - 4.2 - seededRandom(seed, 'vfltY', i) * 4.5
@@ -1278,7 +1818,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         rz: seededRandom(seed, 'vfltRZ', i) * TWO_PI,
         scale,
         phase: i * 0.43,
-        speed: 0.5 + (i % 5) * 0.18
+        speed: 0.65 + (i % 5) * 0.18
       };
       activeVoidFloatingData.push(item);
       dummy.position.set(item.x, item.baseY, item.z);
@@ -1299,9 +1839,14 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       bumpScale: 0.3,
       color: 0xffffff,
       vertexColors: true,
-      roughness: towerId === 'ice' ? 0.2 : 0.82,
-      metalness: towerId === 'ice' ? 0.35 : 0.2
+      roughness: towerId === 'ice' ? 0.16 : 0.86,
+      metalness: towerId === 'ice' ? 0.25 : 0.14
     });
+    if (towerId === 'ash') {
+      structMat.normalMap = TOWER_WALL_TEXTURES.ash.normalMap;
+      structMat.normalScale = new THREE.Vector2(2.4, 2.4);
+      applyWorldStoneShader(structMat, { crackRarity: 0.5, charStrength: 0.88 });
+    }
     const structMesh = new THREE.Mesh(mergedStructGeo, structMat);
     structMesh.userData.disposeMaterial = true;
     towerDecorGroup.add(structMesh);
@@ -1322,15 +1867,19 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       });
       activeAshLavaStreamMat = accentMat;
     } else if (towerId === 'ice') {
-      accentMat = new THREE.MeshStandardMaterial({
-        color: 0xd8f4ff,
+      accentMat = new THREE.MeshPhysicalMaterial({
+        color: 0xb5ecff,
         vertexColors: true,
-        emissive: 0x3898e0,
-        emissiveIntensity: 0.58,
+        emissive: 0x2d7aa8,
+        emissiveIntensity: 0.38,
         roughness: 0.08,
-        metalness: 0.35,
+        metalness: 0.05,
+        transmission: 0.65,
+        ior: 1.31,
+        clearcoat: 1.0,
+        envMap: ICE_ENV_CUBEMAP,
         transparent: true,
-        opacity: 0.84
+        opacity: 0.9
       });
     } else {
       accentMat = new THREE.MeshStandardMaterial({
@@ -1351,7 +1900,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 }
 
 function updateTowerDecorAnimations(time, dt, towerId) {
-  // Анимация Прыжковых площадок (вращение рунного круга и пульсация кинетического потока)
+  // Анимация Прыжковых площадок
   for (let i = 0; i < jumpPadGroup.children.length; i++) {
     const padObj = jumpPadGroup.children[i];
     const ud = padObj.userData;
@@ -1364,7 +1913,7 @@ function updateTowerDecorAnimations(time, dt, towerId) {
     }
   }
 
-  // Анимация Алтарей пакта («Вращается медленно, гипнотически» + парящий лиловый ореол)
+  // Анимация Алтарей пакта
   for (let i = 0; i < altars.length; i++) {
     const alt = altars[i];
     if (!alt.isOpen && alt.group.visible && alt.group.userData) {
@@ -1384,33 +1933,97 @@ function updateTowerDecorAnimations(time, dt, towerId) {
     }
   }
 
-  // Пульсация багрово-розовой Печати (Врат босса, 0xff2a60)
+  // Пульсация Печати (Врат босса)
   bossGateBeamMat.opacity = 0.78 + Math.sin(time * 6.5) * 0.18;
 
-  if (towerId === 'void' && activeVoidFloatingMesh && activeVoidFloatingData.length) {
-    const dummy = _pickupDummyObj;
-    for (let i = 0; i < activeVoidFloatingData.length; i++) {
-      const item = activeVoidFloatingData[i];
-      dummy.position.set(
-        item.x,
-        item.baseY + Math.sin(time * item.speed + item.phase) * 0.55,
-        item.z
-      );
-      dummy.rotation.set(
-        item.rx + time * 0.18 * item.speed,
-        item.ry + time * 0.24 * item.speed,
-        item.rz
-      );
-      dummy.scale.setScalar(item.scale);
-      dummy.updateMatrix();
-      activeVoidFloatingMesh.setMatrixAt(i, dummy.matrix);
+  if (towerId === 'ash') {
+    const speedScale = (activeVFXState.lavaSpeed || 2.25) / 2.1;
+
+    // 1. Анимация вязких сгустков лавы, стекающих вдоль настенных 3D-потоков (из ash tower.html)
+    for (let i = 0; i < ashWallStreamGlobs.length; i++) {
+      const g = ashWallStreamGlobs[i];
+      const t = (time * g.speed * speedScale + g.phase) % 1.0;
+      const pt = g.curve.getPointAt(t);
+      g.mesh.position.copy(pt);
+      const s = Math.sin(t * Math.PI);
+      g.mesh.scale.set(0.85 * s, 1.65 * s, 0.85 * s);
     }
-    activeVoidFloatingMesh.instanceMatrix.needsUpdate = true;
+
+    // 2. Анимация капель лавы, срывающихся со ступеней в небольшие лужицы (3 фазы из ash tower.html)
+    for (let i = 0; i < ashFallingDrops.length; i++) {
+      const d = ashFallingDrops[i];
+      const cycle = (time * d.speed * speedScale + d.phase) % 1.0;
+
+      if (cycle < 0.32) {
+        const grow = cycle / 0.32;
+        d.mesh.position.set(d.startX, d.startY - grow * 0.08, d.startZ);
+        d.mesh.scale.set(0.35 + grow * 0.65, 0.45 + grow * 0.95, 0.35 + grow * 0.65);
+      } else if (cycle < 0.86) {
+        const fallT = (cycle - 0.32) / 0.54;
+        const quadFall = fallT * fallT;
+        d.mesh.position.set(
+          d.startX,
+          d.startY - 0.08 + (d.endY - (d.startY - 0.08)) * quadFall,
+          d.startZ
+        );
+        d.mesh.scale.set(0.75 - fallT * 0.2, 1.35 + fallT * 0.9, 0.75 - fallT * 0.2);
+      } else {
+        const splashT = (cycle - 0.86) / 0.14;
+        d.mesh.position.set(d.startX, d.endY + 0.02, d.startZ);
+        const spread = 1.0 + splashT * 1.8;
+        const fade = Math.max(0.01, 1.0 - splashT);
+        d.mesh.scale.set(spread * fade, 0.25 * fade, spread * fade);
+      }
+    }
+
+    if (activeAshLavaStreamMat) {
+      activeAshLavaStreamMat.emissiveIntensity = 1.75 + Math.sin(time * 3.4) * 0.3;
+    }
+  } else if (towerId === 'void') {
+    const gravAnom = activeVFXState.gravityAnomaly || 1.4;
+    const gravTime = time * gravAnom;
+
+    // Левитация инстансированных обломков в невесомости
+    if (activeVoidFloatingMesh && activeVoidFloatingData.length) {
+      const dummy = _pickupDummyObj;
+      for (let i = 0; i < activeVoidFloatingData.length; i++) {
+        const item = activeVoidFloatingData[i];
+        dummy.position.set(
+          item.x + Math.cos(gravTime * 0.5 + item.phase) * 0.18,
+          item.baseY + Math.sin(gravTime * 0.8 * item.speed + item.phase) * 0.65,
+          item.z
+        );
+        dummy.rotation.set(
+          item.rx + gravTime * 0.18 * item.speed,
+          item.ry + gravTime * 0.24 * item.speed,
+          item.rz
+        );
+        dummy.scale.setScalar(item.scale);
+        dummy.updateMatrix();
+        activeVoidFloatingMesh.setMatrixAt(i, dummy.matrix);
+      }
+      activeVoidFloatingMesh.instanceMatrix.needsUpdate = true;
+    }
+
+    // Левитация осколков у растворившихся ступеней
+    for (let i = 0; i < voidFloatingDebrisMeshes.length; i++) {
+      const obj = voidFloatingDebrisMeshes[i];
+      const ud = obj.userData;
+      if (!ud || !ud.basePos) continue;
+      const wave = Math.sin(gravTime * 0.8 + ud.phase);
+      obj.position.y = ud.basePos.y + wave * ud.amp;
+      obj.position.x = ud.basePos.x + Math.cos(gravTime * 0.5 + ud.phase) * (ud.amp * 0.22);
+      obj.rotation.x += 0.004 * ud.rotSpeed * gravAnom;
+      obj.rotation.y += 0.005 * ud.rotSpeed * gravAnom;
+    }
+
+    for (let i = 0; i < voidMistBillboards.length; i++) {
+      voidMistBillboards[i].rotation.z = time * 0.22 + i;
+    }
+
     if (activeVoidRunePillarMat) {
       activeVoidRunePillarMat.emissiveIntensity = 1.35 + Math.sin(time * 2.8) * 0.45;
     }
-  } else if (towerId === 'ash' && activeAshLavaStreamMat) {
-    activeAshLavaStreamMat.emissiveIntensity = 1.75 + Math.sin(time * 3.4) * 0.3;
   }
 }
 
@@ -1435,10 +2048,14 @@ function buildTower(seed) {
   jumpPads = [];
   blocks = [];
   blockGrid = new Array(GRID_FLOORS * GRID_DIM * GRID_DIM).fill(null);
+  voidDissolvedStairStepSet.clear();
+
+  const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
 
   let prevStairPositions = [];
   const stairPositionsByFloor = [];
   const floorEdgeCellsByFloor = [];
+  const floorValidCellsByFloor = [];
 
   for (let floor = 0; floor < 12; floor++) {
     const floorY = floor * 14;
@@ -1574,6 +2191,7 @@ function buildTower(seed) {
 
     floorLayouts[floor] = finalLayout;
     const edgeCells = [];
+    const validFloorCells = [];
     for (const cellKey of activeCells) {
       const ci = (cellKey / 15) | 0;
       const cj = cellKey % 15;
@@ -1581,16 +2199,20 @@ function buildTower(seed) {
       const z = (cj - 7) * 4;
       blocks.push([x - 2, x + 2, z - 2, z + 2, floorY - 1, floorY, floor]);
 
-      if (
+      const isEdge =
         !activeCells.has((ci - 1) * 15 + cj) ||
         !activeCells.has((ci + 1) * 15 + cj) ||
         !activeCells.has(ci * 15 + (cj - 1)) ||
-        !activeCells.has(ci * 15 + (cj + 1))
-      ) {
+        !activeCells.has(ci * 15 + (cj + 1));
+
+      if (isEdge) {
         edgeCells.push([x, z]);
+      } else if (!isNearAnyPoint(currentStairCells, ci - 7, cj - 7, 1)) {
+        validFloorCells.push([x, z]);
       }
     }
     floorEdgeCellsByFloor[floor] = edgeCells;
+    floorValidCellsByFloor[floor] = validFloorCells;
 
     prevStairPositions = [];
     const floorStairs = [];
@@ -1605,9 +2227,16 @@ function buildTower(seed) {
           const z = Math.round(Math.sin(angle) * 5.5) * 4;
           const routeTag = isForkFloor ? ((branch === 0) !== swapRoutes ? 1 : 2) : 0;
 
+          // Физический блок ступени всегда остаётся в массиве blocks (на растворённые ступени можно встать!)
+          const stepBlockIndex = blocks.length;
           blocks.push([x - 2, x + 2, z - 2, z + 2, floorY, floorY + 2 * stepIdx, floor, routeTag]);
           prevStairPositions.push([x, z]);
-          floorStairs.push([x, z, floorY + 2 * stepIdx]);
+          floorStairs.push([x, z, floorY + 2 * stepIdx, stepBlockIndex]);
+
+          // В Башне Пустоты ступени 3 и 5 каждого марша отмечаются как «растворившиеся»
+          if (towerId === 'void' && (stepIdx === 3 || stepIdx === 5)) {
+            voidDissolvedStairStepSet.add(stepBlockIndex);
+          }
 
           if (floor % 4 === 3 && floor < 11) {
             blocks.push([x - 2.05, x + 2.05, z - 2.05, z + 2.05, floorY, floorY + 16, floor, 3]);
@@ -1742,7 +2371,6 @@ function buildTower(seed) {
     }
   }
 
-  const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
   const dummyObj = new THREE.Object3D();
   const blockColor = new THREE.Color();
   towerInstancedMesh = new THREE.InstancedMesh(
@@ -1756,15 +2384,18 @@ function buildTower(seed) {
 
   blocks.forEach((b, idx) => {
     const rawH = b[5] - b[4];
-    if (b[7] === 3) {
-      // Физический барьер Печати босса остаётся, а визуально рендерится паутина 0xff2a60 (bossGateSealGroup)
+    const isStairBlock = rawH > 1.5 && b[7] !== 3;
+
+    // В Башне Пустоты все ступени рендерятся специальными шейдерами растворения (STAIR_DISSOLVE_FRAGMENT_SHADER),
+    // а физическая коллизия ступени в массиве blocks сохраняется полностью!
+    if (b[7] === 3 || (towerId === 'void' && isStairBlock)) {
       dummyObj.position.set(0, -999, 0);
       dummyObj.scale.set(0, 0, 0);
       dummyObj.updateMatrix();
       towerInstancedMesh.setMatrixAt(idx, dummyObj.matrix);
       return;
     }
-    const isStairBlock = rawH > 1.5 && b[7] !== 3;
+
     const visualH = isStairBlock ? 1.15 : rawH;
     const visualCenterY = isStairBlock ? b[5] - visualH * 0.5 : (b[4] + b[5]) / 2;
     dummyObj.position.set((b[0] + b[1]) / 2, visualCenterY, (b[2] + b[3]) / 2);
@@ -1783,7 +2414,7 @@ function buildTower(seed) {
 
     towerInstancedMesh.setColorAt(
       idx,
-      blockColor.setHex(baseColorHex).offsetHSL(0, 0, ((b[0] / 4 + b[2] / 4) & 1) * 0.05)
+      blockColor.setHex(baseColorHex).offsetHSL(0, 0, ((b[0] / 4 + b[2] / 4) & 1) * 0.04)
     );
   });
 
@@ -1793,5 +2424,5 @@ function buildTower(seed) {
   }
   scene.add(towerInstancedMesh);
 
-  buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor);
+  buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor, floorValidCellsByFloor);
 }

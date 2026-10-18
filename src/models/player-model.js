@@ -1654,37 +1654,187 @@ function updatePlayerAnimation(dt) {
   rig.beltGlow.material.opacity = 0.38 + 0.14 * Math.sin(time * 5.2);
 }
 
-/* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна) ---------- */
+/* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна из 3D-макетов) ---------- */
+
+// 1A. ПЕПЕЛЬНАЯ БАШНЯ — Кастомный GLSL шейдер моря магмы (из createLava в ash tower.html)
+const ashLavaUniforms = {
+  uTime: { value: 0 },
+  uSpeed: { value: 2.25 },
+  uFogColor: { value: new THREE.Color('#220707') },
+  uFogDensity: { value: 0.0165 }
+};
+TOWER_SHADER_UNIFORMS.ashLavaSea = ashLavaUniforms;
+
+const ashLavaShaderMaterial = new THREE.ShaderMaterial({
+  uniforms: ashLavaUniforms,
+  vertexShader: `
+    uniform float uTime;
+    uniform float uSpeed;
+    varying vec2 vUv;
+    varying float vElevation;
+    varying vec3 vWorldPos;
+    ${GLSL_SIMPLEX_NOISE}
+
+    void main() {
+      vUv = uv;
+      vec3 pos = position;
+      float t = uTime * 0.45 * uSpeed;
+
+      float waveLarge = snoise(vec3(pos.xy * 0.045, t * 0.6)) * 1.05;
+      float waveMedium = snoise(vec3(pos.xy * 0.12 - t * 0.35, t * 0.9)) * 0.42;
+      float bubble = max(0.0, snoise(vec3(pos.xy * 0.28, t * 1.8))) * 0.32;
+
+      float elevation = waveLarge + waveMedium + bubble;
+      pos.z += elevation;
+      vElevation = elevation;
+
+      vec4 worldPosition = modelMatrix * vec4(pos, 1.0);
+      vWorldPos = worldPosition.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform float uSpeed;
+    uniform vec3 uFogColor;
+    uniform float uFogDensity;
+
+    varying vec2 vUv;
+    varying float vElevation;
+    varying vec3 vWorldPos;
+    ${GLSL_SIMPLEX_NOISE}
+
+    void main() {
+      float t = uTime * 0.35 * uSpeed;
+      vec2 p = vWorldPos.xz * 0.065;
+
+      float n1 = snoise(vec3(p * 1.4 + vec2(t * 0.25, -t * 0.15), t * 0.4));
+      float n2 = snoise(vec3(p * 3.1 - vec2(t * 0.4, t * 0.2), t * 0.85));
+      float n3 = snoise(vec3(p * 6.5, t * 1.6));
+
+      float heat = (n1 * 0.5 + 0.5) * 0.55 + (n2 * 0.5 + 0.5) * 0.35 + (n3 * 0.5 + 0.5) * 0.2;
+      heat += vElevation * 0.22;
+
+      float bubblePop = smoothstep(0.72, 0.92, n3) * smoothstep(0.1, 0.6, n1);
+      heat = clamp(heat + bubblePop * 0.45, 0.0, 1.25);
+
+      vec3 colCrust    = vec3(0.11, 0.02, 0.01);
+      vec3 colDarkRed  = vec3(0.58, 0.05, 0.01);
+      vec3 colOrange   = vec3(1.00, 0.32, 0.00);
+      vec3 colYellow   = vec3(1.00, 0.92, 0.38);
+
+      vec3 lavaColor = mix(colCrust, colDarkRed, smoothstep(0.18, 0.42, heat));
+      lavaColor = mix(lavaColor, colOrange, smoothstep(0.42, 0.70, heat));
+      lavaColor = mix(lavaColor, colYellow, smoothstep(0.70, 0.98, heat));
+
+      lavaColor *= (0.85 + pow(max(0.0, heat), 2.2) * 1.45);
+
+      float dist = length(cameraPosition - vWorldPos);
+      float fogFactor = 1.0 - exp(-(uFogDensity * dist) * (uFogDensity * dist));
+      lavaColor = mix(lavaColor, uFogColor, clamp(fogFactor * 0.78, 0.0, 0.95));
+
+      gl_FragColor = vec4(lavaColor, 1.0);
+    }
+  `
+});
+
+// 1B. БАШНЯ ПУСТОТЫ — Кастомный GLSL шейдер Бездны с глубоким параллаксом и далёкими огнями (из void tower.html)
+const voidAbyssUniforms = {
+  uTime: { value: 0 },
+  uSurge: { value: 0 }
+};
+TOWER_SHADER_UNIFORMS.voidList.push(voidAbyssUniforms);
+
+const voidAbyssShaderMaterial = new THREE.ShaderMaterial({
+  uniforms: voidAbyssUniforms,
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    void main() {
+      vUv = uv;
+      vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+      vWorldPos = worldPosition.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPosition;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform float uSurge;
+    varying vec2 vUv;
+    varying vec3 vWorldPos;
+    ${GLSL_SIMPLEX_NOISE}
+
+    float hash21(vec2 p) {
+      p = fract(p * vec2(234.34, 435.345));
+      p += dot(p, p + 34.23);
+      return fract(p.x * p.y);
+    }
+
+    float starLayer(vec2 uv, float scale, float timeOffset) {
+      vec2 gv = fract(uv * scale) - 0.5;
+      vec2 id = floor(uv * scale);
+      float n = hash21(id);
+      if (n < 0.86) return 0.0;
+
+      vec2 offset = (vec2(hash21(id + 1.7), hash21(id + 9.2)) - 0.5) * 0.65;
+      float d = length(gv - offset);
+
+      float pulse = sin(uTime * (0.35 + fract(n * 17.0) * 0.8) + n * 62.8 + timeOffset);
+      pulse = smoothstep(0.15, 0.98, pulse);
+
+      float star = smoothstep(0.09, 0.0, d) * pulse;
+      star += smoothstep(0.24, 0.0, d) * 0.25 * pulse;
+      return star;
+    }
+
+    void main() {
+      vec2 centered = vWorldPos.xz * 0.022;
+      float distFromCenter = length(vWorldPos.xz);
+
+      vec3 viewDir = normalize(vWorldPos - cameraPosition);
+      vec2 parallaxUv1 = centered + viewDir.xz * 0.22;
+      vec2 parallaxUv2 = centered * 1.6 + viewDir.xz * 0.48;
+      vec2 parallaxUv3 = centered * 2.5 + viewDir.xz * 0.82;
+
+      vec3 baseAbyss = vec3(0.008, 0.002, 0.016);
+
+      float nebula1 = snoise(vec3(parallaxUv1 * 2.2, uTime * 0.04)) * 0.5 + 0.5;
+      float nebula2 = snoise(vec3(parallaxUv2 * 3.8, -uTime * 0.06)) * 0.5 + 0.5;
+      float voidVortex = smoothstep(34.0, 2.0, distFromCenter);
+
+      vec3 deepGlow = mix(vec3(0.02, 0.005, 0.05), vec3(0.14, 0.03, 0.26), nebula1 * nebula2);
+      baseAbyss += deepGlow * 0.35 * (0.4 + 0.6 * voidVortex);
+
+      float s1 = starLayer(parallaxUv1, 14.0, 0.0);
+      float s2 = starLayer(parallaxUv2, 23.0, 12.4);
+      float s3 = starLayer(parallaxUv3, 35.0, 29.1);
+
+      vec3 starCol1 = vec3(0.66, 0.33, 0.97) * s1 * 0.95;
+      vec3 starCol2 = vec3(0.55, 0.75, 1.00) * s2 * 0.75;
+      vec3 starCol3 = vec3(0.85, 0.50, 1.00) * s3 * 0.55;
+
+      float ring = smoothstep(0.32, 0.0, abs(length(parallaxUv2) - 0.19 - sin(uTime * 0.3) * 0.02));
+      vec3 singularity = vec3(0.54, 0.17, 0.89) * ring * (0.32 + uSurge * 0.65);
+
+      vec3 finalColor = baseAbyss + starCol1 + starCol2 + starCol3 + singularity;
+      float radialFade = smoothstep(55.0, 22.0, distFromCenter);
+      finalColor *= radialFade;
+
+      gl_FragColor = vec4(finalColor, 1.0);
+    }
+  `
+});
+
+// Подложка бездонной шахты для Ледяной башни
+const iceAbyssBaseMaterial = new THREE.MeshBasicMaterial({ color: 0x06101e });
 
 const LAVA_MATERIALS = {
-  ash: new THREE.MeshStandardMaterial({
-    map: lavaTexture,
-    bumpMap: lavaTexture,
-    bumpScale: 0.25,
-    emissive: 0xff6a15,
-    emissiveMap: lavaTexture,
-    emissiveIntensity: 2.1,
-    roughness: 0.55
-  }),
-  ice: new THREE.MeshStandardMaterial({
-    map: iceLavaTexture,
-    bumpMap: iceLavaTexture,
-    bumpScale: 0.2,
-    emissive: 0x68c4ff,
-    emissiveMap: iceLavaTexture,
-    emissiveIntensity: 1.35,
-    roughness: 0.35
-  }),
-  void: new THREE.MeshStandardMaterial({
-    map: voidLavaTexture,
-    emissive: 0x9835ff,
-    emissiveMap: voidLavaTexture,
-    emissiveIntensity: 1.75,
-    roughness: 0.75
-  })
+  ash: ashLavaShaderMaterial,
+  ice: iceAbyssBaseMaterial,
+  void: voidAbyssShaderMaterial
 };
 
-const lavaMesh = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), LAVA_MATERIALS.ash);
+const lavaMesh = new THREE.Mesh(new THREE.PlaneGeometry(140, 140, 96, 96), LAVA_MATERIALS.ash);
 lavaMesh.rotation.x = -Math.PI / 2;
 scene.add(lavaMesh);
 
@@ -1696,44 +1846,38 @@ const hazardIceGroup = new THREE.Group();
 const hazardVoidGroup = new THREE.Group();
 hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
-// 1A. Детали моря магмы (Пепельная башня)
+// 1A. Детали моря магмы (Пепельная башня: обрушившиеся базальтовые глыбы и обугленный шлак в лаве, из ash tower.html)
 (function buildAshHazardDetails() {
-  const glowDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(30.2, 36),
-    new THREE.MeshBasicMaterial({
-      map: lavaTexture,
-      color: 0xffaa30,
-      transparent: true,
-      opacity: 0.38,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  glowDisc.rotation.x = -Math.PI / 2;
-  glowDisc.position.y = 0.08;
-  hazardAshGroup.add(glowDisc);
-  hazardAshGroup.userData.glowDisc = glowDisc;
-
-  const crustMat = new THREE.MeshStandardMaterial({
-    color: 0x240b0d,
-    emissive: 0x6a1400,
-    emissiveIntensity: 0.65,
-    roughness: 0.92,
-    flatShading: true
+  const charredMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#18181b'),
+    map: TOWER_FLOOR_TEXTURES.ash.map,
+    normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
+    normalScale: new THREE.Vector2(2.6, 2.6),
+    roughness: 0.95,
+    metalness: 0.05
   });
+  const basaltMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#585a60'),
+    map: TOWER_FLOOR_TEXTURES.ash.map,
+    normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
+    normalScale: new THREE.Vector2(2.4, 2.4),
+    roughness: 0.9,
+    metalness: 0.1,
+    emissive: new THREE.Color('#ff3b00'),
+    emissiveMap: TOWER_FLOOR_TEXTURES.ash.emissive,
+    emissiveIntensity: 0.95
+  });
+
   const crustRocks = [];
-  for (let i = 0; i < 18; i++) {
-    const angle = (i / 18) * TWO_PI + (i % 3) * 0.2;
-    const radius = 3.8 + (i % 4) * 6.0;
-    const rockGeo = new THREE.CylinderGeometry(
-      1.1 + (i % 3) * 0.6,
-      1.6 + (i % 3) * 0.7,
-      0.5,
-      7
-    );
-    const rock = new THREE.Mesh(rockGeo, crustMat);
-    rock.position.set(Math.cos(angle) * radius, 0.14, Math.sin(angle) * radius);
-    rock.rotation.y = i * 1.1;
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * TWO_PI + texSeededRandom(i * 19) * 0.3;
+    const radius = 5.5 + (i % 4) * 5.8 + texSeededRandom(i * 37) * 2.2;
+    const rockSize = 0.9 + texSeededRandom(i * 91) * 1.4;
+    const rockGeo = jitterGeometry(new THREE.DodecahedronGeometry(rockSize, 1), 0.18);
+    const rock = new THREE.Mesh(rockGeo, i % 3 === 0 ? charredMat : basaltMat);
+    rock.position.set(Math.cos(angle) * radius, 0.1, Math.sin(angle) * radius);
+    rock.scale.set(1.3, 0.55, 1.2);
+    rock.rotation.set(texSeededRandom(i) * 3, texSeededRandom(i + 1) * 3, texSeededRandom(i + 2) * 3);
     rock.userData = { baseAngle: angle, radius, phase: i * 0.7 };
     hazardAshGroup.add(rock);
     crustRocks.push(rock);
@@ -1741,227 +1885,947 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardAshGroup.userData.crustRocks = crustRocks;
 })();
 
-// 1B. Детали вихря метели (Ледяная башня)
+// 1B. 3-слойная GLSL воронка бездонной метели (Ледяная башня, из createBottomBlizzard в ice tower.html)
 (function buildIceHazardDetails() {
-  const funnelRings = [];
-  for (let layer = 0; layer < 4; layer++) {
-    const ringMesh = new THREE.Mesh(
-      new THREE.RingGeometry(2.2 + layer * 4.8, 9.2 + layer * 6.2, 44, 1),
-      new THREE.MeshBasicMaterial({
-        map: iceLavaTexture,
-        color: layer === 0 ? 0xffffff : 0x9cdfff,
-        transparent: true,
-        opacity: 0.46 - layer * 0.08,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    );
-    ringMesh.rotation.x = -Math.PI / 2;
-    ringMesh.position.y = 0.15 + layer * 0.35;
-    hazardIceGroup.add(ringMesh);
-    funnelRings.push(ringMesh);
-  }
+  const BLIZZARD_VERTEX_SHADER = `
+    uniform float uTime;
+    uniform float uLayerIndex;
+    varying vec2 vUv;
+    varying float vRadialDist;
+    varying float vElevation;
+    varying vec3 vViewPosition;
+    varying vec3 vNormalView;
 
-  const eyeGlow = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: TEXTURES.glowIce,
-      color: 0xdff8ff,
+    vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+    vec3 permute(vec3 x) { return mod289(((x * 34.0) + 1.0) * x); }
+
+    float snoise2D(vec2 v) {
+      const vec4 C = vec4(0.211324865405187, 0.366025403784439,
+                         -0.577350269189626, 0.024390243902439);
+      vec2 i  = floor(v + dot(v, C.yy));
+      vec2 x0 = v - i + dot(i, C.xx);
+      vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+      vec4 x12 = x0.xyxy + C.xxzz;
+      x12.xy -= i1;
+      i = mod289(i);
+      vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
+      vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+      m = m * m;
+      m = m * m;
+      vec3 x = 2.0 * fract(p * C.www) - 1.0;
+      vec3 h = abs(x) - 0.5;
+      vec3 ox = floor(x + 0.5);
+      vec3 a0 = x - ox;
+      m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+      vec3 g;
+      g.x  = a0.x  * x0.x  + h.x  * x0.y;
+      g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+      return 130.0 * dot(m, g);
+    }
+
+    void main() {
+      vUv = uv;
+      vec2 centered = (uv - 0.5) * 2.0;
+      float r = length(centered);
+      float theta = atan(centered.y, centered.x);
+      vRadialDist = r;
+
+      float spiralAngle = theta + (3.8 / (r + 0.28)) - uTime * (1.85 + uLayerIndex * 0.35);
+      vec2 spiralCoord = vec2(cos(spiralAngle) * r, sin(spiralAngle) * r);
+
+      float wave1 = snoise2D(spiralCoord * 2.5 + vec2(uTime * 0.4, -uTime * 0.6));
+      float wave2 = snoise2D(spiralCoord * 5.5 - vec2(uTime * 0.9, uTime * 0.5)) * 0.5;
+
+      float funnelDepth = -pow(1.0 - clamp(r, 0.0, 1.0), 1.85) * 4.5;
+      float ridge = (wave1 + wave2) * smoothstep(0.08, 0.85, r) * (1.4 + uLayerIndex * 0.5);
+
+      vec3 displaced = position;
+      displaced.z += funnelDepth + ridge;
+      vElevation = wave1 + wave2;
+
+      vec4 mvPosition = modelViewMatrix * vec4(displaced, 1.0);
+      vViewPosition = -mvPosition.xyz;
+      vNormalView = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  `;
+
+  const BLIZZARD_FRAGMENT_SHADER = `
+    uniform float uTime;
+    uniform float uLayerIndex;
+    uniform float uOpacity;
+    varying vec2 vUv;
+    varying float vRadialDist;
+    varying float vElevation;
+    varying vec3 vViewPosition;
+    varying vec3 vNormalView;
+
+    vec2 hash2(vec2 p) {
+      p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+      return fract(sin(p) * 43758.5453);
+    }
+
+    float voronoi(vec2 x) {
+      vec2 n = floor(x);
+      vec2 f = fract(x);
+      float md = 8.0;
+      for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+          vec2 g = vec2(float(i), float(j));
+          vec2 o = hash2(n + g);
+          o = 0.5 + 0.5 * sin(uTime * 1.4 + 6.2831 * o);
+          vec2 r = g + o - f;
+          float d = dot(r, r);
+          if (d < md) md = d;
+        }
+      }
+      return sqrt(md);
+    }
+
+    float fbm(vec2 p) {
+      float v = 0.0;
+      float a = 0.5;
+      mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+      for (int i = 0; i < 4; i++) {
+        v += a * (1.0 - voronoi(p));
+        p = rot * p * 2.05 + vec2(uTime * 0.25, -uTime * 0.18);
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    void main() {
+      vec2 centered = (vUv - 0.5) * 2.0;
+      float r = length(centered);
+      if (r > 1.0) discard;
+
+      float angle = atan(centered.y, centered.x);
+      float vortexTwist = angle + 4.8 / (r + 0.16) - uTime * (2.1 + uLayerIndex * 0.4);
+      vec2 polarUv = vec2(vortexTwist * 1.35, log(r + 0.08) * 3.4 - uTime * 1.6);
+
+      float stormNoise = fbm(polarUv);
+      float fineStreaks = fbm(polarUv * vec2(2.4, 1.2) + vec2(0.0, -uTime * 2.2));
+      float combined = clamp(stormNoise * 0.68 + fineStreaks * 0.52 + vElevation * 0.22, 0.0, 1.0);
+
+      vec3 abyssColor = vec3(0.04, 0.09, 0.17);
+      vec3 frostCyan  = vec3(0.48, 0.80, 0.96);
+      vec3 snowWhite  = vec3(0.93, 0.98, 1.00);
+
+      float coreDarkness = smoothstep(0.02, 0.26, r);
+      vec3 color = mix(abyssColor, frostCyan, smoothstep(0.15, 0.58, combined) * coreDarkness);
+      color = mix(color, snowWhite, smoothstep(0.46, 0.88, combined) * coreDarkness);
+
+      vec3 viewDir = normalize(vViewPosition);
+      float fresnel = pow(1.0 - abs(dot(viewDir, vNormalView)), 2.2);
+      color += vec3(0.55, 0.88, 1.0) * fresnel * 0.42;
+
+      float radialMask = smoothstep(1.0, 0.62, r) * smoothstep(0.0, 0.08, r);
+      float alpha = radialMask * smoothstep(0.12, 0.78, combined) * uOpacity;
+
+      gl_FragColor = vec4(color, alpha);
+    }
+  `;
+
+  const layers = [
+    { y: 0.2, radius: 32.0, opacity: 0.95, layerIdx: 0.0 },
+    { y: 1.4, radius: 30.5, opacity: 0.68, layerIdx: 1.0 },
+    { y: 2.6, radius: 29.0, opacity: 0.45, layerIdx: 2.0 }
+  ];
+
+  layers.forEach((cfg) => {
+    const vortexGeo = new THREE.PlaneGeometry(cfg.radius * 2, cfg.radius * 2, 56, 56);
+    const uniforms = {
+      uTime: { value: 0 },
+      uLayerIndex: { value: cfg.layerIdx },
+      uOpacity: { value: cfg.opacity }
+    };
+    TOWER_SHADER_UNIFORMS.iceBlizzard.push(uniforms);
+
+    const vortexMat = new THREE.ShaderMaterial({
+      vertexShader: BLIZZARD_VERTEX_SHADER,
+      fragmentShader: BLIZZARD_FRAGMENT_SHADER,
+      uniforms: uniforms,
       transparent: true,
-      opacity: 0.78,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  eyeGlow.scale.set(28, 8, 1);
-  eyeGlow.position.y = 1.2;
-  hazardIceGroup.add(eyeGlow);
+      depthWrite: cfg.layerIdx === 0.0,
+      blending: cfg.layerIdx === 2.0 ? THREE.AdditiveBlending : THREE.NormalBlending,
+      side: THREE.DoubleSide
+    });
 
-  hazardIceGroup.userData.funnelRings = funnelRings;
+    const vortexMesh = new THREE.Mesh(vortexGeo, vortexMat);
+    vortexMesh.rotation.x = -Math.PI / 2;
+    vortexMesh.position.y = cfg.y;
+    hazardIceGroup.add(vortexMesh);
+  });
+
   hazardIceGroup.visible = false;
 })();
 
 // 1C. Детали Бездны (Башня Пустоты)
 (function buildVoidHazardDetails() {
-  const blackHoleCore = new THREE.Mesh(
-    new THREE.CircleGeometry(9.8, 44),
-    new THREE.MeshBasicMaterial({ color: 0x010003 })
-  );
-  blackHoleCore.rotation.x = -Math.PI / 2;
-  blackHoleCore.position.y = 0.06;
-  hazardVoidGroup.add(blackHoleCore);
-
-  const vortexRings = [];
-  for (let r = 0; r < 3; r++) {
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(7.5 + r * 4.8, 12.0 + r * 6.2, 44),
-      new THREE.MeshBasicMaterial({
-        map: voidLavaTexture,
-        color: r === 0 ? 0xe098ff : r === 1 ? 0xa840ff : 0x6818c8,
-        transparent: true,
-        opacity: 0.65 - r * 0.14,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.12 + r * 0.18;
-    hazardVoidGroup.add(ring);
-    vortexRings.push(ring);
-  }
-
-  const abyssStarGeo = new THREE.BufferGeometry();
-  const starCount = 56;
-  const starPos = new Float32Array(starCount * 3);
-  const starCol = new Float32Array(starCount * 3);
-  for (let i = 0; i < starCount; i++) {
-    const ang = Math.random() * TWO_PI;
-    const rad = 3 + Math.random() * 26;
-    starPos[i * 3] = Math.cos(ang) * rad;
-    starPos[i * 3 + 1] = 0.2 + Math.random() * 1.8;
-    starPos[i * 3 + 2] = Math.sin(ang) * rad;
-    starCol[i * 3] = 0.85;
-    starCol[i * 3 + 1] = 0.65;
-    starCol[i * 3 + 2] = 1.0;
-  }
-  abyssStarGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  abyssStarGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
-  const abyssStars = new THREE.Points(
-    abyssStarGeo,
-    new THREE.PointsMaterial({
-      size: 0.55,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.85,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  hazardVoidGroup.add(abyssStars);
-
-  hazardVoidGroup.userData.vortexRings = vortexRings;
-  hazardVoidGroup.userData.abyssStars = abyssStars;
   hazardVoidGroup.visible = false;
 })();
 
-/* ---------- 2. Цилиндрические внешние стены башни ---------- */
+/* ---------- 2. Цилиндрические стены трёх башен и купола (из 3D-макетов) ---------- */
 
 const TOWER_WALL_MATERIALS = {
   ash: new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#787a80'),
     map: TOWER_WALL_TEXTURES.ash.map,
-    bumpMap: TOWER_WALL_TEXTURES.ash.bump,
-    bumpScale: 0.45,
-    emissive: 0xff5a14,
+    normalMap: TOWER_WALL_TEXTURES.ash.normalMap,
+    normalScale: new THREE.Vector2(2.6, 2.6),
+    roughnessMap: TOWER_WALL_TEXTURES.ash.roughnessMap,
+    roughness: 0.92,
+    metalness: 0.08,
+    emissive: new THREE.Color('#ff4500'),
     emissiveMap: TOWER_WALL_TEXTURES.ash.emissive,
-    emissiveIntensity: 1.45,
-    roughness: 0.86,
-    metalness: 0.12,
+    emissiveIntensity: 1.15,
     side: THREE.BackSide
   }),
-  ice: new THREE.MeshStandardMaterial({
-    map: TOWER_WALL_TEXTURES.ice.map,
+  ice: new THREE.MeshPhysicalMaterial({
+    color: 0xb8e6ff,
+    emissive: 0x102e4a,
+    emissiveIntensity: 0.28,
+    roughness: 0.14,
+    metalness: 0.05,
+    transmission: 0.62,
+    ior: 1.31,
+    reflectivity: 0.85,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.08,
+    envMap: ICE_ENV_CUBEMAP,
+    envMapIntensity: 1.65,
     bumpMap: TOWER_WALL_TEXTURES.ice.bump,
-    bumpScale: 0.35,
-    emissive: 0x58c4ff,
-    emissiveMap: TOWER_WALL_TEXTURES.ice.emissive,
-    emissiveIntensity: 1.15,
-    roughness: 0.18,
-    metalness: 0.28,
+    bumpScale: 0.22,
+    transparent: true,
+    opacity: 0.76,
     side: THREE.BackSide
   }),
   void: new THREE.MeshStandardMaterial({
-    map: TOWER_WALL_TEXTURES.void.map,
+    color: 0x12081c,
+    roughness: 0.85,
+    metalness: 0.12,
     bumpMap: TOWER_WALL_TEXTURES.void.bump,
-    bumpScale: 0.38,
-    emissive: 0xc055ff,
-    emissiveMap: TOWER_WALL_TEXTURES.void.emissive,
-    emissiveIntensity: 1.65,
-    roughness: 0.62,
-    metalness: 0.25,
+    bumpScale: 0.45,
     side: THREE.BackSide
   })
 };
 
-const towerWallMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(30.8, 30.8, 220, 36, 1, true),
-  TOWER_WALL_MATERIALS.ash
-);
+applyWorldStoneShader(TOWER_WALL_MATERIALS.ash, { crackRarity: 0.46, charStrength: 0.90 });
+applyVoidWallRuneShader(TOWER_WALL_MATERIALS.void, 6.0, 10.0);
+
+// Основной цилиндр стен башни с каменным/ледяным рельефом
+const towerWallGeo = new THREE.CylinderGeometry(30.8, 30.8, 225, 56, 36, true);
+(function displaceWallCylinderVertices(geo) {
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    const vz = pos.getZ(i);
+    const angle = Math.atan2(vz, vx);
+    const rShift = (fbm2D(vx * 0.09 + 3.1, vy * 0.09 + 8.7, 3) - 0.5) * 0.55;
+    const r = 30.8 + rShift;
+    pos.setX(i, Math.cos(angle) * r);
+    pos.setZ(i, Math.sin(angle) * r);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+})(towerWallGeo);
+
+const towerWallMesh = new THREE.Mesh(towerWallGeo, TOWER_WALL_MATERIALS.ash);
 towerWallMesh.position.y = 80;
 scene.add(towerWallMesh);
 towerWallMesh.matrixAutoUpdate = false;
 towerWallMesh.updateMatrix();
 
-const iceInnerGlazeMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(29.85, 29.85, 220, 36, 1, true),
-  new THREE.MeshStandardMaterial({
-    map: TOWER_WALL_TEXTURES.ice.map,
-    color: 0x90d8ff,
-    emissive: 0x2878b8,
-    emissiveIntensity: 0.45,
-    roughness: 0.08,
-    metalness: 0.35,
-    transparent: true,
-    opacity: 0.26,
-    side: THREE.BackSide,
-    depthWrite: false
-  })
-);
+// Внешняя кристаллическая ледяная порода позади прозрачной ледяной стены (из ice tower.html),
+// чтобы вмёрзшие силуэты находились МЕЖДУ слоями льда и подсвечивались из глубины
+const iceOuterWallGeo = new THREE.CylinderGeometry(33.2, 33.2, 225, 48, 16, true);
+const iceOuterWallMat = new THREE.MeshStandardMaterial({
+  color: 0x3b78a6,
+  emissive: 0x163d61,
+  emissiveIntensity: 0.75,
+  roughness: 0.35,
+  metalness: 0.15,
+  bumpMap: TOWER_WALL_TEXTURES.ice.bump,
+  bumpScale: 0.35,
+  side: THREE.BackSide
+});
+const iceInnerGlazeMesh = new THREE.Mesh(iceOuterWallGeo, iceOuterWallMat);
 iceInnerGlazeMesh.position.y = 80;
 iceInnerGlazeMesh.visible = false;
 scene.add(iceInnerGlazeMesh);
 iceInnerGlazeMesh.matrixAutoUpdate = false;
 iceInnerGlazeMesh.updateMatrix();
 
+// Верхний купол «Сложенное как бумага небо» для Башни Пустоты (из createFoldedSkyDome в void tower.html)
+const voidSkyDomeGroup = new THREE.Group();
+voidSkyDomeGroup.position.y = 185;
+voidSkyDomeGroup.visible = false;
+scene.add(voidSkyDomeGroup);
+
+(function buildVoidFoldedSkyDome() {
+  const skyUniforms = {
+    uTime: { value: 0 },
+    uSurge: { value: 0 }
+  };
+  TOWER_SHADER_UNIFORMS.voidList.push(skyUniforms);
+
+  const domeGeo = new THREE.ConeGeometry(42, 24, 9, 1, true);
+  const domeMat = new THREE.ShaderMaterial({
+    uniforms: skyUniforms,
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      void main() {
+        vUv = uv;
+        vLocalPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uSurge;
+      varying vec2 vUv;
+      varying vec3 vLocalPos;
+      ${GLSL_SIMPLEX_NOISE}
+
+      float foldedRiftMask(vec2 p) {
+        float minSeam = 10.0;
+        for (int i = 0; i < 7; i++) {
+          float fi = float(i);
+          float angle = fi * 0.89759 + 0.35;
+          vec2 dir = vec2(cos(angle), sin(angle));
+          float offset = sin(fi * 2.4 + 0.8) * 0.32;
+          float d = abs(dot(p, dir) - offset);
+          minSeam = min(minSeam, d);
+        }
+        return minSeam;
+      }
+
+      float starHash(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+
+      void main() {
+        vec2 p = vLocalPos.xz * 0.025;
+        float seamDist = foldedRiftMask(p);
+
+        float n = snoise(vec3(p * 6.0, uTime * 0.15)) * 0.018;
+        float riftWidth = 0.042 + sin(uTime * 0.7 + length(p) * 3.0) * 0.008 + uSurge * 0.025;
+        float isRift = 1.0 - smoothstep(riftWidth * 0.45, riftWidth, seamDist + n);
+        float riftEdge = smoothstep(riftWidth * 1.9, riftWidth * 0.45, seamDist + n) * (1.0 - isRift);
+
+        float facetShade = fract(sin(floor(p.x * 4.0) * 12.9 + floor(p.y * 4.0) * 78.2) * 43758.5);
+        vec3 foldedPaperCol = mix(vec3(0.012, 0.004, 0.024), vec3(0.045, 0.015, 0.085), facetShade * 0.5);
+
+        vec2 starUv = p * 55.0 + vec2(uTime * 0.08, -uTime * 0.05);
+        vec2 gridId = floor(starUv);
+        vec2 gridUv = fract(starUv) - 0.5;
+        float sh = starHash(gridId);
+        float starMask = step(0.82, sh);
+        float twinkle = 0.55 + 0.45 * sin(uTime * 2.5 + sh * 50.0);
+        float starPoint = smoothstep(0.18, 0.0, length(gridUv)) * starMask * twinkle;
+
+        vec3 riftSpaceCol = vec3(0.04, 0.01, 0.11) + vec3(0.75, 0.88, 1.0) * starPoint * 2.2;
+        vec3 neonEdgeCol = vec3(0.66, 0.33, 0.97) * riftEdge * (1.9 + uSurge);
+
+        vec3 finalCol = mix(foldedPaperCol, riftSpaceCol, isRift) + neonEdgeCol;
+        gl_FragColor = vec4(finalCol, 1.0);
+      }
+    `,
+    side: THREE.DoubleSide
+  });
+
+  const domeMesh = new THREE.Mesh(domeGeo, domeMat);
+  domeMesh.rotation.x = Math.PI;
+  voidSkyDomeGroup.add(domeMesh);
+
+  const shardMat = new THREE.MeshStandardMaterial({
+    color: 0x05020a,
+    roughness: 0.9,
+    metalness: 0.1,
+    side: THREE.DoubleSide
+  });
+  const edgeGlowMat = new THREE.MeshBasicMaterial({
+    color: 0xa855f7,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.32
+  });
+
+  for (let i = 0; i < 14; i++) {
+    const angle = (i / 14) * TWO_PI;
+    const radius = 11 + (i % 3) * 6.5;
+    const planeGeo = new THREE.PlaneGeometry(22, 13, 1, 1);
+
+    const shard = new THREE.Mesh(planeGeo, shardMat);
+    shard.position.set(Math.cos(angle) * radius, -4 + (i % 4) * 2.2, Math.sin(angle) * radius);
+    shard.rotation.set(0.45 + Math.sin(i * 2.1) * 0.55, angle + 0.4, 0.35 * Math.cos(i * 1.7));
+    voidSkyDomeGroup.add(shard);
+
+    const edgeMesh = new THREE.Mesh(planeGeo, edgeGlowMat);
+    edgeMesh.position.copy(shard.position);
+    edgeMesh.rotation.copy(shard.rotation);
+    voidSkyDomeGroup.add(edgeMesh);
+  }
+})();
+
+/* ---------- 3. Атмосферные системы частиц трёх башен (Пепел и угольки / Ледяная пыль и метель / Планктон) ---------- */
+
+const towerAtmosphereGroup = new THREE.Group();
+scene.add(towerAtmosphereGroup);
+
+const ashParticlesGroup = new THREE.Group();
+const iceParticlesGroup = new THREE.Group();
+const voidParticlesGroup = new THREE.Group();
+towerAtmosphereGroup.add(ashParticlesGroup, iceParticlesGroup, voidParticlesGroup);
+
+let ashParticleSystemData = [];
+let ashParticleGeometry = null;
+
+// 3A. Частицы пепла и раскалённых угольков (из createAshParticles в ash tower.html)
+(function buildAshAtmosphereParticles() {
+  const particleCount = 1600;
+  ashParticleGeometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+
+  const emberColors = [
+    new THREE.Color('#ff5500'),
+    new THREE.Color('#ffaa22'),
+    new THREE.Color('#5a4a48'),
+    new THREE.Color('#382e2e')
+  ];
+
+  for (let i = 0; i < particleCount; i++) {
+    const angle = Math.random() * TWO_PI;
+    const radius = 1.5 + Math.random() * 28.5;
+    positions[i * 3] = Math.cos(angle) * radius;
+    positions[i * 3 + 1] = (Math.random() - 0.5) * 60.0;
+    positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+    const isEmber = Math.random() < 0.36;
+    const col = isEmber
+      ? Math.random() < 0.4 ? emberColors[1] : emberColors[0]
+      : Math.random() < 0.5 ? emberColors[2] : emberColors[3];
+
+    colors[i * 3] = col.r;
+    colors[i * 3 + 1] = col.g;
+    colors[i * 3 + 2] = col.b;
+
+    ashParticleSystemData.push({
+      speedY: 1.4 + Math.random() * 3.8,
+      freq: 0.6 + Math.random() * 1.8,
+      amp: 0.03 + Math.random() * 0.08,
+      phase: Math.random() * TWO_PI,
+      swirlSpeed: (Math.random() - 0.5) * 0.25
+    });
+  }
+
+  ashParticleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  ashParticleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const pCanvas = document.createElement('canvas');
+  pCanvas.width = pCanvas.height = 64;
+  const pCtx = pCanvas.getContext('2d');
+  const grad = pCtx.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  grad.addColorStop(0.45, 'rgba(255, 200, 150, 0.7)');
+  grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  pCtx.fillStyle = grad;
+  pCtx.fillRect(0, 0, 64, 64);
+
+  const ashMat = new THREE.PointsMaterial({
+    size: 0.62,
+    map: new THREE.CanvasTexture(pCanvas),
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const points = new THREE.Points(ashParticleGeometry, ashMat);
+  points.frustumCulled = false;
+  ashParticlesGroup.add(points);
+  ashParticlesGroup.userData.mat = ashMat;
+})();
+
+// 3B. Две GLSL-системы частиц Ледяной башни: алмазная ледяная пыль + восходящие порывы метели (из ice tower.html)
+(function buildIceAtmosphereParticles() {
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+  // Система 1: Блестящая ледяная пыль с 4-лучевыми вспышками
+  const dustCount = 1500;
+  const dustPositions = new Float32Array(dustCount * 3);
+  const dustIds = new Float32Array(dustCount);
+  const dustSpeeds = new Float32Array(dustCount);
+  const dustSizes = new Float32Array(dustCount);
+
+  for (let i = 0; i < dustCount; i++) {
+    const angle = Math.random() * TWO_PI;
+    const radius = Math.sqrt(Math.random()) * 29.0;
+    dustPositions[i * 3] = Math.cos(angle) * radius;
+    dustPositions[i * 3 + 1] = (Math.random() - 0.5) * 44.0;
+    dustPositions[i * 3 + 2] = Math.sin(angle) * radius;
+    dustIds[i] = Math.random();
+    dustSpeeds[i] = 0.45 + Math.random() * 0.9;
+    dustSizes[i] = 1.6 + Math.random() * 2.2;
+  }
+
+  const dustGeo = new THREE.BufferGeometry();
+  dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+  dustGeo.setAttribute('aParticleId', new THREE.BufferAttribute(dustIds, 1));
+  dustGeo.setAttribute('aSpeed', new THREE.BufferAttribute(dustSpeeds, 1));
+  dustGeo.setAttribute('aBaseSize', new THREE.BufferAttribute(dustSizes, 1));
+
+  const dustUniforms = {
+    uTime: { value: 0 },
+    uPixelRatio: { value: pixelRatio }
+  };
+  TOWER_SHADER_UNIFORMS.iceDust = dustUniforms;
+
+  const dustMat = new THREE.ShaderMaterial({
+    uniforms: dustUniforms,
+    vertexShader: `
+      attribute float aParticleId;
+      attribute float aSpeed;
+      attribute float aBaseSize;
+      uniform float uTime;
+      uniform float uPixelRatio;
+      varying float vTwinkle;
+      varying float vDepthFade;
+
+      void main() {
+        vec3 pos = position;
+        float driftPhase = uTime * aSpeed + aParticleId * 6.2831;
+        pos.x += sin(driftPhase * 0.7) * 0.85;
+        pos.y += cos(driftPhase * 0.5) * 0.65 + mod(uTime * 0.35 + aParticleId * 19.0, 42.0) - 21.0;
+        pos.z += cos(driftPhase * 0.8) * 0.85;
+
+        float rawSin = sin(uTime * (aSpeed * 3.8) + aParticleId * 37.0);
+        float spark = pow(max(0.0, rawSin), 6.0);
+        vTwinkle = 0.25 + 0.75 * spark;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        float dist = -mvPosition.z;
+        vDepthFade = smoothstep(85.0, 8.0, dist);
+
+        gl_PointSize = aBaseSize * (0.75 + 1.45 * spark) * uPixelRatio * (160.0 / max(dist, 6.0));
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      varying float vTwinkle;
+      varying float vDepthFade;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        if (d > 0.5) discard;
+
+        float core = smoothstep(0.5, 0.05, d);
+        float crossFlare = max(
+          smoothstep(0.09, 0.0, abs(uv.x)) * smoothstep(0.5, 0.0, abs(uv.y)),
+          smoothstep(0.09, 0.0, abs(uv.y)) * smoothstep(0.5, 0.0, abs(uv.x))
+        );
+
+        float intensity = clamp(core * 0.75 + crossFlare * vTwinkle * 0.9, 0.0, 1.0);
+        vec3 baseTint = mix(vec3(0.62, 0.89, 1.0), vec3(1.0, 1.0, 1.0), vTwinkle);
+        gl_FragColor = vec4(baseTint * (1.0 + vTwinkle * 0.9), intensity * vDepthFade * (0.35 + 0.65 * vTwinkle));
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const dustPoints = new THREE.Points(dustGeo, dustMat);
+  dustPoints.frustumCulled = false;
+  iceParticlesGroup.add(dustPoints);
+
+  // Система 2: Восходящие спиральные порывы метели
+  const spiralCount = 1600;
+  const spiralPositions = new Float32Array(spiralCount * 3);
+  const spiralAngles = new Float32Array(spiralCount);
+  const spiralRadii = new Float32Array(spiralCount);
+  const spiralSpeeds = new Float32Array(spiralCount);
+  const spiralIds = new Float32Array(spiralCount);
+
+  for (let i = 0; i < spiralCount; i++) {
+    const theta = Math.random() * TWO_PI;
+    const isWallStream = i % 3 !== 0;
+    const rad = isWallStream ? 18.0 + Math.random() * 11.0 : 5.0 + Math.random() * 12.0;
+    const y = (Math.random() - 0.5) * 60.0;
+
+    spiralPositions[i * 3] = Math.cos(theta) * rad;
+    spiralPositions[i * 3 + 1] = y;
+    spiralPositions[i * 3 + 2] = Math.sin(theta) * rad;
+
+    spiralAngles[i] = theta;
+    spiralRadii[i] = rad;
+    spiralSpeeds[i] = isWallStream ? 5.5 + Math.random() * 6.0 : 8.0 + Math.random() * 7.0;
+    spiralIds[i] = Math.random();
+  }
+
+  const spiralGeo = new THREE.BufferGeometry();
+  spiralGeo.setAttribute('position', new THREE.BufferAttribute(spiralPositions, 3));
+  spiralGeo.setAttribute('aAngleOffset', new THREE.BufferAttribute(spiralAngles, 1));
+  spiralGeo.setAttribute('aRadius', new THREE.BufferAttribute(spiralRadii, 1));
+  spiralGeo.setAttribute('aRiseSpeed', new THREE.BufferAttribute(spiralSpeeds, 1));
+  spiralGeo.setAttribute('aParticleId', new THREE.BufferAttribute(spiralIds, 1));
+
+  const spiralUniforms = {
+    uTime: { value: 0 },
+    uPixelRatio: { value: pixelRatio }
+  };
+  TOWER_SHADER_UNIFORMS.iceSpiralSnow = spiralUniforms;
+
+  const spiralMat = new THREE.ShaderMaterial({
+    uniforms: spiralUniforms,
+    vertexShader: `
+      attribute float aAngleOffset;
+      attribute float aRadius;
+      attribute float aRiseSpeed;
+      attribute float aParticleId;
+      uniform float uTime;
+      uniform float uPixelRatio;
+      varying float vAlpha;
+
+      void main() {
+        float heightCycle = mod(position.y + uTime * aRiseSpeed + aParticleId * 65.0, 60.0) - 30.0;
+        float spiralAngle = aAngleOffset + uTime * (0.45 + (aRiseSpeed * 0.04)) + heightCycle * 0.085;
+        float radialOsc = aRadius + sin(uTime * 1.5 + aParticleId * 12.0) * 1.2;
+
+        vec3 pos = vec3(
+          cos(spiralAngle) * radialOsc,
+          heightCycle,
+          sin(spiralAngle) * radialOsc
+        );
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        float dist = -mvPosition.z;
+
+        float verticalMask = smoothstep(-30.0, -16.0, heightCycle) * smoothstep(30.0, 16.0, heightCycle);
+        vAlpha = verticalMask * smoothstep(90.0, 10.0, dist) * 0.78;
+
+        gl_PointSize = (2.0 + fract(aParticleId * 13.7) * 2.2) * uPixelRatio * (150.0 / max(dist, 8.0));
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      varying float vAlpha;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float dist = length(uv);
+        if (dist > 0.5) discard;
+        float softFlake = pow(1.0 - dist * 2.0, 1.7);
+        vec3 snowColor = vec3(0.86, 0.95, 1.0);
+        gl_FragColor = vec4(snowColor, softFlake * vAlpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const spiralPoints = new THREE.Points(spiralGeo, spiralMat);
+  spiralPoints.frustumCulled = false;
+  iceParticlesGroup.add(spiralPoints);
+  iceParticlesGroup.visible = false;
+})();
+
+// 3C. Биолюминесцентный «планктон» Башни Пустоты (из createPlanktonParticles в void tower.html)
+(function buildVoidAtmosphereParticles() {
+  const particleCount = 1800;
+  const positions = new Float32Array(particleCount * 3);
+  const colors = new Float32Array(particleCount * 3);
+  const scales = new Float32Array(particleCount);
+  const phases = new Float32Array(particleCount);
+
+  const palette = [
+    new THREE.Color(0x8a2be2),
+    new THREE.Color(0xa855f7),
+    new THREE.Color(0x60a5fa),
+    new THREE.Color(0xe879f9)
+  ];
+
+  for (let i = 0; i < particleCount; i++) {
+    const radius = 2.0 + Math.pow(Math.random(), 0.7) * 27.5;
+    const angle = Math.random() * TWO_PI;
+    const height = (Math.random() - 0.5) * 60.0;
+
+    positions[i * 3] = Math.cos(angle) * radius;
+    positions[i * 3 + 1] = height;
+    positions[i * 3 + 2] = Math.sin(angle) * radius;
+
+    const col = palette[i % palette.length];
+    colors[i * 3] = col.r;
+    colors[i * 3 + 1] = col.g;
+    colors[i * 3 + 2] = col.b;
+
+    scales[i] = 0.6 + Math.random() * 2.0;
+    phases[i] = Math.random() * TWO_PI;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+  geometry.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
+
+  const planktonUniforms = {
+    uTime: { value: 0 },
+    uGravitySpeed: { value: 1.4 }
+  };
+  TOWER_SHADER_UNIFORMS.voidList.push(planktonUniforms);
+
+  const material = new THREE.ShaderMaterial({
+    uniforms: planktonUniforms,
+    vertexShader: `
+      uniform float uTime;
+      uniform float uGravitySpeed;
+      attribute float aScale;
+      attribute float aPhase;
+      attribute vec3 aColor;
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        vColor = aColor;
+        vec3 pos = position;
+
+        float t = uTime * 0.45 * uGravitySpeed + aPhase;
+        pos.x += sin(t * 0.9 + pos.y * 0.12) * 0.85;
+        pos.y += cos(t * 0.65 + pos.x * 0.10) * 1.15;
+        pos.z += sin(t * 0.75 + pos.z * 0.12) * 0.85;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+
+        float pulse = 0.55 + 0.45 * sin(uTime * 1.8 + aPhase * 3.0);
+        vAlpha = pulse * smoothstep(90.0, 10.0, -mvPosition.z);
+
+        gl_PointSize = aScale * (190.0 / max(-mvPosition.z, 1.0)) * (0.75 + 0.35 * pulse);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+      void main() {
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        if (d > 0.5) discard;
+        float core = smoothstep(0.5, 0.0, d);
+        float hotCenter = smoothstep(0.18, 0.0, d);
+        vec3 col = vColor * core * 1.8 + vec3(0.95, 0.9, 1.0) * hotCenter * 0.9;
+        gl_FragColor = vec4(col, core * vAlpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+
+  const planktonPoints = new THREE.Points(geometry, material);
+  planktonPoints.frustumCulled = false;
+  voidParticlesGroup.add(planktonPoints);
+  voidParticlesGroup.visible = false;
+})();
+
 let currentTowerTheme = TOWERS.ash;
 
+/**
+ * Обновляет все шейдеры, частицы, пост-обработку и параметры Бури в каждом кадре.
+ */
 function updateEnvironmentVisuals(time, dt) {
   hazardEffectsGroup.position.y = lavaMesh.position.y;
-  const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
+  const towerConfig = currentTowerTheme || TOWERS.ash;
+  const towerId = towerConfig.id;
+
+  // Привязываем вертикальное окно атмосферных частиц к высоте игрока/камеры
+  const focusY = typeof state !== 'undefined' && state && state.player ? state.player.y + 6 : camera.position.y;
+  towerAtmosphereGroup.position.y = focusY;
+
+  // Вычисляем коэффициент активной Бури (0..1)
+  const stormFactor =
+    typeof state !== 'undefined' && state && state.towerStorm
+      ? state.towerStorm.blend || 0
+      : window.menuStormPreviewFactor || 0;
+
+  activeVFXState.towerId = towerId;
+  activeVFXState.stormFactor = stormFactor;
+
+  const baseCfg = towerConfig.vfxBase;
+  const stormCfg = towerConfig.vfxStorm;
 
   if (towerId === 'ash') {
-    const wallMat = TOWER_WALL_MATERIALS.ash;
-    wallMat.emissiveIntensity = 1.35 + Math.sin(time * 2.2) * 0.28;
-    const glowDisc = hazardAshGroup.userData.glowDisc;
-    if (glowDisc) {
-      glowDisc.rotation.z = time * 0.06;
-      glowDisc.material.opacity = 0.32 + Math.sin(time * 3.1) * 0.1;
+    const curBloom = lerp(baseCfg.bloomStrength, stormCfg.bloomStrength, stormFactor);
+    const curThresh = baseCfg.bloomThreshold;
+    const curHeat = lerp(baseCfg.heatDistortion, stormCfg.heatDistortion, stormFactor);
+    const curLavaSpd = lerp(baseCfg.lavaSpeed, stormCfg.lavaSpeed, stormFactor);
+    const curFogParam = lerp(baseCfg.fogDensity, stormCfg.fogDensity, stormFactor);
+    const curRenderFog = lerp(baseCfg.renderFogDensity, stormCfg.renderFogDensity, stormFactor);
+
+    activeVFXState.bloomStrength = curBloom;
+    activeVFXState.bloomThreshold = curThresh;
+    activeVFXState.heatDistortion = curHeat;
+    activeVFXState.lavaSpeed = curLavaSpd;
+    activeVFXState.fogDensityParam = curFogParam;
+    activeVFXState.renderFogDensity = curRenderFog;
+
+    if (bloomPass) {
+      bloomPass.strength = curBloom;
+      bloomPass.threshold = curThresh;
+      bloomPass.radius = lerp(baseCfg.bloomRadius, stormCfg.bloomRadius, stormFactor);
     }
+    if (towerPostPass) {
+      towerPostPass.uniforms.uTowerMode.value = 0;
+      towerPostPass.uniforms.uTime.value = time;
+      towerPostPass.uniforms.uHeatStrength.value = curHeat;
+      towerPostPass.uniforms.uStormFactor.value = stormFactor;
+    }
+
+    scene.fog.density = curRenderFog;
+    if (TOWER_SHADER_UNIFORMS.ashLavaSea) {
+      TOWER_SHADER_UNIFORMS.ashLavaSea.uTime.value = time;
+      TOWER_SHADER_UNIFORMS.ashLavaSea.uSpeed.value = curLavaSpd;
+      TOWER_SHADER_UNIFORMS.ashLavaSea.uFogDensity.value = curRenderFog;
+    }
+    for (let i = 0; i < TOWER_SHADER_UNIFORMS.ashFlows.length; i++) {
+      const u = TOWER_SHADER_UNIFORMS.ashFlows[i];
+      u.uTime.value = time;
+      u.uSpeed.value = curLavaSpd;
+      u.uFogDensity.value = curRenderFog;
+    }
+    for (let i = 0; i < TOWER_SHADER_UNIFORMS.ashPuddles.length; i++) {
+      const u = TOWER_SHADER_UNIFORMS.ashPuddles[i];
+      u.uTime.value = time;
+      u.uSpeed.value = curLavaSpd;
+      u.uFogDensity.value = curRenderFog;
+    }
+
+    // Анимация частиц пепла и раскалённых угольков
+    if (ashParticleGeometry) {
+      const posAttr = ashParticleGeometry.attributes.position;
+      const speedBoost = 1 + stormFactor * 1.4;
+      for (let i = 0; i < ashParticleSystemData.length; i++) {
+        const d = ashParticleSystemData[i];
+        let x = posAttr.getX(i);
+        let y = posAttr.getY(i);
+        let z = posAttr.getZ(i);
+
+        y += d.speedY * speedBoost * dt;
+        x += Math.sin(time * d.freq + d.phase + y * 0.08) * d.amp * speedBoost;
+        z += Math.cos(time * d.freq * 0.9 + d.phase + x * 0.08) * d.amp * speedBoost;
+
+        const cosA = Math.cos(d.swirlSpeed * speedBoost * dt);
+        const sinA = Math.sin(d.swirlSpeed * speedBoost * dt);
+        const nx = x * cosA - z * sinA;
+        const nz = x * sinA + z * cosA;
+
+        if (y > 30.0) y = -30.0;
+        posAttr.setXYZ(i, nx, y, nz);
+      }
+      posAttr.needsUpdate = true;
+    }
+
     const crustRocks = hazardAshGroup.userData.crustRocks;
     if (crustRocks) {
       for (let i = 0; i < crustRocks.length; i++) {
         const rock = crustRocks[i];
         const ud = rock.userData;
-        const a = ud.baseAngle + time * 0.03 * (i % 2 ? 1 : -1);
+        const a = ud.baseAngle + time * 0.025 * (i % 2 ? 1 : -1);
         rock.position.x = Math.cos(a) * ud.radius;
         rock.position.z = Math.sin(a) * ud.radius;
         rock.position.y = 0.1 + Math.sin(time * 1.8 + ud.phase) * 0.08;
       }
     }
   } else if (towerId === 'ice') {
-    const wallMat = TOWER_WALL_MATERIALS.ice;
-    wallMat.emissiveIntensity = 1.05 + Math.sin(time * 1.6) * 0.18;
-    const rings = hazardIceGroup.userData.funnelRings;
-    if (rings) {
-      for (let i = 0; i < rings.length; i++) {
-        rings[i].rotation.z = time * (0.55 - i * 0.12) * (i % 2 ? -1 : 1);
-      }
+    const curBloom = lerp(baseCfg.bloomStrength, stormCfg.bloomStrength, stormFactor);
+    const curCracks = lerp(baseCfg.crackEmissive, stormCfg.crackEmissive, stormFactor);
+    const curFog = lerp(baseCfg.fogDensity, stormCfg.fogDensity, stormFactor);
+    const curBlizzardSpd = lerp(baseCfg.blizzardSpeed, stormCfg.blizzardSpeed, stormFactor);
+
+    activeVFXState.bloomStrength = curBloom;
+    activeVFXState.crackEmissive = curCracks;
+    activeVFXState.fogDensityParam = curFog;
+    activeVFXState.renderFogDensity = curFog;
+    activeVFXState.blizzardSpeed = curBlizzardSpd;
+
+    if (bloomPass) {
+      bloomPass.strength = curBloom;
+      bloomPass.threshold = lerp(baseCfg.bloomThreshold, stormCfg.bloomThreshold, stormFactor);
+      bloomPass.radius = lerp(baseCfg.bloomRadius, stormCfg.bloomRadius, stormFactor);
+    }
+    if (towerPostPass) {
+      towerPostPass.uniforms.uTowerMode.value = 1;
+      towerPostPass.uniforms.uTime.value = time;
+      towerPostPass.uniforms.uStormFactor.value = stormFactor;
+    }
+
+    scene.fog.density = curFog;
+    if (typeof TOWER_SLAB_MATERIALS !== 'undefined' && TOWER_SLAB_MATERIALS.ice) {
+      TOWER_SLAB_MATERIALS.ice.emissiveIntensity = curCracks;
+    }
+
+    const scaledTime = time * curBlizzardSpd;
+    for (let i = 0; i < TOWER_SHADER_UNIFORMS.iceBlizzard.length; i++) {
+      TOWER_SHADER_UNIFORMS.iceBlizzard[i].uTime.value = scaledTime;
+    }
+    if (TOWER_SHADER_UNIFORMS.iceDust) {
+      TOWER_SHADER_UNIFORMS.iceDust.uTime.value = scaledTime;
+    }
+    if (TOWER_SHADER_UNIFORMS.iceSpiralSnow) {
+      TOWER_SHADER_UNIFORMS.iceSpiralSnow.uTime.value = scaledTime;
+    }
+    for (let i = 0; i < TOWER_SHADER_UNIFORMS.iceCreepingFog.length; i++) {
+      TOWER_SHADER_UNIFORMS.iceCreepingFog[i].uTime.value = scaledTime;
     }
   } else if (towerId === 'void') {
-    const wallMat = TOWER_WALL_MATERIALS.void;
-    wallMat.emissiveIntensity =
-      1.45 + Math.sin(time * 2.4) * 0.45 + Math.cos(time * 5.7) * 0.18;
-    const vRings = hazardVoidGroup.userData.vortexRings;
-    if (vRings) {
-      vRings[0].rotation.z = time * 0.7;
-      vRings[1].rotation.z = -time * 0.45;
-      vRings[2].rotation.z = time * 0.28;
+    const curBloom = lerp(baseCfg.bloomStrength, stormCfg.bloomStrength, stormFactor);
+    const curRgb = lerp(baseCfg.rgbShift, stormCfg.rgbShift, stormFactor);
+    const curGravAnom = lerp(baseCfg.gravityAnomaly, stormCfg.gravityAnomaly, stormFactor);
+    const curDissolve = lerp(baseCfg.dissolveThreshold, stormCfg.dissolveThreshold, stormFactor);
+    const curRenderFog = lerp(baseCfg.renderFogDensity, stormCfg.renderFogDensity, stormFactor);
+    const curGravMul = lerp(baseCfg.gravityMul, stormCfg.gravityMul, stormFactor);
+
+    activeVFXState.bloomStrength = curBloom;
+    activeVFXState.rgbShift = curRgb;
+    activeVFXState.gravityAnomaly = curGravAnom;
+    activeVFXState.dissolveThreshold = curDissolve;
+    activeVFXState.renderFogDensity = curRenderFog;
+    activeVFXState.gravityMul = curGravMul;
+
+    if (bloomPass) {
+      bloomPass.strength = curBloom;
+      bloomPass.threshold = lerp(baseCfg.bloomThreshold, stormCfg.bloomThreshold, stormFactor);
+      bloomPass.radius = lerp(baseCfg.bloomRadius, stormCfg.bloomRadius, stormFactor);
     }
-    const abyssStars = hazardVoidGroup.userData.abyssStars;
-    if (abyssStars) {
-      abyssStars.rotation.y = time * 0.08;
-      abyssStars.material.opacity = 0.6 + Math.sin(time * 4.2) * 0.3;
+    if (towerPostPass) {
+      towerPostPass.uniforms.uTowerMode.value = 2;
+      towerPostPass.uniforms.uTime.value = time;
+      towerPostPass.uniforms.uRgbShiftAmount.value = curRgb;
+      towerPostPass.uniforms.uStormFactor.value = stormFactor;
     }
+
+    scene.fog.density = curRenderFog;
+
+    for (let i = 0; i < TOWER_SHADER_UNIFORMS.voidList.length; i++) {
+      const u = TOWER_SHADER_UNIFORMS.voidList[i];
+      if (u.uTime) u.uTime.value = time;
+      if (u.uSurge) u.uSurge.value = stormFactor * 1.45;
+      if (u.uGravitySpeed) u.uGravitySpeed.value = curGravAnom;
+      if (u.uDissolveLevel && u.uBrokenEnd && u.uBrokenEnd.value > 0.2) {
+        u.uDissolveLevel.value = curDissolve;
+      }
+    }
+  }
+
+  if (typeof syncAmbientToTower === 'function') {
+    syncAmbientToTower(towerId, stormFactor);
   }
 
   if (typeof updateTowerDecorAnimations === 'function') {
@@ -1976,10 +2840,16 @@ function applyTowerTheme(towerConfig) {
   lavaMesh.material = LAVA_MATERIALS[id];
   towerWallMesh.material = TOWER_WALL_MATERIALS[id];
   iceInnerGlazeMesh.visible = id === 'ice';
+  voidSkyDomeGroup.visible = id === 'void';
+  scene.environment = id === 'ice' ? ICE_ENV_CUBEMAP : null;
 
   hazardAshGroup.visible = id === 'ash';
   hazardIceGroup.visible = id === 'ice';
   hazardVoidGroup.visible = id === 'void';
+
+  ashParticlesGroup.visible = id === 'ash';
+  iceParticlesGroup.visible = id === 'ice';
+  voidParticlesGroup.visible = id === 'void';
 
   scene.background = BACKGROUND_TEXTURES[id];
   scene.fog.color.setHex(towerConfig.fogColor);
@@ -2001,13 +2871,19 @@ function applyTowerTheme(towerConfig) {
     rimLight.color.setHex(towerConfig.rimLightColor);
   }
 
-  if (typeof dustMat !== 'undefined' && towerConfig.dustColor) {
-    dustMat.color.setHex(towerConfig.dustColor);
-    dustMat.size = towerConfig.dustSize || 0.32;
-    dustMat.opacity = towerConfig.dustOpacity || 0.6;
+  // Скрываем старые базовые dustParticles, т.к. теперь работают полноценные системы частиц из 3D-макетов
+  if (typeof dustParticles !== 'undefined') {
+    dustParticles.visible = false;
   }
 
   if (typeof applyTowerHazardPalette === 'function') {
     applyTowerHazardPalette(id);
+  }
+
+  if (typeof syncAmbientToTower === 'function') {
+    syncAmbientToTower(id, 0);
+  }
+  if (typeof updateAudioButtonUI === 'function') {
+    updateAudioButtonUI();
   }
 }

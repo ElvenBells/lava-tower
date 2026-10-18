@@ -1,6 +1,7 @@
 /* ==========================================================================
    Конфигурация и баланс игры:
-   оружие, предметы, тома, мутаторы, мобы, боссы, герои, башни, пакты, кузница
+   оружие, предметы, тома, мутаторы, мобы, боссы, герои, башни (с VFX и Бурями),
+   пакты, кузница
    ========================================================================== */
 
 /**
@@ -175,7 +176,6 @@ const TOWER_MOB_NAMES = {
 
 /**
  * Пороги вероятностей появления мобов [s, r, l] по этажам (остаток — 't').
- * Этаж 0: только Рой (85%) и Стрелки; Прыгуны — с 1-го, Танки — со 2-го этажа.
  */
 const WAVE_THRESHOLDS = [
   [0.85, 1.01, 1.01],
@@ -187,7 +187,6 @@ const WAVE_THRESHOLDS = [
 
 /**
  * Общий пул карточек улучшений при повышении уровня или открытии сундука.
- * Формат элемента: [категория ('w' | 'i' | 't'), ключ]
  */
 const UPGRADE_POOL = [
   ...Object.keys(WEAPONS).map((key) => ['w', key]),
@@ -361,7 +360,8 @@ const PACTS = {
 };
 
 /**
- * Конфигурация трёх башен с индивидуальной атмосферой, палитрой и освещением.
+ * Конфигурация трёх башен с зафиксированными параметрами шейдеров/VFX из 3D-макетов
+ * и параметрами периодических «Бурь».
  */
 const TOWERS = {
   ash: {
@@ -370,24 +370,45 @@ const TOWERS = {
     hazardGenitive: 'лавы',
     loseTitle: 'ЛАВА ПОБЕДИЛА',
     description:
-      'Тёмно-багровый кирпич с магматическими трещинами, бурлящее море лавы снизу. Боссы: Голем Пепельных Врат, Кристальная Матка, Лавовый Колосс.',
+      'Детализированный базальт с обугленными участками и редкими лавовыми трещинами, 3D-ручьи текущей по стенам и ступеням магмы, кипящие лужи на полу и атмосфера «Великого Горна».',
     unlockCondition: '',
-    fogColor: 0x1a090d,
-    fogDensity: 0.0105,
-    hemiSkyColor: 0xb86b58,
-    hemiGroundColor: 0x4d1506,
-    dirLightColor: 0xffb878,
-    dirLightIntensity: 0.55,
-    lavaLightColor: 0xff5a00,
-    lavaLightIntensity: 3.1,
-    rimLightColor: 0xff7030,
-    blockColors: [0xb58d82, 0xa87e78, 0xba7c72],
+    fogColor: 0x220707,
+    fogDensity: 0.0165, // базовый рендер-туман (соответствует параметру 0.065 в шкале башни)
+    hemiSkyColor: 0x525664,
+    hemiGroundColor: 0xd93800,
+    dirLightColor: 0x8a92a6,
+    dirLightIntensity: 0.75,
+    lavaLightColor: 0xff5a18,
+    lavaLightIntensity: 2.6,
+    rimLightColor: 0xff4800,
+    blockColors: [0x7c7e84, 0x6e7076, 0x5c5e64],
     layoutWeights: [0.15, 0.4, 0.7],
     islandRemoveProb: 0.32,
-    dustColor: 0xff9442,
-    dustSize: 0.34,
-    dustOpacity: 0.65,
-    backgroundGradient: ['#1a060a', '#3d0e14', '#6e1c0a']
+    dustColor: 0xff7722,
+    dustSize: 0.52,
+    dustOpacity: 0.85,
+    backgroundGradient: ['#140505', '#220707', '#3a0a06'],
+    // Зафиксированные параметры из ТЗ:
+    vfxBase: {
+      bloomStrength: 0.3,
+      bloomThreshold: 0.14,
+      bloomRadius: 0.55,
+      heatDistortion: 0.039,
+      lavaSpeed: 2.25,
+      fogDensity: 0.065,
+      renderFogDensity: 0.0165
+    },
+    // Параметры во время Пепельной бури:
+    vfxStorm: {
+      stormName: 'ПЕПЕЛЬНАЯ БУРЯ',
+      bloomStrength: 2.2,
+      bloomThreshold: 0.14,
+      bloomRadius: 0.65,
+      heatDistortion: 0.073,
+      lavaSpeed: 3.15,
+      fogDensity: 0.03,
+      renderFogDensity: 0.032
+    }
   },
   ice: {
     id: 'ice',
@@ -395,28 +416,49 @@ const TOWERS = {
     hazardGenitive: 'метели',
     loseTitle: 'МЕТЕЛЬ ПОБЕДИЛА',
     description:
-      'Полупрозрачный голубой лёд с вмёрзшими силуэтами, скользкий пол и метель. Боссы: Хранитель Забытых Обрядов, Изувеченная Снежная Пряха, Первозданный Буран.',
+      'Полупрозрачный лёд (IOR 1.31) с вмёрзшими силуэтами тех, кто не дошёл до вершины, зеркальный пол со светящимися трещинами (#88ddff), сосульки на ступенях и 3-слойная воронка метели.',
     unlockCondition: 'Победить Лавового Колосса в Пепельной башне',
-    fogColor: 0x10253d,
-    fogDensity: 0.0115,
-    hemiSkyColor: 0xd4f0ff,
-    hemiGroundColor: 0x285680,
+    fogColor: 0xc4e2f5,
+    fogDensity: 0.004,
+    hemiSkyColor: 0xb8e2f2,
+    hemiGroundColor: 0xe8f7ff,
     dirLightColor: 0xe6f7ff,
-    dirLightIntensity: 0.72,
-    lavaLightColor: 0x68c8ff,
-    lavaLightIntensity: 2.6,
-    rimLightColor: 0x90e0ff,
-    blockColors: [0xc2e4ff, 0xd4eeff, 0xb2d8f8],
+    dirLightIntensity: 0.78,
+    lavaLightColor: 0x88ddff,
+    lavaLightIntensity: 2.2,
+    rimLightColor: 0x9be6ff,
+    blockColors: [0x8bc9eb, 0x9edbff, 0x7ba6c2],
     layoutWeights: [0.25, 0.45, 0.7],
     islandRemoveProb: 0.3,
     isSlipperyIce: 1,
     hasColdPenalty: 1,
     hazardSpeedMul: 0.85,
     enemyHpMul: 1.15,
-    dustColor: 0xdff6ff,
-    dustSize: 0.36,
-    dustOpacity: 0.78,
-    backgroundGradient: ['#0b1d36', '#1c426e', '#4b8ec2']
+    dustColor: 0xe8f7ff,
+    dustSize: 0.44,
+    dustOpacity: 0.88,
+    backgroundGradient: ['#0a1526', '#264e73', '#d0e8f7'],
+    // Зафиксированные параметры из ТЗ:
+    vfxBase: {
+      bloomStrength: 0.0,
+      bloomThreshold: 0.72,
+      bloomRadius: 0.65,
+      crackEmissive: 1.95,
+      fogDensity: 0.004,
+      renderFogDensity: 0.004,
+      blizzardSpeed: 0.5
+    },
+    // Параметры во время Ледяного бурана:
+    vfxStorm: {
+      stormName: 'ЛЕДЯНОЙ БУРАН',
+      bloomStrength: 0.08,
+      bloomThreshold: 0.62,
+      bloomRadius: 0.68,
+      crackEmissive: 2.55,
+      fogDensity: 0.024,
+      renderFogDensity: 0.024,
+      blizzardSpeed: 0.9
+    }
   },
   void: {
     id: 'void',
@@ -424,26 +466,49 @@ const TOWERS = {
     hazardGenitive: 'бездны',
     loseTitle: 'БЕЗДНА ПОБЕДИЛА',
     description:
-      'Тёмно-фиолетовый камень с мерцающими рунами, слабая гравитация и бездна. Боссы: Архитектор Искажения, Пожиратель Фаз, Вестник Коллапса.',
+      'Тёмно-фиолетовый камень (#12081c) с асинхронными рунами и лентами абсолютной тьмы, обсидиановый пол со звёздной пылью, растворённые ступени, парящие осколки и аномальная гравитация.',
     unlockCondition: 'Победить в Ледяной башне',
-    fogColor: 0x080312,
-    fogDensity: 0.0095,
-    hemiSkyColor: 0xa868ff,
-    hemiGroundColor: 0x18042e,
-    dirLightColor: 0xc896ff,
-    dirLightIntensity: 0.48,
-    lavaLightColor: 0xa838ff,
-    lavaLightIntensity: 2.9,
-    rimLightColor: 0xd068ff,
-    blockColors: [0x9c82c8, 0xb084d8, 0x8a74bc],
+    fogColor: 0x070210,
+    fogDensity: 0.0092,
+    hemiSkyColor: 0x1a0933,
+    hemiGroundColor: 0x000000,
+    dirLightColor: 0xa855f7,
+    dirLightIntensity: 0.52,
+    lavaLightColor: 0x8a2be2,
+    lavaLightIntensity: 3.1,
+    rimLightColor: 0xa855f7,
+    blockColors: [0x12081c, 0x1a0c28, 0x0e0618],
     layoutWeights: [0.05, 0.3, 0.55],
     islandRemoveProb: 0.42,
     gravityMul: 0.62,
     canEnemiesBlink: 1,
-    dustColor: 0xc888ff,
-    dustSize: 0.32,
-    dustOpacity: 0.72,
-    backgroundGradient: ['#030108', '#110626', '#280a48']
+    dustColor: 0xa855f7,
+    dustSize: 0.42,
+    dustOpacity: 0.85,
+    backgroundGradient: ['#030106', '#090412', '#1a0933'],
+    // Зафиксированные параметры из ТЗ:
+    vfxBase: {
+      bloomStrength: 0.30,
+      bloomThreshold: 0.18,
+      bloomRadius: 0.65,
+      rgbShift: 0.0046,
+      gravityAnomaly: 1.4,
+      dissolveThreshold: 0.39,
+      renderFogDensity: 0.0092,
+      gravityMul: 0.62
+    },
+    // Параметры во время Шторма Пустоты:
+    vfxStorm: {
+      stormName: 'ШТОРМ ПУСТОТЫ',
+      bloomStrength: 2.15,
+      bloomThreshold: 0.16,
+      bloomRadius: 0.72,
+      rgbShift: 0.0080,
+      gravityAnomaly: 2.35,
+      dissolveThreshold: 0.65,
+      renderFogDensity: 0.022,
+      gravityMul: 0.35
+    }
   }
 };
 
@@ -517,7 +582,7 @@ const LOCKED_ITEMS = {
 };
 
 /**
- * Уникальные имена боссов для каждой из трёх башен (по мудбордам).
+ * Уникальные имена боссов для каждой из трёх башен.
  */
 const TOWER_BOSS_NAMES = {
   ash: {
