@@ -1,17 +1,13 @@
 /* ==========================================================================
    Процедурные текстуры (генерируются один раз на старте и переиспользуются):
-   многослойные карты цвета (map), рельефа (bumpMap) и свечения (emissiveMap)
-   для Пепельной башни, Ледяной башни и Башни Пустоты, а также текстуры мобов/боссов
+   многослойные карты цвета (map), нормалей/рельефа (bumpMap) и свечения (emissiveMap)
+   для Пепельной башни (детализированный базальт с обугленными участками и редкими
+   лавовыми трещинами из babylon_js_glsl.html), Ледяной башни (глубокий сплошной лёд
+   с внутренними трещинами #88ddff и вмёрзшими силуэтами из babylon_js.html) и
+   Башни Пустоты (R/G/B асинхронные руны и чёрный обсидиановый пол с редкими
+   блестящими вкраплениями звёздной пыли из babylon_js_environment.html)
    ========================================================================== */
 
-/**
- * Создаёт повторяющуюся текстуру на основе функции рисования на 2D-канвасе.
- * @param {(ctx: CanvasRenderingContext2D, size: number) => void} drawFn
- * @param {number} size
- * @param {number} repeatX
- * @param {number} repeatY
- * @returns {BABYLON.CanvasTexture}
- */
 function createProceduralTexture(drawFn, size = 256, repeatX = 1, repeatY = 1) {
   const texCanvas = document.createElement('canvas');
   texCanvas.width = texCanvas.height = size;
@@ -25,15 +21,122 @@ function createProceduralTexture(drawFn, size = 256, repeatX = 1, repeatY = 1) {
 }
 
 const TEXTURES = {};
-
-/* ---------- 1. Многослойные текстуры стен и полов для 3 башен ---------- */
-
 const TOWER_WALL_TEXTURES = {};
 const TOWER_FLOOR_TEXTURES = {};
 
-/**
- * Рисует ломаную линию (трещину или жилу) с поддержкой бесшовного повтора по краям текстуры.
- */
+/* ---------- Утилиты шума и конвертации карт рельефа в Normal Map (из референсов) ---------- */
+
+function texSeededRandom(seed) {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function tiledNoise2D(x, y, period) {
+  const xi = Math.floor(x);
+  const yi = Math.floor(y);
+  const xf = x - xi;
+  const yf = y - yi;
+  const u = xf * xf * (3.0 - 2.0 * xf);
+  const v = yf * yf * (3.0 - 2.0 * yf);
+
+  const x0 = ((xi % period) + period) % period;
+  const x1 = (((xi + 1) % period) + period) % period;
+  const y0 = ((yi % period) + period) % period;
+  const y1 = (((yi + 1) % period) + period) % period;
+
+  const n00 = texSeededRandom(x0 * 57.0 + y0 * 131.0 + 19.0);
+  const n10 = texSeededRandom(x1 * 57.0 + y0 * 131.0 + 19.0);
+  const n01 = texSeededRandom(x0 * 57.0 + y1 * 131.0 + 19.0);
+  const n11 = texSeededRandom(x1 * 57.0 + y1 * 131.0 + 19.0);
+
+  const nx0 = n00 * (1 - u) + n10 * u;
+  const nx1 = n01 * (1 - u) + n11 * u;
+  return nx0 * (1 - v) + nx1 * v;
+}
+
+function tiledFbm2D(u, v, basePeriod = 8, octaves = 4) {
+  let value = 0;
+  let amp = 0.5;
+  let p = basePeriod;
+  for (let i = 0; i < octaves; i++) {
+    value += amp * tiledNoise2D(u * p, v * p, p);
+    p *= 2;
+    amp *= 0.5;
+  }
+  return value;
+}
+
+function stoneHash3D(px, py, pz) {
+  const fx = ((px * 0.3183099 + 0.1) % 1 + 1) % 1 * 17.0;
+  const fy = ((py * 0.3183099 + 0.1) % 1 + 1) % 1 * 17.0;
+  const fz = ((pz * 0.3183099 + 0.1) % 1 + 1) % 1 * 17.0;
+  const prod = fx * fy * fz * (fx + fy + fz);
+  return prod - Math.floor(prod);
+}
+
+function stoneNoise3D(x, y, z) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  let fx = x - ix, fy = y - iy, fz = z - iz;
+  fx = fx * fx * (3.0 - 2.0 * fx);
+  fy = fy * fy * (3.0 - 2.0 * fy);
+  fz = fz * fz * (3.0 - 2.0 * fz);
+
+  const n000 = stoneHash3D(ix, iy, iz);
+  const n100 = stoneHash3D(ix + 1, iy, iz);
+  const n010 = stoneHash3D(ix, iy + 1, iz);
+  const n110 = stoneHash3D(ix + 1, iy + 1, iz);
+  const n001 = stoneHash3D(ix, iy, iz + 1);
+  const n101 = stoneHash3D(ix + 1, iy, iz + 1);
+  const n011 = stoneHash3D(ix, iy + 1, iz + 1);
+  const n111 = stoneHash3D(ix + 1, iy + 1, iz + 1);
+
+  const nx00 = n000 + (n100 - n000) * fx;
+  const nx10 = n010 + (n110 - n010) * fx;
+  const nx01 = n001 + (n101 - n001) * fx;
+  const nx11 = n011 + (n111 - n011) * fx;
+
+  const nxy0 = nx00 + (nx10 - nx00) * fy;
+  const nxy1 = nx01 + (nx11 - nx01) * fy;
+  return nxy0 + (nxy1 - nxy0) * fz;
+}
+
+function convertBumpToNormalCanvas(bumpCanvas, strength = 3.5) {
+  const w = bumpCanvas.width;
+  const h = bumpCanvas.height;
+  const srcCtx = bumpCanvas.getContext('2d');
+  const src = srcCtx.getImageData(0, 0, w, h).data;
+
+  const normCanvas = document.createElement('canvas');
+  normCanvas.width = w;
+  normCanvas.height = h;
+  const dstCtx = normCanvas.getContext('2d');
+  const dstImg = dstCtx.createImageData(w, h);
+  const dst = dstImg.data;
+
+  const getH = (x, y) => {
+    const wx = (x + w) % w;
+    const wy = (y + h) % h;
+    return src[(wy * w + wx) * 4] / 255.0;
+  };
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (getH(x - 1, y) - getH(x + 1, y)) * strength;
+      const dy = (getH(x, y - 1) - getH(x, y + 1)) * strength;
+      const dz = 1.0;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1.0;
+
+      const idx = (y * w + x) * 4;
+      dst[idx] = Math.floor(((dx / len) * 0.5 + 0.5) * 255);
+      dst[idx + 1] = Math.floor(((dy / len) * 0.5 + 0.5) * 255);
+      dst[idx + 2] = Math.floor(((dz / len) * 0.5 + 0.5) * 255);
+      dst[idx + 3] = 255;
+    }
+  }
+  dstCtx.putImageData(dstImg, 0, 0);
+  return normCanvas;
+}
+
 function drawSeamlessCrack(ctx, size, points, width, strokeStyle, shadowColor, shadowBlur) {
   ctx.save();
   ctx.lineCap = 'round';
@@ -57,9 +160,6 @@ function drawSeamlessCrack(ctx, size, points, width, strokeStyle, shadowColor, s
   ctx.restore();
 }
 
-/**
- * Генерирует набор органических ветвящихся трещин для бесшовной текстуры.
- */
 function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
   const network = [];
   for (let c = 0; c < mainCount; c++) {
@@ -88,245 +188,425 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
   return network;
 }
 
-// ==================== I. ПЕПЕЛЬНАЯ БАШНЯ (ASH) ====================
+// ==================== I. ПЕПЕЛЬНАЯ БАШНЯ (ASH — из babylon_js_glsl.html) ====================
+// Детализированный базальтовый камень, некоторые участки обуглены до черноты,
+// в некоторых местах присутствуют ветвящиеся «лавовые трещины»
 (function buildAshTowerTextures() {
   const size = 512;
-  const wallCracks = generateCrackNetwork(size, 9, 8, 52, 64);
 
-  const wallMap = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#18070a';
-    ctx.fillRect(0, 0, sz, sz);
+  // 1. Текстуры каменной кладки стен (createWallStoneTextures из babylon_js_glsl.html)
+  const diffCanvas = document.createElement('canvas');
+  diffCanvas.width = diffCanvas.height = size;
+  const dCtx = diffCanvas.getContext('2d');
 
-    const rowH = 20;
-    for (let y = 0, row = 0; y < sz; y += rowH, row++) {
-      let x = row % 2 ? -20 : 0;
-      while (x < sz) {
-        const brickW = 38 + (((Math.sin(row * 7.3 + x * 0.17) + 1) * 10) | 0);
-        const r = 56 + (((Math.cos(row * 3.1 + x * 0.07) + 1) * 24) | 0);
-        const g = 16 + (((Math.sin(row * 5.7 + x * 0.09) + 1) * 9) | 0);
-        const b = 20 + (((Math.cos(row * 2.3 + x * 0.08) + 1) * 11) | 0);
+  const bumpCanvas = document.createElement('canvas');
+  bumpCanvas.width = bumpCanvas.height = size;
+  const bCtx = bumpCanvas.getContext('2d');
 
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x + 2, y + 2, brickW - 4, rowH - 4);
+  const emCanvas = document.createElement('canvas');
+  emCanvas.width = emCanvas.height = size;
+  const eCtx = emCanvas.getContext('2d');
 
-        ctx.fillStyle = 'rgba(145,45,38,0.32)';
-        ctx.fillRect(x + 2, y + 2, brickW - 4, 3);
-        ctx.fillStyle = 'rgba(10,2,4,0.7)';
-        ctx.fillRect(x + 2, y + rowH - 5, brickW - 4, 3);
+  dCtx.fillStyle = '#0c0c0e';
+  dCtx.fillRect(0, 0, size, size);
+  bCtx.fillStyle = '#121212';
+  bCtx.fillRect(0, 0, size, size);
+  eCtx.fillStyle = '#000000';
+  eCtx.fillRect(0, 0, size, size);
 
-        x += brickW;
+  const rows = 14;
+  const cols = 7;
+  const blockH = size / rows;
+  const blockW = size / cols;
+
+  for (let r = 0; r < rows; r++) {
+    const offset = (r % 2) * (blockW * 0.48);
+    for (let c = -1; c <= cols; c++) {
+      const jitterW = (texSeededRandom(r * 19 + c * 73) - 0.5) * 6;
+      const bx = c * blockW + offset + jitterW;
+      const by = r * blockH;
+      const bw = blockW - jitterW * 0.5;
+      const bh = blockH;
+      const pad = 2.5;
+
+      const baseVal = 50 + Math.floor(texSeededRandom(r * 41 + c * 23) * 30);
+      const warmShift = Math.floor((texSeededRandom(r * 13 + c * 97) - 0.4) * 8);
+      const cr = baseVal + warmShift;
+      const cg = baseVal - 1;
+      const cb = baseVal + 2 - warmShift;
+
+      dCtx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      dCtx.fillRect(bx + pad, by + pad, bw - pad * 2, bh - pad * 2);
+
+      const hVal = 150 + Math.floor(texSeededRandom(r * 71 + c * 29) * 75);
+      bCtx.fillStyle = `rgb(${hVal}, ${hVal}, ${hVal})`;
+      bCtx.fillRect(bx + pad + 1, by + pad + 1, bw - pad * 2 - 2, bh - pad * 2 - 2);
+    }
+  }
+
+  const diffData = dCtx.getImageData(0, 0, size, size);
+  const bumpData = bCtx.getImageData(0, 0, size, size);
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const idx = (y * size + x) * 4;
+
+      const macroN = tiledFbm2D(u, v, 4, 4);
+      const medN = tiledFbm2D(u + 0.31, v + 0.57, 16, 4);
+      const fineN = tiledNoise2D(u * 96, v * 96, 96);
+      const microCrack = Math.abs(tiledFbm2D(u + 0.13, v + 0.79, 12, 3) - 0.5) * 2.0;
+
+      // Обугленные до глубокой черноты участки камня
+      const charMask = Math.max(0, Math.min(1, (macroN - 0.52) * 3.8 + (medN - 0.5) * 0.9));
+      const darkCrackMask = microCrack < 0.045 ? (1.0 - microCrack / 0.045) : 0.0;
+
+      let r = diffData.data[idx];
+      let g = diffData.data[idx + 1];
+      let b = diffData.data[idx + 2];
+
+      const grain = (medN - 0.5) * 34 + (fineN - 0.5) * 22;
+      r += grain;
+      g += grain * 0.96;
+      b += grain * 0.94;
+
+      r *= (1.0 - darkCrackMask * 0.72);
+      g *= (1.0 - darkCrackMask * 0.72);
+      b *= (1.0 - darkCrackMask * 0.72);
+
+      const charDarken = 1.0 - charMask * 0.90;
+      r = r * charDarken + 4 * charMask;
+      g = g * charDarken + 4 * charMask;
+      b = b * charDarken + 6 * charMask;
+
+      diffData.data[idx]     = Math.max(4, Math.min(255, Math.floor(r)));
+      diffData.data[idx + 1] = Math.max(4, Math.min(255, Math.floor(g)));
+      diffData.data[idx + 2] = Math.max(5, Math.min(255, Math.floor(b)));
+
+      let bv = bumpData.data[idx];
+      bv += (medN - 0.5) * 75 + (fineN - 0.5) * 42 - darkCrackMask * 110;
+      bv = Math.max(0, Math.min(255, Math.floor(bv)));
+      bumpData.data[idx] = bumpData.data[idx + 1] = bumpData.data[idx + 2] = bv;
+    }
+  }
+
+  dCtx.putImageData(diffData, 0, 0);
+  bCtx.putImageData(bumpData, 0, 0);
+
+  // Ветвящиеся лавовые трещины в некоторых местах стены
+  const sparseCrackCount = 6;
+  for (let i = 0; i < sparseCrackCount; i++) {
+    let cx = (0.14 + texSeededRandom(i * 113 + 9) * 0.72) * size;
+    let cy = (0.14 + texSeededRandom(i * 197 + 23) * 0.72) * size;
+    const segments = 16 + Math.floor(texSeededRandom(i * 43) * 12);
+    let angle = Math.PI * 0.5 + (texSeededRandom(i * 79) - 0.5) * 1.2;
+
+    for (let s = 0; s < segments; s++) {
+      const stepLen = 5 + texSeededRandom(i * 311 + s * 17) * 7;
+      angle += (texSeededRandom(i * 509 + s * 23) - 0.5) * 0.85;
+      const nx = cx + Math.cos(angle) * stepLen;
+      const ny = cy + Math.sin(angle) * stepLen;
+
+      const t = 1.0 - s / segments;
+      const taper = Math.sin(t * Math.PI);
+      const width = 0.9 + taper * 2.2;
+
+      dCtx.strokeStyle = 'rgba(5, 4, 5, 0.9)';
+      dCtx.lineWidth = width * 4.5;
+      dCtx.lineCap = 'round';
+      dCtx.beginPath();
+      dCtx.moveTo(cx, cy);
+      dCtx.lineTo(nx, ny);
+      dCtx.stroke();
+
+      eCtx.strokeStyle = 'rgba(235, 55, 0, 0.55)';
+      eCtx.lineWidth = width * 2.4;
+      eCtx.lineCap = 'round';
+      eCtx.shadowColor = '#ff3800';
+      eCtx.shadowBlur = 8;
+      eCtx.beginPath();
+      eCtx.moveTo(cx, cy);
+      eCtx.lineTo(nx, ny);
+      eCtx.stroke();
+
+      eCtx.strokeStyle = s % 3 === 0 ? '#ffaa18' : '#ff4500';
+      eCtx.lineWidth = width * 0.95;
+      eCtx.beginPath();
+      eCtx.moveTo(cx, cy);
+      eCtx.lineTo(nx, ny);
+      eCtx.stroke();
+
+      bCtx.strokeStyle = '#020202';
+      bCtx.lineWidth = width * 2.2;
+      bCtx.beginPath();
+      bCtx.moveTo(cx, cy);
+      bCtx.lineTo(nx, ny);
+      bCtx.stroke();
+
+      cx = nx;
+      cy = ny;
+    }
+  }
+
+  const wallNormalCanvas = convertBumpToNormalCanvas(bumpCanvas, 4.2);
+  const wallMap = new BABYLON.CanvasTexture(diffCanvas);
+  const wallBump = new BABYLON.CanvasTexture(wallNormalCanvas);
+  const wallEmissive = new BABYLON.CanvasTexture(emCanvas);
+  for (const t of [wallMap, wallBump, wallEmissive]) {
+    t.wrapS = t.wrapT = BABYLON.RepeatWrapping;
+    t.repeat.set(6, 4);
+  }
+
+  // 2. Текстуры каменного пола и ступеней (createFloorStoneTextures из babylon_js_glsl.html)
+  const fDiffCanvas = document.createElement('canvas');
+  fDiffCanvas.width = fDiffCanvas.height = size;
+  const fdCtx = fDiffCanvas.getContext('2d');
+
+  const fBumpCanvas = document.createElement('canvas');
+  fBumpCanvas.width = fBumpCanvas.height = size;
+  const fbCtx = fBumpCanvas.getContext('2d');
+
+  const fEmCanvas = document.createElement('canvas');
+  fEmCanvas.width = fEmCanvas.height = size;
+  const feCtx = fEmCanvas.getContext('2d');
+
+  const fdImg = fdCtx.createImageData(size, size);
+  const fbImg = fbCtx.createImageData(size, size);
+  const feImg = feCtx.createImageData(size, size);
+
+  for (let y = 0; y < size; y++) {
+    const v = y / size;
+    for (let x = 0; x < size; x++) {
+      const u = x / size;
+      const idx = (y * size + x) * 4;
+
+      const nMacro = tiledFbm2D(u, v, 4, 4);
+      const nMed = tiledFbm2D(u + 0.41, v + 0.19, 12, 4);
+      const nFine = tiledFbm2D(u + 0.73, v + 0.61, 32, 3);
+      const nMicro = tiledNoise2D(u * 96, v * 96, 96);
+
+      const ridge1 = Math.abs(nMed - 0.5) * 2.0;
+      const ridge2 = Math.abs(tiledFbm2D(u + 0.22, v + 0.88, 8, 4) - 0.5) * 2.0;
+
+      const charZone = Math.max(0, Math.min(1, (nMacro - 0.50) * 3.6 + (nFine - 0.5) * 0.75));
+      const stoneFissure = ridge1 < 0.068 ? (1.0 - ridge1 / 0.068) : 0.0;
+      const subFissure = ridge2 < 0.042 ? (1.0 - ridge2 / 0.042) * 0.6 : 0.0;
+      const totalCrackDark = Math.min(1.0, stoneFissure + subFissure);
+
+      let baseStone = 52 + nMed * 36 + (nFine - 0.5) * 22 + (nMicro - 0.5) * 14;
+      let sr = baseStone + 2;
+      let sg = baseStone + 1;
+      let sb = baseStone + 3;
+
+      sr *= (1.0 - totalCrackDark * 0.78);
+      sg *= (1.0 - totalCrackDark * 0.78);
+      sb *= (1.0 - totalCrackDark * 0.78);
+
+      const charMult = 1.0 - charZone * 0.90;
+      sr = sr * charMult + 4 * charZone;
+      sg = sg * charMult + 4 * charZone;
+      sb = sb * charMult + 5 * charZone;
+
+      fdImg.data[idx]     = Math.max(4, Math.min(255, Math.floor(sr)));
+      fdImg.data[idx + 1] = Math.max(4, Math.min(255, Math.floor(sg)));
+      fdImg.data[idx + 2] = Math.max(5, Math.min(255, Math.floor(sb)));
+      fdImg.data[idx + 3] = 255;
+
+      let bumpVal = 140 + (nMed - 0.5) * 70 + (nFine - 0.5) * 55 + (nMicro - 0.5) * 30;
+      bumpVal -= totalCrackDark * 125;
+      fbImg.data[idx] = fbImg.data[idx + 1] = fbImg.data[idx + 2] = Math.max(0, Math.min(255, Math.floor(bumpVal)));
+      fbImg.data[idx + 3] = 255;
+
+      // Лавовые трещины в некоторых участках каменного пола
+      const rareHeatPocket = nMacro < 0.28 && ridge2 < 0.25;
+      if (ridge1 < 0.038 && rareHeatPocket) {
+        const heatMask = (1.0 - nMacro / 0.28) * (1.0 - ridge2 / 0.25);
+        const intensity = Math.pow(1.0 - ridge1 / 0.038, 1.5) * Math.min(1.0, heatMask * 2.5);
+        feImg.data[idx]     = Math.min(255, Math.floor(intensity * 255));
+        feImg.data[idx + 1] = Math.min(255, Math.floor(intensity * 95));
+        feImg.data[idx + 2] = Math.min(255, Math.floor(intensity * 12));
+        fdImg.data[idx]     = Math.floor(fdImg.data[idx] * 0.32);
+        fdImg.data[idx + 1] = Math.floor(fdImg.data[idx + 1] * 0.32);
+        fdImg.data[idx + 2] = Math.floor(fdImg.data[idx + 2] * 0.32);
+      } else {
+        feImg.data[idx] = feImg.data[idx + 1] = feImg.data[idx + 2] = 0;
       }
+      feImg.data[idx + 3] = 255;
     }
+  }
 
-    for (let i = 0; i < 450; i++) {
-      const rx = Math.random() * sz;
-      const ry = Math.random() * sz;
-      ctx.fillStyle =
-        Math.random() < 0.55
-          ? `rgba(12,3,5,${0.18 + Math.random() * 0.25})`
-          : `rgba(115,28,16,${0.12 + Math.random() * 0.18})`;
-      ctx.beginPath();
-      ctx.arc(rx, ry, 3 + Math.random() * 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  fdCtx.putImageData(fdImg, 0, 0);
+  fbCtx.putImageData(fbImg, 0, 0);
+  feCtx.putImageData(feImg, 0, 0);
 
-    for (const crack of wallCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 11 : 6, 'rgba(16,4,4,0.88)');
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5.5 : 3.2, '#ff6810', '#ff3300', 10);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 2.2 : 1.2, '#ffe490');
-    }
-  }, size, 5, 4);
-
-  const wallBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#181818';
-    ctx.fillRect(0, 0, sz, sz);
-    const rowH = 20;
-    for (let y = 0, row = 0; y < sz; y += rowH, row++) {
-      let x = row % 2 ? -20 : 0;
-      while (x < sz) {
-        const brickW = 38 + (((Math.sin(row * 7.3 + x * 0.17) + 1) * 10) | 0);
-        const shade = 150 + (((Math.cos(row * 4.1 + x * 0.09) + 1) * 35) | 0);
-        ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-        ctx.fillRect(x + 2, y + 2, brickW - 4, rowH - 4);
-        x += brickW;
-      }
-    }
-    for (const crack of wallCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 9 : 5, '#050505');
-    }
-  }, size, 5, 4);
-
-  const wallEmissive = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, sz, sz);
-    for (const crack of wallCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 9 : 5, 'rgba(215,38,0,0.8)', '#ff2a00', 16);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 4.2 : 2.4, '#ff7b18', '#ff6600', 10);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.8 : 1.0, '#fff0a8');
-    }
-  }, size, 5, 4);
-
-  const floorVeins = generateCrackNetwork(size, 6, 6, 75, 75);
-
-  const floorMap = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#26181b';
-    ctx.fillRect(0, 0, sz, sz);
-
-    for (let i = 0; i < 65; i++) {
-      const rx = Math.random() * sz;
-      const ry = Math.random() * sz;
-      const rad = 18 + Math.random() * 55;
-      const g = ctx.createRadialGradient(rx, ry, 2, rx, ry, rad);
-      g.addColorStop(0, i % 2 ? 'rgba(68,38,42,0.45)' : 'rgba(22,12,15,0.55)');
-      g.addColorStop(1, 'rgba(38,24,27,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(rx, ry, rad, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.strokeStyle = 'rgba(85,48,46,0.55)';
-    ctx.lineWidth = 8;
-    ctx.strokeRect(6, 6, sz - 12, sz - 12);
-    ctx.strokeStyle = 'rgba(14,6,8,0.8)';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, sz - 4, sz - 4);
-
-    for (const vein of floorVeins) {
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 9 : 5, 'rgba(16,5,6,0.9)');
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 4.0 : 2.2, '#d84208', '#ff4400', 8);
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 1.5 : 0.9, '#ffbe55');
-    }
-  }, size, 1, 1);
-
-  const floorBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#989898';
-    ctx.fillRect(0, 0, sz, sz);
-    for (let i = 0; i < 420; i++) {
-      const v = i % 2 ? 165 : 55;
-      ctx.fillStyle = `rgba(${v},${v},${v},0.22)`;
-      ctx.fillRect(Math.random() * sz, Math.random() * sz, 4 + Math.random() * 10, 4 + Math.random() * 10);
-    }
-    ctx.strokeStyle = '#dcdcdc';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(6, 6, sz - 12, sz - 12);
-    for (const vein of floorVeins) {
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 6 : 3.5, '#181818');
-    }
-  }, size, 1, 1);
-
-  const floorEmissive = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, sz, sz);
-    for (const vein of floorVeins) {
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 6.5 : 3.5, 'rgba(175,32,0,0.6)', '#ff3300', 10);
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 2.4 : 1.4, '#ff7818');
-      drawSeamlessCrack(ctx, sz, vein.pts, vein.main ? 1.0 : 0.6, '#ffd878');
-    }
-  }, size, 1, 1);
+  const floorNormalCanvas = convertBumpToNormalCanvas(fBumpCanvas, 4.5);
+  const floorMap = new BABYLON.CanvasTexture(fDiffCanvas);
+  const floorBump = new BABYLON.CanvasTexture(floorNormalCanvas);
+  const floorEmissive = new BABYLON.CanvasTexture(fEmCanvas);
+  for (const t of [floorMap, floorBump, floorEmissive]) {
+    t.wrapS = t.wrapT = BABYLON.RepeatWrapping;
+    t.repeat.set(1, 1);
+  }
 
   TOWER_WALL_TEXTURES.ash = { map: wallMap, bump: wallBump, emissive: wallEmissive };
   TOWER_FLOOR_TEXTURES.ash = { map: floorMap, bump: floorBump, emissive: floorEmissive };
 })();
 
-// ==================== II. ЛЕДЯНАЯ БАШНЯ (ICE) ====================
+// ==================== II. ЛЕДЯНАЯ БАШНЯ (ICE — из babylon_js.html) ====================
+// Сплошной глубокий лёд с внутренними трещинами (#88ddff, эмиссия = 1.95) и вмёрзшими силуэтами
 (function buildIceTowerTextures() {
   const size = 512;
-  const frostCracks = generateCrackNetwork(size, 8, 6, 62, 62);
 
-  function drawGothicFrozenFigure(ctx, cx, cy, scale, tilt, hasStaff) {
+  // Генератор альфа-текстур вмёрзших в лёд силуэтов странников (из babylon_js.html)
+  function buildFrozenSilhouetteTex(poseVariant) {
+    const w = 256, h = 512;
+    const cvs = document.createElement('canvas');
+    cvs.width = w;
+    cvs.height = h;
+    const ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    const aura = ctx.createRadialGradient(w * 0.5, h * 0.48, 12, w * 0.5, h * 0.48, 120);
+    aura.addColorStop(0, 'rgba(8, 22, 42, 0.68)');
+    aura.addColorStop(0.6, 'rgba(18, 48, 78, 0.28)');
+    aura.addColorStop(1, 'rgba(18, 48, 78, 0.0)');
+    ctx.fillStyle = aura;
+    ctx.fillRect(0, 0, w, h);
+
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(tilt);
-    ctx.scale(scale, scale);
+    ctx.fillStyle = '#050d1a';
+    ctx.strokeStyle = '#050d1a';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    const halo = ctx.createRadialGradient(0, 0, 6, 0, 0, 82);
-    halo.addColorStop(0, 'rgba(160,230,255,0.35)');
-    halo.addColorStop(0.5, 'rgba(20,65,110,0.45)');
-    halo.addColorStop(1, 'rgba(15,45,80,0)');
-    ctx.fillStyle = halo;
+    const cx = w * 0.5;
+    const headY = h * 0.23;
+
     ctx.beginPath();
-    ctx.ellipse(0, 0, 64, 92, 0, 0, Math.PI * 2);
+    ctx.arc(cx + (poseVariant === 1 ? -6 : 4), headY, 21, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = 'rgba(8,24,46,0.88)';
-    ctx.shadowColor = 'rgba(120,210,255,0.6)';
-    ctx.shadowBlur = 12;
-
     ctx.beginPath();
-    ctx.moveTo(0, -74);
-    ctx.lineTo(15, -52);
-    ctx.lineTo(12, -34);
-    ctx.lineTo(-12, -34);
-    ctx.lineTo(-15, -52);
+    ctx.moveTo(cx - 28, headY + 22);
+    ctx.quadraticCurveTo(cx + 32, headY + 20, cx + 26, headY + 125);
+    ctx.lineTo(cx + 42, headY + 235);
+    ctx.quadraticCurveTo(cx, headY + 215, cx - 38, headY + 240);
+    ctx.lineTo(cx - 24, headY + 120);
     ctx.closePath();
     ctx.fill();
 
-    ctx.beginPath();
-    ctx.moveTo(-14, -36);
-    ctx.lineTo(-34, -26);
-    ctx.lineTo(-28, 12);
-    ctx.lineTo(-36, 72);
-    ctx.lineTo(-10, 64);
-    ctx.lineTo(0, 32);
-    ctx.lineTo(12, 68);
-    ctx.lineTo(34, 72);
-    ctx.lineTo(26, 10);
-    ctx.lineTo(34, -26);
-    ctx.lineTo(14, -36);
-    ctx.closePath();
-    ctx.fill();
+    ctx.lineWidth = 15;
+    if (poseVariant === 0) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 20, headY + 38);
+      ctx.quadraticCurveTo(cx - 56, headY - 10, cx - 42, headY - 58);
+      ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(12,32,58,0.92)';
-    ctx.lineWidth = 4.5;
-    ctx.beginPath();
-    if (hasStaff) {
-      ctx.moveTo(22, -64);
-      ctx.lineTo(14, 74);
+      ctx.beginPath();
+      ctx.moveTo(cx + 22, headY + 42);
+      ctx.lineTo(cx + 58, headY + 95);
+      ctx.stroke();
+
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(cx + 56, headY + 75);
+      ctx.lineTo(cx + 76, headY + 210);
+      ctx.stroke();
+    } else if (poseVariant === 1) {
+      ctx.beginPath();
+      ctx.moveTo(cx - 22, headY + 40);
+      ctx.lineTo(cx - 54, headY + 86);
+      ctx.lineTo(cx - 35, headY + 35);
+      ctx.stroke();
+
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(cx - 42, headY - 45);
+      ctx.lineTo(cx - 28, headY + 275);
+      ctx.stroke();
     } else {
-      ctx.moveTo(0, -18);
-      ctx.lineTo(0, 76);
-      ctx.moveTo(-16, 2);
-      ctx.lineTo(16, 2);
+      ctx.beginPath();
+      ctx.moveTo(cx - 24, headY + 36);
+      ctx.lineTo(cx - 64, headY + 70);
+      ctx.moveTo(cx + 24, headY + 36);
+      ctx.lineTo(cx + 62, headY + 18);
+      ctx.stroke();
     }
-    ctx.stroke();
 
-    const heart = ctx.createRadialGradient(0, -12, 1, 0, -12, 16);
-    heart.addColorStop(0, 'rgba(220,250,255,0.9)');
-    heart.addColorStop(0.5, 'rgba(80,190,255,0.5)');
-    heart.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = heart;
+    ctx.lineWidth = 18;
     ctx.beginPath();
-    ctx.arc(0, -12, 16, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.strokeStyle = 'rgba(215,248,255,0.55)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-42, -28);
-    ctx.lineTo(38, 14);
-    ctx.moveTo(-30, 34);
-    ctx.lineTo(35, -18);
+    ctx.moveTo(cx - 16, headY + 150);
+    ctx.lineTo(cx - 24, headY + 285);
+    ctx.moveTo(cx + 16, headY + 150);
+    ctx.lineTo(cx + 26, headY + 280);
     ctx.stroke();
-
     ctx.restore();
+
+    ctx.strokeStyle = 'rgba(165, 230, 255, 0.38)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) {
+      ctx.beginPath();
+      ctx.moveTo(20, 80 + i * 55);
+      ctx.lineTo(w - 20, 50 + i * 58 + (i % 2) * 30);
+      ctx.stroke();
+    }
+
+    return new BABYLON.CanvasTexture(cvs);
   }
+
+  TEXTURES.frozenSilhouettes = [
+    buildFrozenSilhouetteTex(0),
+    buildFrozenSilhouetteTex(1),
+    buildFrozenSilhouetteTex(2)
+  ];
+
+  const frostCracks = generateCrackNetwork(size, 9, 6, 62, 62);
+
+  // Рельефная карта нормалей ледяных стен (generateIceWallNormalTexture из babylon_js.html)
+  const wallHeightCvs = document.createElement('canvas');
+  wallHeightCvs.width = wallHeightCvs.height = size;
+  const whCtx = wallHeightCvs.getContext('2d');
+  whCtx.fillStyle = '#303030';
+  whCtx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 64; i++) {
+    const x = (i / 64) * size;
+    const grad = whCtx.createLinearGradient(x, 0, x + 10, 0);
+    grad.addColorStop(0, '#181818');
+    grad.addColorStop(0.5, '#909090');
+    grad.addColorStop(1, '#222222');
+    whCtx.fillStyle = grad;
+    whCtx.fillRect(x, 0, 10, size);
+  }
+  whCtx.strokeStyle = 'rgba(225, 225, 225, 0.5)';
+  for (let i = 0; i < 95; i++) {
+    whCtx.lineWidth = 0.8 + texSeededRandom(i * 19) * 1.8;
+    whCtx.beginPath();
+    const sx = texSeededRandom(i * 37) * size;
+    const sy = texSeededRandom(i * 53) * size;
+    whCtx.moveTo(sx, sy);
+    whCtx.lineTo(sx + (texSeededRandom(i * 71) - 0.5) * 90, sy + (texSeededRandom(i * 89) - 0.5) * 160);
+    whCtx.stroke();
+  }
+  const wallNormalCvs = convertBumpToNormalCanvas(wallHeightCvs, 3.2);
+  const wallBump = new BABYLON.CanvasTexture(wallNormalCvs);
+  wallBump.wrapS = wallBump.wrapT = BABYLON.RepeatWrapping;
+  wallBump.repeat.set(6, 3);
 
   const wallMap = createProceduralTexture((ctx, sz) => {
     const bg = ctx.createLinearGradient(0, 0, sz, sz);
-    bg.addColorStop(0, '#163d66');
-    bg.addColorStop(0.4, '#265f96');
-    bg.addColorStop(0.75, '#1b4b7a');
-    bg.addColorStop(1, '#3478b2');
+    bg.addColorStop(0, '#112c4a');
+    bg.addColorStop(0.45, '#255a8c');
+    bg.addColorStop(0.8, '#1b4772');
+    bg.addColorStop(1, '#3b78a6');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, sz, sz);
 
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < 36; i++) {
       ctx.save();
-      ctx.translate(Math.random() * sz, Math.random() * sz);
-      ctx.rotate((Math.random() - 0.5) * 0.6);
-      ctx.fillStyle =
-        i % 2 === 0 ? 'rgba(150,220,255,0.14)' : 'rgba(10,32,60,0.22)';
+      ctx.translate(texSeededRandom(i * 17) * sz, texSeededRandom(i * 31) * sz);
+      ctx.rotate((texSeededRandom(i * 43) - 0.5) * 0.6);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(155,225,255,0.16)' : 'rgba(8,26,50,0.26)';
       ctx.beginPath();
       ctx.moveTo(-60, -30);
       ctx.lineTo(50, -40);
@@ -337,298 +617,384 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
       ctx.restore();
     }
 
-    drawGothicFrozenFigure(ctx, 115, 165, 0.95, -0.06, true);
-    drawGothicFrozenFigure(ctx, 375, 145, 0.88, 0.05, false);
-    drawGothicFrozenFigure(ctx, 245, 395, 0.92, -0.04, false);
-
     for (const crack of frostCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5.5 : 3.0, 'rgba(135,215,255,0.6)', '#70d8ff', 8);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.8 : 1.0, '#f4fcff');
+      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 6.0 : 3.2, 'rgba(136,221,255,0.65)', '#88ddff', 10);
+      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.9 : 1.1, '#f4fcff');
     }
-  }, size, 4, 3);
-
-  const wallBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#808080';
-    ctx.fillRect(0, 0, sz, sz);
-    for (const crack of frostCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5 : 3, '#202020');
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.6 : 1, '#ffffff');
-    }
-  }, size, 4, 3);
+  }, size, 6, 3);
 
   const wallEmissive = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#06182e';
+    ctx.fillStyle = '#071c33';
     ctx.fillRect(0, 0, sz, sz);
-    for (const [sx, sy] of [
-      [115, 165],
-      [375, 145],
-      [245, 395]
-    ]) {
-      const g = ctx.createRadialGradient(sx, sy, 6, sx, sy, 75);
-      g.addColorStop(0, 'rgba(85,195,255,0.45)');
-      g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(sx - 80, sy - 80, 160, 160);
-    }
     for (const crack of frostCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5 : 2.8, 'rgba(75,195,255,0.65)', '#50c8ff', 10);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.5 : 0.9, '#ebfbff');
+      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5.5 : 3.0, 'rgba(136,221,255,0.75)', '#88ddff', 12);
+      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.8 : 1.0, '#ffffff');
     }
-  }, size, 4, 3);
+  }, size, 6, 3);
 
-  const floorCracks = generateCrackNetwork(size, 5, 5, 80, 80);
+  // Сплошной глубокий лёд пола с внутренними светящимися трещинами (generateFloorMaps из babylon_js.html)
+  const fEmCanvas = document.createElement('canvas');
+  fEmCanvas.width = fEmCanvas.height = size;
+  const feCtx = fEmCanvas.getContext('2d');
 
-  const floorMap = createProceduralTexture((ctx, sz) => {
-    const grad = ctx.createRadialGradient(sz / 2, sz / 2, 20, sz / 2, sz / 2, sz * 0.72);
-    grad.addColorStop(0, '#bce6ff');
-    grad.addColorStop(0.55, '#8ec8f2');
-    grad.addColorStop(1, '#68a8dc');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, sz, sz);
+  const fRoughCanvas = document.createElement('canvas');
+  fRoughCanvas.width = fRoughCanvas.height = size;
+  const frCtx = fRoughCanvas.getContext('2d');
 
-    const cx = sz / 2;
-    const cy = sz / 2;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.strokeStyle = 'rgba(238,252,255,0.68)';
-    ctx.lineWidth = 2.5;
-    for (let k = 0; k < 8; k++) {
-      const ang = (k * Math.PI) / 4;
-      const len = k % 2 === 0 ? 185 : 135;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(ang) * len, Math.sin(ang) * len);
-      for (const d of [65, 115, 155]) {
-        if (d > len) continue;
-        const bx = Math.cos(ang) * d;
-        const by = Math.sin(ang) * d;
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx + Math.cos(ang + 0.55) * 28, by + Math.sin(ang + 0.55) * 28);
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx + Math.cos(ang - 0.55) * 28, by + Math.sin(ang - 0.55) * 28);
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
+  const fDiffCanvas = document.createElement('canvas');
+  fDiffCanvas.width = fDiffCanvas.height = size;
+  const fdCtx = fDiffCanvas.getContext('2d');
 
-    ctx.strokeStyle = 'rgba(235,250,255,0.75)';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(8, 8, sz - 16, sz - 16);
+  feCtx.fillStyle = '#030a14';
+  feCtx.fillRect(0, 0, size, size);
+  frCtx.fillStyle = 'rgb(16, 16, 20)';
+  frCtx.fillRect(0, 0, size, size);
 
-    for (const crack of floorCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 6 : 3.5, 'rgba(30,85,140,0.65)');
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 2.2 : 1.2, '#ffffff', '#a8e8ff', 8);
-    }
-  }, size, 1, 1);
+  // Глубокий слоистый ледяной массив
+  const iceGrad = fdCtx.createRadialGradient(size * 0.5, size * 0.5, 16, size * 0.5, size * 0.5, size * 0.72);
+  iceGrad.addColorStop(0, '#4a8ab8');
+  iceGrad.addColorStop(0.5, '#2b6391');
+  iceGrad.addColorStop(1, '#173d63');
+  fdCtx.fillStyle = iceGrad;
+  fdCtx.fillRect(0, 0, size, size);
 
-  const floorBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#c8c8c8';
-    ctx.fillRect(0, 0, sz, sz);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(8, 8, sz - 16, sz - 16);
-    for (const crack of floorCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 4.5 : 2.5, '#202020');
-    }
-  }, size, 1, 1);
+  // Внутренние глубинные разломы льда (эффект толстого многометрового льда)
+  const deepSubCracks = generateCrackNetwork(size, 6, 6, 75, 75);
+  for (const dc of deepSubCracks) {
+    drawSeamlessCrack(fdCtx, size, dc.pts, dc.main ? 10 : 6, 'rgba(10, 28, 52, 0.55)');
+    drawSeamlessCrack(fdCtx, size, dc.pts, dc.main ? 4 : 2.2, 'rgba(72, 168, 225, 0.38)');
+  }
 
-  const floorEmissive = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#071a30';
-    ctx.fillRect(0, 0, sz, sz);
-    for (const crack of floorCracks) {
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 5 : 3, 'rgba(85,205,255,0.65)', '#60d0ff', 10);
-      drawSeamlessCrack(ctx, sz, crack.pts, crack.main ? 1.8 : 1.0, '#ebfbff');
-    }
-  }, size, 1, 1);
+  // Верхняя сеть морозных светящихся трещин (#88ddff, как в generateFloorMaps из babylon_js.html)
+  const surfaceCracks = generateCrackNetwork(size, 9, 7, 68, 68);
+  for (const sc of surfaceCracks) {
+    drawSeamlessCrack(feCtx, size, sc.pts, sc.main ? 7.5 : 4.2, 'rgba(72, 185, 245, 0.38)', '#88ddff', 10);
+    drawSeamlessCrack(feCtx, size, sc.pts, sc.main ? 2.2 : 1.3, 'rgba(155, 232, 255, 0.95)');
+
+    drawSeamlessCrack(fdCtx, size, sc.pts, sc.main ? 5.0 : 3.0, 'rgba(136, 221, 255, 0.65)');
+    drawSeamlessCrack(fdCtx, size, sc.pts, sc.main ? 1.8 : 1.0, '#effbff');
+
+    drawSeamlessCrack(frCtx, size, sc.pts, sc.main ? 5.5 : 3.0, 'rgba(195, 195, 195, 0.8)');
+  }
+
+  const floorNormalCvs = convertBumpToNormalCanvas(fRoughCanvas, 2.6);
+  const floorMap = new BABYLON.CanvasTexture(fDiffCanvas);
+  const floorBump = new BABYLON.CanvasTexture(floorNormalCvs);
+  const floorEmissive = new BABYLON.CanvasTexture(fEmCanvas);
 
   TOWER_WALL_TEXTURES.ice = { map: wallMap, bump: wallBump, emissive: wallEmissive };
   TOWER_FLOOR_TEXTURES.ice = { map: floorMap, bump: floorBump, emissive: floorEmissive };
 })();
 
-// ==================== III. БАШНЯ ПУСТОТЫ (VOID) ====================
+// ==================== III. БАШНЯ ПУСТОТЫ (VOID — из babylon_js_environment.html) ====================
+// Руны в R/G/B каналах и чёрный обсидиановый пол с редкими блестящими вкраплениями звёздной пыли
 (function buildVoidTowerTextures() {
   const size = 512;
-  const voidRifts = generateCrackNetwork(size, 7, 6, 65, 65);
 
-  function drawArcaneRune(ctx, cx, cy, runeHeight, glyphIndex) {
-    const w = runeHeight * 0.52;
-    const h = runeHeight;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.beginPath();
-    ctx.moveTo(0, -h * 0.5);
-    ctx.lineTo(0, h * 0.5);
+  // 1. Текстуры R/G/B рун и каменного рельефа стен (generateRunesAndCracksTextures из babylon_js_environment.html)
+  const runeRGBCanvas = document.createElement('canvas');
+  runeRGBCanvas.width = runeRGBCanvas.height = size;
+  const rCtx = runeRGBCanvas.getContext('2d');
 
-    const pattern = glyphIndex % 6;
-    if (pattern === 0) {
-      ctx.moveTo(0, -h * 0.45);
-      ctx.lineTo(w, -h * 0.15);
-      ctx.lineTo(0, h * 0.1);
-      ctx.moveTo(0, -h * 0.05);
-      ctx.lineTo(w * 0.85, h * 0.35);
-    } else if (pattern === 1) {
-      ctx.moveTo(-w * 0.8, -h * 0.35);
-      ctx.lineTo(w * 0.8, h * 0.15);
-      ctx.moveTo(w * 0.8, -h * 0.35);
-      ctx.lineTo(-w * 0.8, h * 0.15);
-    } else if (pattern === 2) {
-      ctx.moveTo(0, -h * 0.45);
-      ctx.lineTo(w * 0.9, -h * 0.2);
-      ctx.moveTo(0, -h * 0.1);
-      ctx.lineTo(w * 0.75, h * 0.15);
-      ctx.moveTo(-w * 0.7, h * 0.3);
-      ctx.lineTo(w * 0.7, h * 0.3);
-    } else if (pattern === 3) {
-      ctx.moveTo(0, -h * 0.4);
-      ctx.lineTo(-w * 0.85, -h * 0.1);
-      ctx.lineTo(0, h * 0.2);
-      ctx.lineTo(w * 0.85, -h * 0.1);
-      ctx.closePath();
-    } else if (pattern === 4) {
-      ctx.moveTo(-w * 0.8, -h * 0.45);
-      ctx.lineTo(0, -h * 0.1);
-      ctx.lineTo(w * 0.8, -h * 0.45);
-      ctx.moveTo(-w * 0.6, h * 0.2);
-      ctx.lineTo(w * 0.6, h * 0.45);
-    } else {
-      ctx.moveTo(0, -h * 0.45);
-      ctx.lineTo(w * 0.8, -h * 0.45);
-      ctx.lineTo(-w * 0.7, h * 0.05);
-      ctx.lineTo(w * 0.8, h * 0.45);
+  const bumpCanvas = document.createElement('canvas');
+  bumpCanvas.width = bumpCanvas.height = size;
+  const bCtx = bumpCanvas.getContext('2d');
+
+  rCtx.fillStyle = '#000000';
+  rCtx.fillRect(0, 0, size, size);
+
+  bCtx.fillStyle = '#606060';
+  bCtx.fillRect(0, 0, size, size);
+  bCtx.strokeStyle = '#282828';
+  bCtx.lineWidth = 2.5;
+  const rows = 16;
+  const cols = 8;
+  const rowH = size / rows;
+  const colW = size / cols;
+
+  for (let r = 0; r < rows; r++) {
+    const y = r * rowH;
+    bCtx.beginPath();
+    bCtx.moveTo(0, y);
+    bCtx.lineTo(size, y);
+    bCtx.stroke();
+    const shift = (r % 2) * (colW * 0.5);
+    for (let c = 0; c <= cols; c++) {
+      const x = (c * colW + shift) % size;
+      bCtx.beginPath();
+      bCtx.moveTo(x, y);
+      bCtx.lineTo(x, y + rowH);
+      bCtx.stroke();
     }
-    ctx.stroke();
-    ctx.restore();
   }
+
+  rCtx.globalCompositeOperation = 'lighter';
+  const channelColors = ['#ff0000', '#00ff00', '#0000ff'];
+
+  function drawRuneGlyph(context, cx, cy, scale, seed) {
+    context.beginPath();
+    context.moveTo(cx, cy - scale);
+    context.lineTo(cx, cy + scale);
+
+    const type = seed % 6;
+    if (type === 0) {
+      context.moveTo(cx, cy - scale);
+      context.lineTo(cx + scale * 0.65, cy - scale * 0.3);
+      context.lineTo(cx, cy + scale * 0.1);
+      context.lineTo(cx + scale * 0.65, cy + scale * 0.85);
+    } else if (type === 1) {
+      context.moveTo(cx - scale * 0.6, cy - scale * 0.75);
+      context.lineTo(cx, cy);
+      context.lineTo(cx + scale * 0.6, cy - scale * 0.75);
+    } else if (type === 2) {
+      context.moveTo(cx, cy - scale * 0.8);
+      context.lineTo(cx + scale * 0.6, cy - scale * 0.25);
+      context.lineTo(cx, cy + scale * 0.3);
+      context.lineTo(cx - scale * 0.5, cy + scale * 0.1);
+      context.lineTo(cx + scale * 0.5, cy + scale * 0.7);
+    } else if (type === 3) {
+      context.moveTo(cx - scale * 0.55, cy - scale * 0.4);
+      context.lineTo(cx, cy - scale * 0.9);
+      context.lineTo(cx + scale * 0.55, cy - scale * 0.4);
+      context.lineTo(cx, cy + scale * 0.2);
+      context.closePath();
+    } else if (type === 4) {
+      context.moveTo(cx - scale * 0.6, cy - scale * 0.7);
+      context.lineTo(cx + scale * 0.6, cy + scale * 0.7);
+      context.moveTo(cx + scale * 0.6, cy - scale * 0.7);
+      context.lineTo(cx - scale * 0.6, cy + scale * 0.7);
+    } else {
+      context.moveTo(cx, cy - scale * 0.7);
+      context.lineTo(cx + scale * 0.6, cy - scale * 0.2);
+      context.lineTo(cx, cy);
+      context.lineTo(cx - scale * 0.6, cy + scale * 0.55);
+    }
+    context.stroke();
+  }
+
+  for (let col = 0; col < 16; col++) {
+    const cx = (col + 0.5) * (size / 16);
+    for (let row = 0; row < 20; row++) {
+      if ((col + row * 3) % 4 === 0) continue;
+      const cy = (row + 0.5) * (size / 20);
+      const chIdx = (col * 7 + row * 13) % 3;
+      const color = channelColors[chIdx];
+
+      rCtx.strokeStyle = color;
+      rCtx.shadowColor = color;
+      rCtx.shadowBlur = 5;
+      rCtx.lineWidth = 2.0;
+      drawRuneGlyph(rCtx, cx, cy, 7.5, col * 31 + row * 17);
+    }
+  }
+
+  for (let k = 0; k < 14; k++) {
+    let x = ((k * 73) % 100) * 0.01 * size;
+    let y = ((k * 41) % 100) * 0.01 * size;
+    const chColor = channelColors[k % 3];
+
+    rCtx.strokeStyle = chColor;
+    rCtx.shadowColor = chColor;
+    rCtx.shadowBlur = 7;
+    rCtx.lineWidth = 1.6;
+    rCtx.beginPath();
+    rCtx.moveTo(x, y);
+
+    bCtx.strokeStyle = '#080808';
+    bCtx.lineWidth = 3.5;
+    bCtx.beginPath();
+    bCtx.moveTo(x, y);
+
+    for (let seg = 0; seg < 9; seg++) {
+      x += Math.sin(k * 12.3 + seg * 1.9) * 16;
+      y += 12 + Math.cos(k * 7.1 + seg) * 6;
+      rCtx.lineTo(x, y);
+      bCtx.lineTo(x, y);
+    }
+    rCtx.stroke();
+    bCtx.stroke();
+  }
+
+  TEXTURES.voidRuneRGB = new BABYLON.CanvasTexture(runeRGBCanvas);
+  TEXTURES.voidRuneRGB.wrapS = TEXTURES.voidRuneRGB.wrapT = BABYLON.RepeatWrapping;
+
+  TEXTURES.voidBump = new BABYLON.CanvasTexture(bumpCanvas);
+  TEXTURES.voidBump.wrapS = TEXTURES.voidBump.wrapT = BABYLON.RepeatWrapping;
+
+  // 2. Текстура R/G/B «звёздной пыли» для чёрного обсидианового пола (generateStardustFloorTexture из babylon_js_environment.html)
+  const dustCanvas = document.createElement('canvas');
+  dustCanvas.width = dustCanvas.height = size;
+  const dCtx = dustCanvas.getContext('2d');
+  dCtx.fillStyle = '#000000';
+  dCtx.fillRect(0, 0, size, size);
+  dCtx.globalCompositeOperation = 'lighter';
+
+  for (let i = 0; i < 1600; i++) {
+    const x = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1 * size;
+    const y = ((Math.sin(i * 78.2330) * 23421.6312) % 1 + 1) % 1 * size;
+    const radius = (i % 7 === 0) ? 1.9 : 1.1;
+    const ch = channelColors[i % 3];
+    dCtx.fillStyle = ch;
+    dCtx.beginPath();
+    dCtx.arc(x, y, radius, 0, Math.PI * 2);
+    dCtx.fill();
+  }
+
+  for (let v = 0; v < 10; v++) {
+    let vx = (v * 53) % size;
+    let vy = (v * 97) % size;
+    dCtx.strokeStyle = channelColors[v % 3];
+    dCtx.lineWidth = 1.4;
+    dCtx.beginPath();
+    dCtx.moveTo(vx, vy);
+    for (let s = 0; s < 6; s++) {
+      vx += Math.cos(v * 3.1 + s * 1.4) * 26;
+      vy += Math.sin(v * 2.7 + s * 1.8) * 26;
+      dCtx.lineTo(vx, vy);
+    }
+    dCtx.stroke();
+  }
+
+  TEXTURES.voidStardustRGB = new BABYLON.CanvasTexture(dustCanvas);
+  TEXTURES.voidStardustRGB.wrapS = TEXTURES.voidStardustRGB.wrapT = BABYLON.RepeatWrapping;
+
+  // 3. Многослойные текстуры стен и чёрного обсидианового пола для инстансированных блоков Башни Пустоты
+  const voidRifts = generateCrackNetwork(size, 6, 6, 65, 65);
 
   const wallMap = createProceduralTexture((ctx, sz) => {
     ctx.fillStyle = '#0a0414';
     ctx.fillRect(0, 0, sz, sz);
-
-    const rowH = 24;
-    for (let y = 0, row = 0; y < sz; y += rowH, row++) {
-      let x = row % 2 ? -24 : 0;
-      while (x < sz) {
-        const w = 44 + (((Math.sin(row * 5.1 + x * 0.14) + 1) * 14) | 0);
-        const r = 22 + (((Math.cos(row * 3.7 + x * 0.1) + 1) * 14) | 0);
-        const g = 10 + (((Math.sin(row * 2.9 + x * 0.08) + 1) * 8) | 0);
-        const b = 42 + (((Math.cos(row * 4.3 + x * 0.12) + 1) * 22) | 0);
-
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x + 2, y + 2, w - 4, rowH - 4);
-        ctx.strokeStyle = 'rgba(120,60,205,0.22)';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(x + 3, y + 3, w - 6, rowH - 6);
-        x += w;
+    for (let r = 0; r < rows; r++) {
+      const y = r * rowH;
+      const shift = (r % 2) * (colW * 0.5);
+      for (let c = -1; c <= cols; c++) {
+        const x = c * colW + shift;
+        const shade = (texSeededRandom(r * 19 + c * 31) * 14) | 0;
+        ctx.fillStyle = `rgb(${18 + shade}, ${8 + (shade >> 1)}, ${28 + shade})`;
+        ctx.fillRect(x + 2, y + 2, colW - 4, rowH - 4);
       }
     }
-
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (const colX of [96, 352]) {
-      ctx.fillStyle = 'rgba(8,2,18,0.85)';
-      ctx.fillRect(colX - 22, 0, 44, sz);
-      for (let ry = 28, idx = 0; ry < sz; ry += 52, idx++) {
-        ctx.strokeStyle = '#b450ff';
-        ctx.shadowColor = '#9b30ff';
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 3.2;
-        drawArcaneRune(ctx, colX, ry, 26, idx + colX);
-        ctx.strokeStyle = '#f2d8ff';
-        ctx.shadowBlur = 4;
-        ctx.lineWidth = 1.3;
-        drawArcaneRune(ctx, colX, ry, 26, idx + colX);
+    for (let col = 0; col < 16; col++) {
+      const cx = (col + 0.5) * (sz / 16);
+      for (let row = 0; row < 20; row++) {
+        if ((col + row * 3) % 4 === 0) continue;
+        const cy = (row + 0.5) * (sz / 20);
+        const palette = ['#8a2be2', '#a855f7', '#738cff'];
+        const colStr = palette[(col * 7 + row * 13) % 3];
+        ctx.strokeStyle = colStr;
+        ctx.shadowColor = colStr;
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 2.2;
+        drawRuneGlyph(ctx, cx, cy, 7.5, col * 31 + row * 17);
       }
     }
     ctx.shadowBlur = 0;
-
     for (const rift of voidRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 8 : 4.5, '#030008');
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 3.5 : 2.0, '#b040ff', '#9020ff', 10);
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 1.3 : 0.8, '#f2d2ff');
+      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 6 : 3.5, '#030008');
+      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 2.5 : 1.5, '#a855f7', '#8a2be2', 8);
     }
-  }, size, 4, 3);
-
-  const wallBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#202020';
-    ctx.fillRect(0, 0, sz, sz);
-    const rowH = 24;
-    for (let y = 0, row = 0; y < sz; y += rowH, row++) {
-      let x = row % 2 ? -24 : 0;
-      while (x < sz) {
-        const w = 44 + (((Math.sin(row * 5.1 + x * 0.14) + 1) * 14) | 0);
-        ctx.fillStyle = '#a8a8a8';
-        ctx.fillRect(x + 2, y + 2, w - 4, rowH - 4);
-        x += w;
-      }
-    }
-    for (const rift of voidRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 6 : 3.5, '#050505');
-    }
-  }, size, 4, 3);
+  }, size, 6, 3);
 
   const wallEmissive = createProceduralTexture((ctx, sz) => {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, sz, sz);
-    for (const colX of [96, 352]) {
-      for (let ry = 28, idx = 0; ry < sz; ry += 52, idx++) {
-        ctx.strokeStyle = '#b848ff';
-        ctx.shadowColor = '#a028ff';
-        ctx.shadowBlur = 12;
-        ctx.lineWidth = 3.5;
-        drawArcaneRune(ctx, colX, ry, 26, idx + colX);
-        ctx.strokeStyle = '#f5ddff';
-        ctx.lineWidth = 1.4;
-        drawArcaneRune(ctx, colX, ry, 26, idx + colX);
+    for (let col = 0; col < 16; col++) {
+      const cx = (col + 0.5) * (sz / 16);
+      for (let row = 0; row < 20; row++) {
+        if ((col + row * 3) % 4 === 0) continue;
+        const cy = (row + 0.5) * (sz / 20);
+        const palette = ['#8a2be2', '#a855f7', '#738cff'];
+        const colStr = palette[(col * 7 + row * 13) % 3];
+        ctx.strokeStyle = colStr;
+        ctx.shadowColor = colStr;
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 2.4;
+        drawRuneGlyph(ctx, cx, cy, 7.5, col * 31 + row * 17);
       }
     }
-    ctx.shadowBlur = 0;
-    for (const rift of voidRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 5.5 : 3.0, 'rgba(165,45,255,0.75)', '#a030ff', 14);
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 1.6 : 0.9, '#f0c8ff');
-    }
-  }, size, 4, 3);
+  }, size, 6, 3);
 
-  const floorRifts = generateCrackNetwork(size, 5, 5, 78, 78);
+  const wallNormalCvs = convertBumpToNormalCanvas(bumpCanvas, 3.0);
+  const wallBump = new BABYLON.CanvasTexture(wallNormalCvs);
+  wallBump.wrapS = wallBump.wrapT = BABYLON.RepeatWrapping;
+  wallBump.repeat.set(6, 3);
 
+  // Пол Башни Пустоты: глубокий чёрный обсидиановый камень (#06040a) с редкими блестящими вкраплениями
   const floorMap = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#080311';
+    ctx.fillStyle = '#06040a';
     ctx.fillRect(0, 0, sz, sz);
 
-    for (let i = 0; i < 38; i++) {
-      const rx = Math.random() * sz;
-      const ry = Math.random() * sz;
-      const rad = 25 + Math.random() * 65;
-      const g = ctx.createRadialGradient(rx, ry, 4, rx, ry, rad);
-      g.addColorStop(0, i % 2 ? 'rgba(85,28,150,0.38)' : 'rgba(38,12,78,0.45)');
-      g.addColorStop(1, 'rgba(8,3,17,0)');
+    // Мягкие зеркальные грани полированного обсидиана
+    for (let i = 0; i < 24; i++) {
+      const rx = texSeededRandom(i * 23 + 1) * sz;
+      const ry = texSeededRandom(i * 41 + 7) * sz;
+      const rad = 28 + texSeededRandom(i * 59) * 55;
+      const g = ctx.createRadialGradient(rx, ry, 2, rx, ry, rad);
+      g.addColorStop(0, i % 2 ? 'rgba(32, 16, 54, 0.35)' : 'rgba(14, 8, 26, 0.45)');
+      g.addColorStop(1, 'rgba(6, 4, 10, 0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(rx, ry, rad, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    ctx.strokeStyle = 'rgba(145,65,235,0.45)';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(6, 6, sz - 12, sz - 12);
+    // Тонкая фиолетовая фаска по кромке обсидиановой плиты
+    ctx.strokeStyle = 'rgba(138, 43, 226, 0.35)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(4, 4, sz - 8, sz - 8);
 
-    for (const rift of floorRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 6 : 3.5, '#020005');
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 2.6 : 1.5, '#a838ff', '#8820e0', 8);
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 1.0 : 0.6, '#ecc8ff');
+    // Редкие тонкие прожилки звёздной пыли
+    const sparkleColors = ['#a855f7', '#8cd0ff', '#ebb8ff', '#ffffff'];
+    for (let v = 0; v < 6; v++) {
+      let vx = ((v * 83) % sz);
+      let vy = ((v * 127) % sz);
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.28)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(vx, vy);
+      for (let s = 0; s < 5; s++) {
+        vx += Math.cos(v * 3.1 + s * 1.4) * 22;
+        vy += Math.sin(v * 2.7 + s * 1.8) * 22;
+        ctx.lineTo(vx, vy);
+      }
+      ctx.stroke();
     }
 
-    for (let i = 0; i < 240; i++) {
-      const sx = Math.random() * sz;
-      const sy = Math.random() * sz;
-      const r = 0.8 + Math.random() * 2.2;
-      ctx.fillStyle =
-        i % 4 === 0
-          ? '#ffffff'
-          : i % 3 === 0
-            ? '#e5b8ff'
-            : i % 2 === 0
-              ? '#98d8ff'
-              : '#b868ff';
+    // Редкие блестящие вкрапления звёздной пыли в чёрном обсидиане (как в референсе babylon_js_environment.html)
+    for (let i = 0; i < 420; i++) {
+      const sx = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1 * sz;
+      const sy = ((Math.sin(i * 78.2330) * 23421.6312) % 1 + 1) % 1 * sz;
+      const r = (i % 9 === 0) ? 1.85 : 1.05;
+      ctx.fillStyle = sparkleColors[i % sparkleColors.length];
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, size, 1, 1);
+
+  const floorEmissive = createProceduralTexture((ctx, sz) => {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, sz, sz);
+    const sparkleColors = ['#a855f7', '#8cd0ff', '#ebb8ff', '#ffffff'];
+    for (let v = 0; v < 6; v++) {
+      let vx = ((v * 83) % sz);
+      let vy = ((v * 127) % sz);
+      ctx.strokeStyle = 'rgba(138, 43, 226, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(vx, vy);
+      for (let s = 0; s < 5; s++) {
+        vx += Math.cos(v * 3.1 + s * 1.4) * 22;
+        vy += Math.sin(v * 2.7 + s * 1.8) * 22;
+        ctx.lineTo(vx, vy);
+      }
+      ctx.stroke();
+    }
+    for (let i = 0; i < 420; i++) {
+      const sx = ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1 * sz;
+      const sy = ((Math.sin(i * 78.2330) * 23421.6312) % 1 + 1) % 1 * sz;
+      const r = (i % 9 === 0) ? 1.9 : 1.1;
+      ctx.fillStyle = sparkleColors[i % sparkleColors.length];
       ctx.beginPath();
       ctx.arc(sx, sy, r, 0, Math.PI * 2);
       ctx.fill();
@@ -636,28 +1002,9 @@ function generateCrackNetwork(size, mainCount, stepCount, spreadX, spreadY) {
   }, size, 1, 1);
 
   const floorBump = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#909090';
+    ctx.fillStyle = '#8080ff';
     ctx.fillRect(0, 0, sz, sz);
-    ctx.strokeStyle = '#d8d8d8';
-    ctx.lineWidth = 6;
-    ctx.strokeRect(6, 6, sz - 12, sz - 12);
-    for (const rift of floorRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 5 : 3, '#101010');
-    }
-  }, size, 1, 1);
-
-  const floorEmissive = createProceduralTexture((ctx, sz) => {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, sz, sz);
-    for (const rift of floorRifts) {
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 4.5 : 2.5, 'rgba(155,45,255,0.65)', '#9b30ff', 10);
-      drawSeamlessCrack(ctx, sz, rift.pts, rift.main ? 1.4 : 0.8, '#eed0ff');
-    }
-    for (let i = 0; i < 160; i++) {
-      ctx.fillStyle = i % 3 === 0 ? '#ffffff' : '#d088ff';
-      ctx.fillRect(Math.random() * sz, Math.random() * sz, 2.2, 2.2);
-    }
-  }, size, 1, 1);
+  }, 128, 1, 1);
 
   TOWER_WALL_TEXTURES.void = { map: wallMap, bump: wallBump, emissive: wallEmissive };
   TOWER_FLOOR_TEXTURES.void = { map: floorMap, bump: floorBump, emissive: floorEmissive };

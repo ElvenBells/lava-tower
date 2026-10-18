@@ -1,7 +1,7 @@
 /* ==========================================================================
    Интерфейс пользователя (UI):
    главное меню, выбор башни и героя, кузница, карточки наград, пакты, пауза,
-   таблица рекордов и сохранение прогресса
+   переключение фонового звука башен, таблица рекордов и сохранение прогресса
    ========================================================================== */
 
 /* ---------- 1. Загрузка и нормализация сохранений localStorage ---------- */
@@ -69,6 +69,18 @@ function saveNicknameFromInput() {
   }
 }
 
+function toggleUiAudioMute(fromPause) {
+  if (typeof toggleGameAudioMute === 'function') {
+    toggleGameAudioMute();
+  }
+  if (fromPause) {
+    pauseGame();
+  } else {
+    saveNicknameFromInput();
+    showMainMenu();
+  }
+}
+
 /* ---------- 2. Открытие героев, башен и Кузница ---------- */
 
 function unlockHero(heroId) {
@@ -128,6 +140,10 @@ function selectTower(towerId) {
   saveNicknameFromInput();
   selectedTowerId = towerId;
   storage.set('lt_tower', towerId);
+  if (typeof ensureTowerAmbientAudio === 'function') {
+    ensureTowerAmbientAudio();
+    setTowerAmbientTheme(towerId);
+  }
   if (TOWERS[towerId]) {
     applyTowerTheme(TOWERS[towerId]);
     buildTower(hashString('lava' + getCurrentDateCode() + towerId));
@@ -225,9 +241,11 @@ function buyForgeUpgrade(upgradeKey) {
 function pauseGame() {
   if (!state || state.isGameOver) return;
   state.pauseState = 2;
+  const muted = typeof isGameAudioMuted === 'function' && isGameAudioMuted();
   getById('pn').innerHTML = `
     <h2>ПАУЗА</h2>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
+    <button onclick="toggleUiAudioMute(1)">${muted ? '🔇 ЗВУК: ВЫКЛ' : '🔊 ЗВУК: ВКЛ'}</button>
     <button onclick="quitToMenu()">✕ ВЫЙТИ В ГЛАВНОЕ МЕНЮ</button>
   `;
   getById('ov').style.display = 'flex';
@@ -454,6 +472,9 @@ function buildLeaderboardHtml() {
 }
 
 function startRun(mode) {
+  if (typeof ensureTowerAmbientAudio === 'function') {
+    ensureTowerAmbientAudio();
+  }
   playSound('pickup');
   saveNicknameFromInput();
   initializeRun(mode);
@@ -523,12 +544,14 @@ function showMainMenu() {
     MUTATORS[Math.floor(seededRandom(dailySeed, 'mut', 0) * MUTATORS.length)].name;
   const dailyWeaponName =
     Object.values(WEAPONS)[Math.floor(seededRandom(dailySeed, 'hero', 0) * 3)].name;
+  const muted = typeof isGameAudioMuted === 'function' && isGameAudioMuted();
 
   getById('pn').innerHTML =
     `<h1>LAVA TOWER</h1>` +
     `<p>Беги вверх: оружие бьёт само, снизу поднимается лава. 12 этажей, 3 босса на этажах 4, 8 и 12 (свои у каждой башни). Пока босс жив, лестница наверх запечатана. За забег копится пепел — тратьте его в кузнице.</p>` +
     `<p>Ник: <input id="nk" value="${escapeHtml(playerNickname)}" maxlength="16"></p>` +
     `<button onclick="openForgeMenu()">⚒ КУЗНИЦА · пепел: ${metaProgress.ash | 0}</button>` +
+    `<button onclick="toggleUiAudioMute(0)" style="font-size:12px;padding:6px 12px">${muted ? '🔇 Фоновый звук и эффекты: ВЫКЛ' : '🔊 Фоновый звук и эффекты: ВКЛ'}</button>` +
     `${buildTowerSelectHtml()}` +
     `${buildHeroSelectHtml()}` +
     `<button onclick="startRun(0)">▶ СТАНДАРТНЫЙ ЗАБЕГ</button>` +
@@ -548,6 +571,7 @@ window.buyF = buyForgeUpgrade;
 window.selH = selectHero;
 window.selT = selectTower;
 window.unlockAllTowersForPreview = unlockAllTowersForPreview;
+window.toggleUiAudioMute = toggleUiAudioMute;
 window.menu = showMainMenu;
 window.pick = pickUpgrade;
 window.pactPick = pickPact;

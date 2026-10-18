@@ -1654,37 +1654,56 @@ function updatePlayerAnimation(dt) {
   rig.beltGlow.material.opacity = 0.38 + 0.14 * Math.sin(time * 5.2);
 }
 
-/* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна) ---------- */
+/* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна из 3 референсов) ---------- */
+
+// 1.1 Шейдерный материал моря магмы Пепельной башни (из babylon_js_glsl.html, скорость = 2.25)
+const ashLavaSeaShaderMat = new BABYLON.ShaderMaterial(
+  'ashLavaSeaShaderMat',
+  scene,
+  { vertex: 'lavaSea', fragment: 'lavaSea' },
+  {
+    attributes: ['position', 'uv'],
+    uniforms: ['world', 'viewProjection', 'uTime', 'uSpeed', 'uFogColor', 'uFogDensity', 'uCameraPos']
+  }
+);
+ashLavaSeaShaderMat.setFloat('uTime', 0.0);
+ashLavaSeaShaderMat.setFloat('uSpeed', 2.25);
+ashLavaSeaShaderMat.setColor3('uFogColor', BABYLON.Color3.FromHexString('#220707'));
+ashLavaSeaShaderMat.setFloat('uFogDensity', 0.0155);
+ashLavaSeaShaderMat.setVector3('uCameraPos', camera.position);
+ashLavaSeaShaderMat.backFaceCulling = false;
+
+// 1.2 Шейдерный материал Бездны Башни Пустоты (из babylon_js_environment.html, параллакс и далёкие огни)
+const voidAbyssShaderMat = new BABYLON.ShaderMaterial(
+  'voidAbyssShaderMat',
+  scene,
+  { vertex: 'abyss', fragment: 'abyss' },
+  {
+    attributes: ['position', 'uv'],
+    uniforms: ['world', 'worldViewProjection', 'uTime', 'uSurge', 'uCameraPos']
+  }
+);
+voidAbyssShaderMat.setFloat('uTime', 0.0);
+voidAbyssShaderMat.setFloat('uSurge', 0.0);
+voidAbyssShaderMat.setVector3('uCameraPos', camera.position);
+voidAbyssShaderMat.backFaceCulling = false;
 
 const LAVA_MATERIALS = {
-  ash: new BABYLON.MeshStandardMaterial({
-    map: lavaTexture,
-    bumpMap: lavaTexture,
-    bumpScale: 0.25,
-    emissive: 0xff6a15,
-    emissiveMap: lavaTexture,
-    emissiveIntensity: 2.1,
-    roughness: 0.55
-  }),
+  ash: ashLavaSeaShaderMat,
   ice: new BABYLON.MeshStandardMaterial({
     map: iceLavaTexture,
     bumpMap: iceLavaTexture,
-    bumpScale: 0.2,
-    emissive: 0x68c4ff,
+    bumpScale: 0.25,
+    color: 0x06101e,
+    emissive: 0x163854,
     emissiveMap: iceLavaTexture,
-    emissiveIntensity: 1.35,
+    emissiveIntensity: 0.85,
     roughness: 0.35
   }),
-  void: new BABYLON.MeshStandardMaterial({
-    map: voidLavaTexture,
-    emissive: 0x9835ff,
-    emissiveMap: voidLavaTexture,
-    emissiveIntensity: 1.75,
-    roughness: 0.75
-  })
+  void: voidAbyssShaderMat
 };
 
-const lavaMesh = new BABYLON.Mesh(new BABYLON.PlaneGeometry(300, 300), LAVA_MATERIALS.ash);
+const lavaMesh = new BABYLON.Mesh(new BABYLON.PlaneGeometry(140, 140, 64, 64), LAVA_MATERIALS.ash);
 lavaMesh.rotation.x = -Math.PI / 2;
 scene.add(lavaMesh);
 
@@ -1696,43 +1715,25 @@ const hazardIceGroup = new BABYLON.Group();
 const hazardVoidGroup = new BABYLON.Group();
 hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
-// 1A. Детали моря магмы (Пепельная башня)
+// 1A. Детали моря магмы (Пепельная башня — обугленные базальтовые глыбы из babylon_js_glsl.html)
 (function buildAshHazardDetails() {
-  const glowDisc = new BABYLON.Mesh(
-    new BABYLON.CircleGeometry(30.2, 36),
-    new BABYLON.MeshBasicMaterial({
-      map: lavaTexture,
-      color: 0xffaa30,
-      transparent: true,
-      opacity: 0.38,
-      blending: BABYLON.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  glowDisc.rotation.x = -Math.PI / 2;
-  glowDisc.position.y = 0.08;
-  hazardAshGroup.add(glowDisc);
-  hazardAshGroup.userData.glowDisc = glowDisc;
-
   const crustMat = new BABYLON.MeshStandardMaterial({
-    color: 0x240b0d,
-    emissive: 0x6a1400,
-    emissiveIntensity: 0.65,
-    roughness: 0.92,
-    flatShading: true
+    map: TOWER_FLOOR_TEXTURES.ash.map,
+    bumpMap: TOWER_FLOOR_TEXTURES.ash.bump,
+    bumpScale: 1.8,
+    color: 0x18181b,
+    emissive: 0x581200,
+    emissiveIntensity: 0.45,
+    roughness: 0.94
   });
   const crustRocks = [];
-  for (let i = 0; i < 18; i++) {
-    const angle = (i / 18) * TWO_PI + (i % 3) * 0.2;
-    const radius = 3.8 + (i % 4) * 6.0;
-    const rockGeo = new BABYLON.CylinderGeometry(
-      1.1 + (i % 3) * 0.6,
-      1.6 + (i % 3) * 0.7,
-      0.5,
-      7
-    );
+  for (let i = 0; i < 16; i++) {
+    const angle = (i / 16) * TWO_PI + (i % 3) * 0.22;
+    const radius = 5.5 + (i % 4) * 5.8;
+    const rockGeo = jitterGeometry(new BABYLON.IcosahedronGeometry(1.1 + (i % 3) * 0.55, 1), 0.22);
     const rock = new BABYLON.Mesh(rockGeo, crustMat);
-    rock.position.set(Math.cos(angle) * radius, 0.14, Math.sin(angle) * radius);
+    rock.position.set(Math.cos(angle) * radius, 0.15, Math.sin(angle) * radius);
+    rock.scale.set(1.3, 0.55, 1.15);
     rock.rotation.y = i * 1.1;
     rock.userData = { baseAngle: angle, radius, phase: i * 0.7 };
     hazardAshGroup.add(rock);
@@ -1741,56 +1742,48 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardAshGroup.userData.crustRocks = crustRocks;
 })();
 
-// 1B. Детали вихря метели (Ледяная башня)
+// 1B. 3-слойная воронка Бездонной Метели (Ледяная башня — GLSL шейдер blizzardVortex из babylon_js.html)
+const iceBlizzardVortexMats = [];
 (function buildIceHazardDetails() {
-  const funnelRings = [];
-  for (let layer = 0; layer < 4; layer++) {
-    const ringMesh = new BABYLON.Mesh(
-      new BABYLON.RingGeometry(2.2 + layer * 4.8, 9.2 + layer * 6.2, 44, 1),
-      new BABYLON.MeshBasicMaterial({
-        map: iceLavaTexture,
-        color: layer === 0 ? 0xffffff : 0x9cdfff,
-        transparent: true,
-        opacity: 0.46 - layer * 0.08,
-        side: BABYLON.DoubleSide,
-        blending: BABYLON.AdditiveBlending,
-        depthWrite: false
-      })
+  const layers = [
+    { y: 0.25, size: 62, opacity: 0.95, layerIdx: 0.0, add: false },
+    { y: 1.15, size: 58, opacity: 0.68, layerIdx: 1.0, add: false },
+    { y: 2.05, size: 54, opacity: 0.45, layerIdx: 2.0, add: true }
+  ];
+
+  layers.forEach((cfg, idx) => {
+    const vGeo = new BABYLON.PlaneGeometry(cfg.size, cfg.size, 48, 48);
+    const vMat = new BABYLON.ShaderMaterial(
+      'iceBlizzardVortexMat_' + idx,
+      scene,
+      { vertex: 'blizzardVortex', fragment: 'blizzardVortex' },
+      {
+        attributes: ['position', 'normal', 'uv'],
+        uniforms: ['worldView', 'projection', 'uTime', 'uLayerIndex', 'uOpacity'],
+        needAlphaBlending: true
+      }
     );
-    ringMesh.rotation.x = -Math.PI / 2;
-    ringMesh.position.y = 0.15 + layer * 0.35;
-    hazardIceGroup.add(ringMesh);
-    funnelRings.push(ringMesh);
-  }
+    vMat.setFloat('uTime', 0.0);
+    vMat.setFloat('uLayerIndex', cfg.layerIdx);
+    vMat.setFloat('uOpacity', cfg.opacity);
+    vMat.backFaceCulling = false;
+    vMat.disableDepthWrite = idx > 0;
+    if (cfg.add) {
+      vMat.alphaMode = BABYLON.Engine.ALPHA_ADD;
+    }
 
-  const eyeGlow = new BABYLON.Sprite(
-    new BABYLON.SpriteMaterial({
-      map: TEXTURES.glowIce,
-      color: 0xdff8ff,
-      transparent: true,
-      opacity: 0.78,
-      blending: BABYLON.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  eyeGlow.scale.set(28, 8, 1);
-  eyeGlow.position.y = 1.2;
-  hazardIceGroup.add(eyeGlow);
+    const vMesh = new BABYLON.Mesh(vGeo, vMat);
+    vMesh.rotation.x = -Math.PI / 2;
+    vMesh.position.y = cfg.y;
+    hazardIceGroup.add(vMesh);
+    iceBlizzardVortexMats.push(vMat);
+  });
 
-  hazardIceGroup.userData.funnelRings = funnelRings;
   hazardIceGroup.visible = false;
 })();
 
-// 1C. Детали Бездны (Башня Пустоты)
+// 1C. Детали Бездны (Башня Пустоты — сингулярные кольца и звёздная пыль из babylon_js_environment.html)
 (function buildVoidHazardDetails() {
-  const blackHoleCore = new BABYLON.Mesh(
-    new BABYLON.CircleGeometry(9.8, 44),
-    new BABYLON.MeshBasicMaterial({ color: 0x010003 })
-  );
-  blackHoleCore.rotation.x = -Math.PI / 2;
-  blackHoleCore.position.y = 0.06;
-  hazardVoidGroup.add(blackHoleCore);
-
   const vortexRings = [];
   for (let r = 0; r < 3; r++) {
     const ring = new BABYLON.Mesh(
@@ -1799,110 +1792,114 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
         map: voidLavaTexture,
         color: r === 0 ? 0xe098ff : r === 1 ? 0xa840ff : 0x6818c8,
         transparent: true,
-        opacity: 0.65 - r * 0.14,
+        opacity: 0.45 - r * 0.1,
         side: BABYLON.DoubleSide,
         blending: BABYLON.AdditiveBlending,
         depthWrite: false
       })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.12 + r * 0.18;
+    ring.position.y = 0.14 + r * 0.18;
     hazardVoidGroup.add(ring);
     vortexRings.push(ring);
   }
 
-  const abyssStarGeo = new BABYLON.BufferGeometry();
-  const starCount = 56;
-  const starPos = new Float32Array(starCount * 3);
-  const starCol = new Float32Array(starCount * 3);
-  for (let i = 0; i < starCount; i++) {
-    const ang = Math.random() * TWO_PI;
-    const rad = 3 + Math.random() * 26;
-    starPos[i * 3] = Math.cos(ang) * rad;
-    starPos[i * 3 + 1] = 0.2 + Math.random() * 1.8;
-    starPos[i * 3 + 2] = Math.sin(ang) * rad;
-    starCol[i * 3] = 0.85;
-    starCol[i * 3 + 1] = 0.65;
-    starCol[i * 3 + 2] = 1.0;
-  }
-  abyssStarGeo.setAttribute('position', new BABYLON.BufferAttribute(starPos, 3));
-  abyssStarGeo.setAttribute('color', new BABYLON.BufferAttribute(starCol, 3));
-  const abyssStars = new BABYLON.Points(
-    abyssStarGeo,
-    new BABYLON.PointsMaterial({
-      size: 0.55,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.85,
-      blending: BABYLON.AdditiveBlending,
-      depthWrite: false
-    })
-  );
-  hazardVoidGroup.add(abyssStars);
-
   hazardVoidGroup.userData.vortexRings = vortexRings;
-  hazardVoidGroup.userData.abyssStars = abyssStars;
   hazardVoidGroup.visible = false;
 })();
 
-/* ---------- 2. Цилиндрические внешние стены башни ---------- */
+/* ---------- 2. Цилиндрические внешние стены башни (с GLSL-шейдером рун для Пустоты) ---------- */
+
+const voidWallRunesShaderMat = new BABYLON.ShaderMaterial(
+  'voidWallRunesShaderMat',
+  scene,
+  { vertex: 'wallRunes', fragment: 'wallRunes' },
+  {
+    attributes: ['position', 'normal', 'uv'],
+    uniforms: ['world', 'worldViewProjection', 'uTime', 'uSurge', 'uFogDensity', 'uCameraPos'],
+    samplers: ['uRuneMap', 'uBumpMap']
+  }
+);
+voidWallRunesShaderMat.setTexture('uRuneMap', TEXTURES.voidRuneRGB);
+voidWallRunesShaderMat.setTexture('uBumpMap', TEXTURES.voidBump);
+voidWallRunesShaderMat.setFloat('uTime', 0.0);
+voidWallRunesShaderMat.setFloat('uSurge', 0.0);
+voidWallRunesShaderMat.setFloat('uFogDensity', 0.0092);
+voidWallRunesShaderMat.setVector3('uCameraPos', camera.position);
+voidWallRunesShaderMat.backFaceCulling = false;
 
 const TOWER_WALL_MATERIALS = {
   ash: new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ash.map,
     bumpMap: TOWER_WALL_TEXTURES.ash.bump,
-    bumpScale: 0.45,
-    emissive: 0xff5a14,
+    bumpScale: 2.6,
+    color: 0x7c7e84,
+    emissive: 0xff4500,
     emissiveMap: TOWER_WALL_TEXTURES.ash.emissive,
-    emissiveIntensity: 1.45,
-    roughness: 0.86,
-    metalness: 0.12,
+    emissiveIntensity: 1.15,
+    roughness: 0.92,
+    metalness: 0.08,
     side: BABYLON.BackSide
   }),
   ice: new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ice.map,
     bumpMap: TOWER_WALL_TEXTURES.ice.bump,
-    bumpScale: 0.35,
+    bumpScale: 2.4,
+    color: 0x8bc9eb,
     emissive: 0x58c4ff,
     emissiveMap: TOWER_WALL_TEXTURES.ice.emissive,
-    emissiveIntensity: 1.15,
-    roughness: 0.18,
-    metalness: 0.28,
-    side: BABYLON.BackSide
-  }),
-  void: new BABYLON.MeshStandardMaterial({
-    map: TOWER_WALL_TEXTURES.void.map,
-    bumpMap: TOWER_WALL_TEXTURES.void.bump,
-    bumpScale: 0.38,
-    emissive: 0xc055ff,
-    emissiveMap: TOWER_WALL_TEXTURES.void.emissive,
-    emissiveIntensity: 1.65,
-    roughness: 0.62,
+    emissiveIntensity: 1.25,
+    roughness: 0.14,
     metalness: 0.25,
     side: BABYLON.BackSide
-  })
+  }),
+  void: voidWallRunesShaderMat
 };
 
-const towerWallMesh = new BABYLON.Mesh(
-  new BABYLON.CylinderGeometry(30.8, 30.8, 220, 36, 1, true),
-  TOWER_WALL_MATERIALS.ash
-);
+const towerWallGeo = new BABYLON.CylinderGeometry(30.8, 30.8, 220, 48, 28, true);
+// Применяем мировые пятна обугливания/вариации камня к вершинам внешней стены
+(function applyWallVertexVariation() {
+  const posAttr = towerWallGeo.attributes.position;
+  if (!posAttr) return;
+  const count = posAttr.count;
+  const cols = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const vx = posAttr.getX(i);
+    const vy = posAttr.getY(i) + 80;
+    const vz = posAttr.getZ(i);
+    const wChar1 = stoneNoise3D(vx * 0.085 + 2.3, vy * 0.085 + 7.1, vz * 0.085 + 4.9);
+    const wChar2 = stoneNoise3D(vx * 0.22 + 11.7, vy * 0.22 + 3.3, vz * 0.22 + 8.2);
+    const raw = (wChar1 * 0.68 + wChar2 * 0.32 - 0.50) / 0.22;
+    const t = Math.max(0, Math.min(1, raw));
+    const charMask = t * t * (3 - 2 * t) * 0.88;
+    const micro = 0.86 + stoneNoise3D(vx * 1.65, vy * 1.65, vz * 1.65) * 0.28;
+    const c = ((1.0 - charMask) + 0.05 * charMask) * micro;
+    cols[i * 3] = c;
+    cols[i * 3 + 1] = c;
+    cols[i * 3 + 2] = c * 1.02;
+  }
+  towerWallGeo.setAttribute('color', new BABYLON.BufferAttribute(cols, 3));
+})();
+
+const towerWallMesh = new BABYLON.Mesh(towerWallGeo, TOWER_WALL_MATERIALS.ash);
 towerWallMesh.position.y = 80;
 scene.add(towerWallMesh);
 towerWallMesh.matrixAutoUpdate = false;
 towerWallMesh.updateMatrix();
 
 const iceInnerGlazeMesh = new BABYLON.Mesh(
-  new BABYLON.CylinderGeometry(29.85, 29.85, 220, 36, 1, true),
+  new BABYLON.CylinderGeometry(29.85, 29.85, 220, 48, 1, true),
   new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ice.map,
-    color: 0x90d8ff,
-    emissive: 0x2878b8,
-    emissiveIntensity: 0.45,
-    roughness: 0.08,
-    metalness: 0.35,
+    bumpMap: TOWER_WALL_TEXTURES.ice.bump,
+    bumpScale: 1.8,
+    color: 0xb8e6ff,
+    emissive: 0x102e4a,
+    emissiveIntensity: 0.42,
+    roughness: 0.12,
+    metalness: 0.15,
     transparent: true,
-    opacity: 0.26,
+    opacity: 0.42,
     side: BABYLON.BackSide,
     depthWrite: false
   })
@@ -1914,58 +1911,73 @@ iceInnerGlazeMesh.matrixAutoUpdate = false;
 iceInnerGlazeMesh.updateMatrix();
 
 var currentTowerTheme = TOWERS.ash;
+let _blizzardAccumTime = 0;
 
 function updateEnvironmentVisuals(time, dt) {
+  const safeDt = dt || 0.016;
+  if (typeof syncScenePostProcessParams === 'function') {
+    syncScenePostProcessParams(time, safeDt);
+  }
+
   hazardEffectsGroup.position.y = lavaMesh.position.y;
   const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
+  const vfx = activeTowerVfxState;
 
   if (towerId === 'ash') {
+    ashLavaSeaShaderMat.setFloat('uTime', time);
+    ashLavaSeaShaderMat.setFloat('uSpeed', vfx.lavaSpeed || 2.25);
+    ashLavaSeaShaderMat.setFloat('uFogDensity', vfx.renderFogDensity || 0.0155);
+    ashLavaSeaShaderMat.setVector3('uCameraPos', camera.position);
+
     const wallMat = TOWER_WALL_MATERIALS.ash;
-    wallMat.emissiveIntensity = 1.35 + Math.sin(time * 2.2) * 0.28;
-    const glowDisc = hazardAshGroup.userData.glowDisc;
-    if (glowDisc) {
-      glowDisc.rotation.z = time * 0.06;
-      glowDisc.material.opacity = 0.32 + Math.sin(time * 3.1) * 0.1;
-    }
+    wallMat.emissiveIntensity = 1.05 + Math.sin(time * 2.4) * 0.22 + (vfx.stormFactor || 0) * 0.85;
+
     const crustRocks = hazardAshGroup.userData.crustRocks;
     if (crustRocks) {
       for (let i = 0; i < crustRocks.length; i++) {
         const rock = crustRocks[i];
         const ud = rock.userData;
-        const a = ud.baseAngle + time * 0.03 * (i % 2 ? 1 : -1);
+        const a = ud.baseAngle + time * 0.025 * (i % 2 ? 1 : -1);
         rock.position.x = Math.cos(a) * ud.radius;
         rock.position.z = Math.sin(a) * ud.radius;
-        rock.position.y = 0.1 + Math.sin(time * 1.8 + ud.phase) * 0.08;
+        rock.position.y = 0.12 + Math.sin(time * 1.8 + ud.phase) * 0.09;
       }
     }
   } else if (towerId === 'ice') {
+    // Бездонная метель со зафиксированной скоростью = 0.5 (повышается до 0.9 в бурю)
+    _blizzardAccumTime += safeDt * (vfx.blizzardSpeed || 0.5);
+    for (let i = 0; i < iceBlizzardVortexMats.length; i++) {
+      iceBlizzardVortexMats[i].setFloat('uTime', _blizzardAccumTime);
+    }
+
     const wallMat = TOWER_WALL_MATERIALS.ice;
-    wallMat.emissiveIntensity = 1.05 + Math.sin(time * 1.6) * 0.18;
-    const rings = hazardIceGroup.userData.funnelRings;
-    if (rings) {
-      for (let i = 0; i < rings.length; i++) {
-        rings[i].rotation.z = time * (0.55 - i * 0.12) * (i % 2 ? -1 : 1);
-      }
+    wallMat.emissiveIntensity = 1.15 + Math.sin(time * 1.6) * 0.18 + (vfx.stormFactor || 0) * 0.45;
+
+    if (typeof TOWER_SLAB_MATERIALS !== 'undefined' && TOWER_SLAB_MATERIALS.ice) {
+      // Зафиксированная эмиссия трещин льда = 1.95 (и до 2.45 в бурю)
+      TOWER_SLAB_MATERIALS.ice.emissiveIntensity = vfx.cracksEmissive || 1.95;
     }
   } else if (towerId === 'void') {
-    const wallMat = TOWER_WALL_MATERIALS.void;
-    wallMat.emissiveIntensity =
-      1.45 + Math.sin(time * 2.4) * 0.45 + Math.cos(time * 5.7) * 0.18;
+    const surge = (vfx.stormFactor || 0) * 1.65;
+    voidAbyssShaderMat.setFloat('uTime', time);
+    voidAbyssShaderMat.setFloat('uSurge', surge);
+    voidAbyssShaderMat.setVector3('uCameraPos', camera.position);
+
+    voidWallRunesShaderMat.setFloat('uTime', time);
+    voidWallRunesShaderMat.setFloat('uSurge', surge);
+    voidWallRunesShaderMat.setFloat('uFogDensity', vfx.renderFogDensity || 0.0092);
+    voidWallRunesShaderMat.setVector3('uCameraPos', camera.position);
+
     const vRings = hazardVoidGroup.userData.vortexRings;
     if (vRings) {
       vRings[0].rotation.z = time * 0.7;
       vRings[1].rotation.z = -time * 0.45;
       vRings[2].rotation.z = time * 0.28;
     }
-    const abyssStars = hazardVoidGroup.userData.abyssStars;
-    if (abyssStars) {
-      abyssStars.rotation.y = time * 0.08;
-      abyssStars.material.opacity = 0.6 + Math.sin(time * 4.2) * 0.3;
-    }
   }
 
   if (typeof updateTowerDecorAnimations === 'function') {
-    updateTowerDecorAnimations(time, dt, towerId);
+    updateTowerDecorAnimations(time, safeDt, towerId);
   }
 }
 
@@ -1975,6 +1987,7 @@ function applyTowerTheme(towerConfig) {
 
   lavaMesh.material = LAVA_MATERIALS[id];
   towerWallMesh.material = TOWER_WALL_MATERIALS[id];
+  towerWallMesh.useVertexColors = id === 'ash';
   iceInnerGlazeMesh.visible = id === 'ice';
 
   hazardAshGroup.visible = id === 'ash';
@@ -1983,7 +1996,31 @@ function applyTowerTheme(towerConfig) {
 
   scene.background = BACKGROUND_TEXTURES[id];
   scene.fog.color.setHex(towerConfig.fogColor);
-  scene.fog.density = towerConfig.fogDensity;
+
+  const baseVfx = towerConfig.vfxParams || TOWERS.ash.vfxParams;
+  activeTowerVfxState.towerId = id;
+  activeTowerVfxState.stormFactor = 0.0;
+  activeTowerVfxState.bloomStrength = baseVfx.bloomStrength !== undefined ? baseVfx.bloomStrength : 0.3;
+  activeTowerVfxState.bloomThreshold = baseVfx.bloomThreshold !== undefined ? baseVfx.bloomThreshold : 0.14;
+  activeTowerVfxState.heatDistortion = baseVfx.heatDistortion || 0.0;
+  activeTowerVfxState.lavaSpeed = baseVfx.lavaSpeed || 2.25;
+  activeTowerVfxState.fogDensity = baseVfx.fogDensity || towerConfig.fogDensity;
+  activeTowerVfxState.renderFogDensity = baseVfx.renderFogDensity !== undefined ? baseVfx.renderFogDensity : towerConfig.fogDensity;
+  activeTowerVfxState.cracksEmissive = baseVfx.cracksEmissive || 1.95;
+  activeTowerVfxState.blizzardSpeed = baseVfx.blizzardSpeed || 0.5;
+  activeTowerVfxState.rgbShift = baseVfx.rgbShift || 0.0;
+  activeTowerVfxState.gravityAnomaly = baseVfx.gravityAnomaly || 1.4;
+  activeTowerVfxState.dissolveThreshold = baseVfx.dissolveThreshold || 0.39;
+  activeTowerVfxState.coldGrade = baseVfx.coldGrade || 0.0;
+
+  scene.fog.density = activeTowerVfxState.renderFogDensity;
+  if (typeof syncScenePostProcessParams === 'function') {
+    syncScenePostProcessParams(0, 1.0);
+  }
+
+  if (typeof TOWER_SLAB_MATERIALS !== 'undefined' && TOWER_SLAB_MATERIALS.ice) {
+    TOWER_SLAB_MATERIALS.ice.emissiveIntensity = activeTowerVfxState.cracksEmissive;
+  }
 
   hemiLight.color.setHex(towerConfig.hemiSkyColor);
   hemiLight.groundColor.setHex(towerConfig.hemiGroundColor);
@@ -2003,11 +2040,14 @@ function applyTowerTheme(towerConfig) {
 
   if (typeof dustMat !== 'undefined' && towerConfig.dustColor) {
     dustMat.color.setHex(towerConfig.dustColor);
-    dustMat.size = towerConfig.dustSize || 0.32;
-    dustMat.opacity = towerConfig.dustOpacity || 0.6;
+    dustMat.size = towerConfig.dustSize || 0.36;
+    dustMat.opacity = towerConfig.dustOpacity || 0.78;
   }
 
   if (typeof applyTowerHazardPalette === 'function') {
     applyTowerHazardPalette(id);
+  }
+  if (typeof setTowerAmbientTheme === 'function') {
+    setTowerAmbientTheme(id);
   }
 }

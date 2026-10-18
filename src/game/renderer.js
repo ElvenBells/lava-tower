@@ -522,9 +522,6 @@ function renderGameFrame(dt) {
     eliteMarkerSprites[q].visible = false;
   }
 
-  // Детализированные 3D-модели лута по мудборду 8:
-  // Кристаллы опыта (октаэдр + кометный след при притяжении), Кристалл здоровья (пульсирует как сердце),
-  // Золотая монета (октаэдр с быстрым вращением и вихрем)
   let xpPickupCount = 0;
   let healPickupCount = 0;
   let goldPickupCount = 0;
@@ -536,7 +533,6 @@ function renderGameFrame(dt) {
     if (pk.type === 0 && xpPickupCount < MAX_PICKUPS) {
       const size = pk.value >= 5 ? 1.42 : 0.88 + Math.min(0.42, pk.value * 0.08);
       if (pk.isMagnetized) {
-        // При полёте к герою кристалл наклоняется вперёд и оставляет бирюзовый шлейф искр (кадр 2 мудборда 8)
         const toHeroYaw = Math.atan2(player.x - pk.x, player.z - pk.z);
         _pickupDummyObj.rotation.set(0.45, toHeroYaw, time * 8);
         if (Math.random() < 0.35) {
@@ -551,7 +547,6 @@ function renderGameFrame(dt) {
       pickupInstancedMesh.setColorAt(xpPickupCount, PICKUP_COLORS[pk.value >= 5 ? 3 : 0]);
       xpPickupCount++;
     } else if (pk.type === 1 && healPickupCount < 120) {
-      // Пульсация рубинового кристалла «как сердце» (кадр 4 мудборда 8)
       const heartBeat = Math.pow(Math.max(0, Math.sin(time * 5.5 + pk.phase)), 3);
       const pulse = 1.12 + heartBeat * 0.24;
       _pickupDummyObj.rotation.set(0, time * 1.4 + pk.phase, 0);
@@ -559,7 +554,6 @@ function renderGameFrame(dt) {
       _pickupDummyObj.updateMatrix();
       healPickupInstancedMesh.setMatrixAt(healPickupCount++, _pickupDummyObj.matrix);
     } else if (pk.type === 2 && goldPickupCount < 200) {
-      // Быстрое вращение золотого октаэдра (кадр 6 мудборда 8)
       _pickupDummyObj.rotation.set(0.14 * Math.sin(time * 4 + pk.phase), time * 6.8 + pk.phase, 0);
       _pickupDummyObj.scale.setScalar(0.98);
       _pickupDummyObj.updateMatrix();
@@ -584,7 +578,6 @@ function renderGameFrame(dt) {
     }
   }
 
-  // Снаряды игрока (Пылающий Метеор + Обсидиановая корка) и вражеские снаряды (Осколок/Веретено)
   let fireCount = 0;
   let enemyFireCount = 0;
   let bladeCount = 0;
@@ -609,7 +602,6 @@ function renderGameFrame(dt) {
       _projectileDummyObj.updateMatrix();
       playerFireballInstancedMesh.setMatrixAt(fireCount, _projectileDummyObj.matrix);
 
-      // Потрескавшаяся лавовая корка вращается вокруг своей оси и «дышит» в полёте (мудборд 1)
       const crustBreath = pulseScale * (1.03 + Math.cos(time * 18 + proj.z) * 0.05);
       _projectileDummyObj.rotation.set(spinRoll * 0.55, flyYaw + spinRoll * 0.7, -spinRoll * 0.45);
       _projectileDummyObj.scale.setScalar(crustBreath);
@@ -619,7 +611,6 @@ function renderGameFrame(dt) {
     }
   }
 
-  // Цветовой резонанс ядра и шлейфа Орбитальных клинков с собранными стихиями
   const tags = state.tagCounts || {};
   if (tags.fire > 0) {
     orbitalBladeCoreMat.emissive.setHex(0xff6a15);
@@ -651,7 +642,6 @@ function renderGameFrame(dt) {
     bladeCount++;
   }
 
-  // Синхронизация «Магической нити» (r = 2.8 м) и сферической «Орбитальной защиты» (мудборд 1)
   if (typeof orbitalDefenseGroup !== 'undefined') {
     const bladeLv = (state.weaponLevels && state.weaponLevels.blade) | 0;
     orbitalDefenseGroup.visible = bladeCount > 0;
@@ -662,7 +652,6 @@ function renderGameFrame(dt) {
       primaryOrbitThreadRing.rotation.z = state.bladeOrbitAngle || 0;
       secondaryOrbitThreadRing.material.color.copy(orbitalBladeTrailMat.color);
 
-      // Сферические вихревые дуги «Орбитальной защиты» усиливаются с ростом уровня клинков
       const cageOpacity = bladeLv >= 3 ? Math.min(0.42, (bladeLv - 2) * 0.07) : 0;
       for (let c = 0; c < orbitalCageRings.length; c++) {
         const cRing = orbitalCageRings[c];
@@ -695,7 +684,6 @@ function renderGameFrame(dt) {
     orbitalBladeTrailInstancedMesh.instanceMatrix.needsUpdate = true;
   }
 
-  // Анимация 3D Ударных волн (с короной зубцов и двойным тором)
   for (const ringMesh of waveEffectRings) {
     if (ringMesh.visible) {
       ringMesh.lifeLeft -= dt;
@@ -712,15 +700,17 @@ function renderGameFrame(dt) {
   }
 
   const activeTowerId = state.towerId || 'ash';
-  dustParticles.rotation.y += dt * (activeTowerId === 'ice' ? 0.24 : activeTowerId === 'void' ? 0.03 : 0.06);
+  const stormBoost = state.towerStorm && state.towerStorm.active ? 1 + state.towerStorm.intensity * 1.4 : 1;
+  dustParticles.rotation.y +=
+    dt * (activeTowerId === 'ice' ? 0.24 : activeTowerId === 'void' ? 0.04 : 0.07) * stormBoost;
   const dustPosArr = dustParticles.geometry.attributes.position.array;
   for (let i = 0; i < DUST_PARTICLE_COUNT * 3; i += 3) {
     if (activeTowerId === 'ice') {
-      dustPosArr[i + 1] += dt * 0.85;
+      dustPosArr[i + 1] += dt * 0.85 * stormBoost;
     } else if (activeTowerId === 'void') {
-      dustPosArr[i + 1] += Math.sin(time * 1.5 + i * 0.37) * dt * 0.28;
+      dustPosArr[i + 1] += Math.sin(time * 1.5 + i * 0.37) * dt * 0.28 * stormBoost;
     } else {
-      dustPosArr[i + 1] += dt * 0.55;
+      dustPosArr[i + 1] += dt * 0.55 * stormBoost;
     }
     if (dustPosArr[i + 1] > 180) dustPosArr[i + 1] = 0;
     if (dustPosArr[i + 1] < 0) dustPosArr[i + 1] = 180;
@@ -890,11 +880,27 @@ function renderGameFrame(dt) {
         .map(([k, v]) => TOMES[k].name + ' ×' + v)
     ].join(', ');
 
+    const stormLine =
+      state.towerStorm && state.towerStorm.active
+        ? `<br><span style="color:#ffd060">${
+            activeTowerId === 'ash'
+              ? '🔥 Пепельная буря'
+              : activeTowerId === 'ice'
+                ? '❄ Ледяной буран'
+                : '🌀 Шторм Пустоты'
+          }: ${Math.ceil(state.towerStorm.timer)} с</span>`
+        : '';
+
+    const puddleLine = state.inLavaPuddle
+      ? '<br><span style="color:#ff5520">🔥 Ожог от лавовой лужи!</span>'
+      : '';
+
     DOM_CACHE.statsText.innerHTML =
       `${HEROES[state.heroId].name}<br>` +
       `Этаж ${state.maxFloorReached + 1}/12 · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
       `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м · золото: ${state.gold | 0}<br>` +
       `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
+      `${stormLine}${puddleLine}` +
       `${state.chosenRoute ? '<br>Путь: ' + (state.chosenRoute === 1 ? 'тихий' : 'опасный') : ''}` +
       `${state.activeEvent ? '<br>Событие: ' + FLOOR_EVENTS[state.activeEvent.key].name + ' · ' + (state.activeEvent.timeLeft | 0) + ' с' : ''}` +
       `${state.mutatorName ? '<br>' + state.mutatorName : ''}` +
