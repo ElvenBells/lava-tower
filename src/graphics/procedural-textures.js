@@ -10,14 +10,14 @@
  * @param {number} size
  * @param {number} repeatX
  * @param {number} repeatY
- * @returns {THREE.CanvasTexture}
+ * @returns {BABYLON.CanvasTexture}
  */
 function createProceduralTexture(drawFn, size = 256, repeatX = 1, repeatY = 1) {
   const texCanvas = document.createElement('canvas');
   texCanvas.width = texCanvas.height = size;
   drawFn(texCanvas.getContext('2d'), size);
-  const texture = new THREE.CanvasTexture(texCanvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = new BABYLON.CanvasTexture(texCanvas);
+  texture.wrapS = texture.wrapT = BABYLON.RepeatWrapping;
   if (repeatX !== 1 || repeatY !== 1) {
     texture.repeat.set(repeatX, repeatY);
   }
@@ -895,7 +895,7 @@ TEXTURES.architectBlueprint = (() => {
   ctx.closePath();
   ctx.stroke();
 
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.frostWeb = (() => {
@@ -938,7 +938,7 @@ TEXTURES.frostWeb = (() => {
     }
     ctx.stroke();
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.glowWarm = createProceduralTexture((ctx, size) => {
@@ -1018,7 +1018,7 @@ TEXTURES.voidCore = (() => {
     ctx.arc(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 4, 0, 7);
     ctx.fill();
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.guardBrick = createProceduralTexture((ctx, size) => {
@@ -1083,7 +1083,7 @@ TEXTURES.guardCrack = (() => {
     ctx.arc(Math.random() * 256, Math.random() * 256, 1.5 + Math.random() * 3, 0, 7);
     ctx.fill();
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.iceCrack = (() => {
@@ -1125,7 +1125,7 @@ TEXTURES.iceCrack = (() => {
       ctx.stroke();
     }
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.leaperLava = createProceduralTexture((ctx, size) => {
@@ -1197,7 +1197,7 @@ TEXTURES.golemChar = (() => {
 
   drawCharPass(6, 'rgba(255,80,10,0.9)', 14);
   drawCharPass(2, '#ffd8b0', 5);
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.golemFloor = (() => {
@@ -1235,7 +1235,7 @@ TEXTURES.golemFloor = (() => {
       ctx.stroke();
     }
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 TEXTURES.wombRune = (() => {
@@ -1273,7 +1273,7 @@ TEXTURES.wombRune = (() => {
     ctx.lineTo(256 + Math.cos(angle) * 118, 256 + Math.sin(angle) * 118);
     ctx.stroke();
   }
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 function createKolossFlowTexture(repeatX, repeatY) {
@@ -1304,8 +1304,8 @@ function createKolossFlowTexture(repeatX, repeatY) {
     }
     ctx.stroke();
   }
-  const texture = new THREE.CanvasTexture(texCanvas);
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  const texture = new BABYLON.CanvasTexture(texCanvas);
+  texture.wrapS = texture.wrapT = BABYLON.RepeatWrapping;
   texture.repeat.set(repeatX, repeatY);
   return texture;
 }
@@ -1337,7 +1337,7 @@ TEXTURES.kolEye = (() => {
     ctx.arc(64, 64, radius, startAngle, startAngle + arcLen);
     ctx.stroke();
   }
-  const texture = new THREE.CanvasTexture(texCanvas);
+  const texture = new BABYLON.CanvasTexture(texCanvas);
   texture.center.set(0.5, 0.5);
   return texture;
 })();
@@ -1381,7 +1381,7 @@ TEXTURES.kolCrack = (() => {
 
   drawCrackPass(7, 'rgba(255,140,20,0.9)', 16);
   drawCrackPass(2.4, '#ffe090', 6);
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 /* ---------- 4. Художественные фоны неба для трёх башен ---------- */
@@ -1463,7 +1463,7 @@ function createRichSkyTexture(towerId) {
     }
   }
 
-  return new THREE.CanvasTexture(skyCanvas);
+  return new BABYLON.CanvasTexture(skyCanvas);
 }
 
 const BACKGROUND_TEXTURES = {
@@ -1620,7 +1620,7 @@ TEXTURES.runicJumpPad = (() => {
     ctx.restore();
   }
 
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 // Концентрические кинетические кольца и радиальные линии для Ударной волны
@@ -1657,7 +1657,7 @@ TEXTURES.shockwaveRunes = (() => {
     ctx.stroke();
   }
 
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 // Каменный кратер с раскалёнными лавовыми швами для Угольного сапога
@@ -1707,7 +1707,7 @@ TEXTURES.coalCraterDecal = (() => {
     ctx.stroke();
   }
 
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();
 
 // Зубчатый светящийся ореол для маркеров элитных мобов (Бронированный / Стремительный / Взрывной)
@@ -1755,5 +1755,5 @@ TEXTURES.eliteHalo = (() => {
     ctx.fill();
   }
 
-  return new THREE.CanvasTexture(texCanvas);
+  return new BABYLON.CanvasTexture(texCanvas);
 })();

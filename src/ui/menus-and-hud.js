@@ -6,18 +6,18 @@
 
 /* ---------- 1. Загрузка и нормализация сохранений localStorage ---------- */
 
-let leaderboard = storage.get('lt_lb');
+var leaderboard = storage.get('lt_lb');
 if (!Array.isArray(leaderboard)) {
   leaderboard = [];
 }
 
-let playerNickname = storage.get('lt_nick');
+var playerNickname = storage.get('lt_nick');
 if (typeof playerNickname !== 'string') {
   playerNickname = 'Игрок';
 }
 
 // Поддержка обратной совместимости структуры мета-прогресса с форматом lt_meta (u, tu, f, a)
-let rawMeta = storage.get('lt_meta');
+var rawMeta = storage.get('lt_meta');
 if (!rawMeta || typeof rawMeta !== 'object' || !rawMeta.u) {
   rawMeta = { u: { wan: 1 }, tu: { ash: 1 }, f: {}, a: 0 };
 }
@@ -27,7 +27,7 @@ rawMeta.tu.ash = 1;
 if (!rawMeta.f) rawMeta.f = {};
 if (!rawMeta.a) rawMeta.a = 0;
 
-const metaProgress = {
+var metaProgress = {
   get raw() {
     return rawMeta;
   },
@@ -51,12 +51,12 @@ const metaProgress = {
   }
 };
 
-let selectedHeroId = storage.get('lt_hero');
+var selectedHeroId = storage.get('lt_hero');
 if (!HEROES[selectedHeroId] || !metaProgress.unlockedHeroes[selectedHeroId]) {
   selectedHeroId = 'wan';
 }
 
-let selectedTowerId = storage.get('lt_tower');
+var selectedTowerId = storage.get('lt_tower');
 if (!TOWERS[selectedTowerId] || !metaProgress.unlockedTowers[selectedTowerId]) {
   selectedTowerId = 'ash';
 }

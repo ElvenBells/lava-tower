@@ -6,13 +6,13 @@
    Лавовое сердце, Поясной Компас высоты, Плавильный кристалл) и окружение башни
    ========================================================================== */
 
-const playerMesh = new THREE.Group();
+const playerMesh = new BABYLON.Group();
 scene.add(playerMesh);
 
 /* ---------- 0. Детализированная 3D-модель героя, плаща, мини-оружия, томов и реликвий ---------- */
 
 const heroRig = (function buildCoalbearerHero() {
-  const T = THREE;
+  const T = BABYLON;
   const PI = Math.PI;
   const L = (color, opts) =>
     new T.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2, ...opts });
@@ -1657,7 +1657,7 @@ function updatePlayerAnimation(dt) {
 /* ---------- 1. Поверхность и 3D-эффекты угрозы снизу (Лава / Метель / Бездна) ---------- */
 
 const LAVA_MATERIALS = {
-  ash: new THREE.MeshStandardMaterial({
+  ash: new BABYLON.MeshStandardMaterial({
     map: lavaTexture,
     bumpMap: lavaTexture,
     bumpScale: 0.25,
@@ -1666,7 +1666,7 @@ const LAVA_MATERIALS = {
     emissiveIntensity: 2.1,
     roughness: 0.55
   }),
-  ice: new THREE.MeshStandardMaterial({
+  ice: new BABYLON.MeshStandardMaterial({
     map: iceLavaTexture,
     bumpMap: iceLavaTexture,
     bumpScale: 0.2,
@@ -1675,7 +1675,7 @@ const LAVA_MATERIALS = {
     emissiveIntensity: 1.35,
     roughness: 0.35
   }),
-  void: new THREE.MeshStandardMaterial({
+  void: new BABYLON.MeshStandardMaterial({
     map: voidLavaTexture,
     emissive: 0x9835ff,
     emissiveMap: voidLavaTexture,
@@ -1684,28 +1684,28 @@ const LAVA_MATERIALS = {
   })
 };
 
-const lavaMesh = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), LAVA_MATERIALS.ash);
+const lavaMesh = new BABYLON.Mesh(new BABYLON.PlaneGeometry(300, 300), LAVA_MATERIALS.ash);
 lavaMesh.rotation.x = -Math.PI / 2;
 scene.add(lavaMesh);
 
-const hazardEffectsGroup = new THREE.Group();
+const hazardEffectsGroup = new BABYLON.Group();
 scene.add(hazardEffectsGroup);
 
-const hazardAshGroup = new THREE.Group();
-const hazardIceGroup = new THREE.Group();
-const hazardVoidGroup = new THREE.Group();
+const hazardAshGroup = new BABYLON.Group();
+const hazardIceGroup = new BABYLON.Group();
+const hazardVoidGroup = new BABYLON.Group();
 hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
 // 1A. Детали моря магмы (Пепельная башня)
 (function buildAshHazardDetails() {
-  const glowDisc = new THREE.Mesh(
-    new THREE.CircleGeometry(30.2, 36),
-    new THREE.MeshBasicMaterial({
+  const glowDisc = new BABYLON.Mesh(
+    new BABYLON.CircleGeometry(30.2, 36),
+    new BABYLON.MeshBasicMaterial({
       map: lavaTexture,
       color: 0xffaa30,
       transparent: true,
       opacity: 0.38,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1714,7 +1714,7 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   hazardAshGroup.add(glowDisc);
   hazardAshGroup.userData.glowDisc = glowDisc;
 
-  const crustMat = new THREE.MeshStandardMaterial({
+  const crustMat = new BABYLON.MeshStandardMaterial({
     color: 0x240b0d,
     emissive: 0x6a1400,
     emissiveIntensity: 0.65,
@@ -1725,13 +1725,13 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
   for (let i = 0; i < 18; i++) {
     const angle = (i / 18) * TWO_PI + (i % 3) * 0.2;
     const radius = 3.8 + (i % 4) * 6.0;
-    const rockGeo = new THREE.CylinderGeometry(
+    const rockGeo = new BABYLON.CylinderGeometry(
       1.1 + (i % 3) * 0.6,
       1.6 + (i % 3) * 0.7,
       0.5,
       7
     );
-    const rock = new THREE.Mesh(rockGeo, crustMat);
+    const rock = new BABYLON.Mesh(rockGeo, crustMat);
     rock.position.set(Math.cos(angle) * radius, 0.14, Math.sin(angle) * radius);
     rock.rotation.y = i * 1.1;
     rock.userData = { baseAngle: angle, radius, phase: i * 0.7 };
@@ -1745,15 +1745,15 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 (function buildIceHazardDetails() {
   const funnelRings = [];
   for (let layer = 0; layer < 4; layer++) {
-    const ringMesh = new THREE.Mesh(
-      new THREE.RingGeometry(2.2 + layer * 4.8, 9.2 + layer * 6.2, 44, 1),
-      new THREE.MeshBasicMaterial({
+    const ringMesh = new BABYLON.Mesh(
+      new BABYLON.RingGeometry(2.2 + layer * 4.8, 9.2 + layer * 6.2, 44, 1),
+      new BABYLON.MeshBasicMaterial({
         map: iceLavaTexture,
         color: layer === 0 ? 0xffffff : 0x9cdfff,
         transparent: true,
         opacity: 0.46 - layer * 0.08,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
+        side: BABYLON.DoubleSide,
+        blending: BABYLON.AdditiveBlending,
         depthWrite: false
       })
     );
@@ -1763,13 +1763,13 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     funnelRings.push(ringMesh);
   }
 
-  const eyeGlow = new THREE.Sprite(
-    new THREE.SpriteMaterial({
+  const eyeGlow = new BABYLON.Sprite(
+    new BABYLON.SpriteMaterial({
       map: TEXTURES.glowIce,
       color: 0xdff8ff,
       transparent: true,
       opacity: 0.78,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1783,9 +1783,9 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
 // 1C. Детали Бездны (Башня Пустоты)
 (function buildVoidHazardDetails() {
-  const blackHoleCore = new THREE.Mesh(
-    new THREE.CircleGeometry(9.8, 44),
-    new THREE.MeshBasicMaterial({ color: 0x010003 })
+  const blackHoleCore = new BABYLON.Mesh(
+    new BABYLON.CircleGeometry(9.8, 44),
+    new BABYLON.MeshBasicMaterial({ color: 0x010003 })
   );
   blackHoleCore.rotation.x = -Math.PI / 2;
   blackHoleCore.position.y = 0.06;
@@ -1793,15 +1793,15 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 
   const vortexRings = [];
   for (let r = 0; r < 3; r++) {
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(7.5 + r * 4.8, 12.0 + r * 6.2, 44),
-      new THREE.MeshBasicMaterial({
+    const ring = new BABYLON.Mesh(
+      new BABYLON.RingGeometry(7.5 + r * 4.8, 12.0 + r * 6.2, 44),
+      new BABYLON.MeshBasicMaterial({
         map: voidLavaTexture,
         color: r === 0 ? 0xe098ff : r === 1 ? 0xa840ff : 0x6818c8,
         transparent: true,
         opacity: 0.65 - r * 0.14,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
+        side: BABYLON.DoubleSide,
+        blending: BABYLON.AdditiveBlending,
         depthWrite: false
       })
     );
@@ -1811,7 +1811,7 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     vortexRings.push(ring);
   }
 
-  const abyssStarGeo = new THREE.BufferGeometry();
+  const abyssStarGeo = new BABYLON.BufferGeometry();
   const starCount = 56;
   const starPos = new Float32Array(starCount * 3);
   const starCol = new Float32Array(starCount * 3);
@@ -1825,16 +1825,16 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
     starCol[i * 3 + 1] = 0.65;
     starCol[i * 3 + 2] = 1.0;
   }
-  abyssStarGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  abyssStarGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
-  const abyssStars = new THREE.Points(
+  abyssStarGeo.setAttribute('position', new BABYLON.BufferAttribute(starPos, 3));
+  abyssStarGeo.setAttribute('color', new BABYLON.BufferAttribute(starCol, 3));
+  const abyssStars = new BABYLON.Points(
     abyssStarGeo,
-    new THREE.PointsMaterial({
+    new BABYLON.PointsMaterial({
       size: 0.55,
       vertexColors: true,
       transparent: true,
       opacity: 0.85,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1848,7 +1848,7 @@ hazardEffectsGroup.add(hazardAshGroup, hazardIceGroup, hazardVoidGroup);
 /* ---------- 2. Цилиндрические внешние стены башни ---------- */
 
 const TOWER_WALL_MATERIALS = {
-  ash: new THREE.MeshStandardMaterial({
+  ash: new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ash.map,
     bumpMap: TOWER_WALL_TEXTURES.ash.bump,
     bumpScale: 0.45,
@@ -1857,9 +1857,9 @@ const TOWER_WALL_MATERIALS = {
     emissiveIntensity: 1.45,
     roughness: 0.86,
     metalness: 0.12,
-    side: THREE.BackSide
+    side: BABYLON.BackSide
   }),
-  ice: new THREE.MeshStandardMaterial({
+  ice: new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ice.map,
     bumpMap: TOWER_WALL_TEXTURES.ice.bump,
     bumpScale: 0.35,
@@ -1868,9 +1868,9 @@ const TOWER_WALL_MATERIALS = {
     emissiveIntensity: 1.15,
     roughness: 0.18,
     metalness: 0.28,
-    side: THREE.BackSide
+    side: BABYLON.BackSide
   }),
-  void: new THREE.MeshStandardMaterial({
+  void: new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.void.map,
     bumpMap: TOWER_WALL_TEXTURES.void.bump,
     bumpScale: 0.38,
@@ -1879,12 +1879,12 @@ const TOWER_WALL_MATERIALS = {
     emissiveIntensity: 1.65,
     roughness: 0.62,
     metalness: 0.25,
-    side: THREE.BackSide
+    side: BABYLON.BackSide
   })
 };
 
-const towerWallMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(30.8, 30.8, 220, 36, 1, true),
+const towerWallMesh = new BABYLON.Mesh(
+  new BABYLON.CylinderGeometry(30.8, 30.8, 220, 36, 1, true),
   TOWER_WALL_MATERIALS.ash
 );
 towerWallMesh.position.y = 80;
@@ -1892,9 +1892,9 @@ scene.add(towerWallMesh);
 towerWallMesh.matrixAutoUpdate = false;
 towerWallMesh.updateMatrix();
 
-const iceInnerGlazeMesh = new THREE.Mesh(
-  new THREE.CylinderGeometry(29.85, 29.85, 220, 36, 1, true),
-  new THREE.MeshStandardMaterial({
+const iceInnerGlazeMesh = new BABYLON.Mesh(
+  new BABYLON.CylinderGeometry(29.85, 29.85, 220, 36, 1, true),
+  new BABYLON.MeshStandardMaterial({
     map: TOWER_WALL_TEXTURES.ice.map,
     color: 0x90d8ff,
     emissive: 0x2878b8,
@@ -1903,7 +1903,7 @@ const iceInnerGlazeMesh = new THREE.Mesh(
     metalness: 0.35,
     transparent: true,
     opacity: 0.26,
-    side: THREE.BackSide,
+    side: BABYLON.BackSide,
     depthWrite: false
   })
 );
@@ -1913,7 +1913,7 @@ scene.add(iceInnerGlazeMesh);
 iceInnerGlazeMesh.matrixAutoUpdate = false;
 iceInnerGlazeMesh.updateMatrix();
 
-let currentTowerTheme = TOWERS.ash;
+var currentTowerTheme = TOWERS.ash;
 
 function updateEnvironmentVisuals(time, dt) {
   hazardEffectsGroup.position.y = lavaMesh.position.y;

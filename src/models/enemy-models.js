@@ -24,33 +24,33 @@
 function buildOgarekPrototype(towerId = 'ash') {
   if (towerId === 'ice') {
     // МЕРЗЛЯВКА: ромбовидный осколок льда + ледяной хвостик + 4 крыла-пластинки
-    const coreGeo = new THREE.OctahedronGeometry(0.62, 1);
+    const coreGeo = new BABYLON.OctahedronGeometry(0.62, 1);
     const shellParts = [];
     const accentParts = [];
-    const iceColA = new THREE.Color(0x98dcff);
-    const iceColB = new THREE.Color(0xd8f6ff);
+    const iceColA = new BABYLON.Color(0x98dcff);
+    const iceColB = new BABYLON.Color(0xd8f6ff);
 
     // Гранёное ледяное тельце-оправа вокруг ядра
     shellParts.push({
-      geo: new THREE.OctahedronGeometry(0.95, 0),
+      geo: new BABYLON.OctahedronGeometry(0.95, 0),
       matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 0.82, 1.28, 0.78).clone(),
       color: iceColA
     });
     // Нижний острый шип-сосулька
     shellParts.push({
-      geo: new THREE.ConeGeometry(0.38, 1.15, 5),
+      geo: new BABYLON.ConeGeometry(0.38, 1.15, 5),
       matrix: computeTransformMatrix(0, -1.1, -0.05, Math.PI + 0.15, 0, 0).clone(),
       color: iceColB
     });
     // Верхний кристаллический гребень
     accentParts.push({
-      geo: new THREE.ConeGeometry(0.28, 0.75, 4),
+      geo: new BABYLON.ConeGeometry(0.28, 0.75, 4),
       matrix: computeTransformMatrix(0, 1.12, 0.08, -0.2, Math.PI / 4, 0).clone(),
       color: iceColB
     });
     for (const s of [-1, 1]) {
       accentParts.push({
-        geo: new THREE.OctahedronGeometry(0.32, 0),
+        geo: new BABYLON.OctahedronGeometry(0.32, 0),
         matrix: computeTransformMatrix(s * 0.55, 0.1, 0.35, 0, 0, s * 0.4, 0.6, 1.2, 0.6).clone(),
         color: iceColB
       });
@@ -63,19 +63,19 @@ function buildOgarekPrototype(towerId = 'ash') {
       const target = s < 0 ? wingPartsL : wingPartsR;
       // Главная верхняя ледяная пластина крыла
       target.push({
-        geo: new THREE.ConeGeometry(0.42, 2.25, 4),
+        geo: new BABYLON.ConeGeometry(0.42, 2.25, 4),
         matrix: computeTransformMatrix(s * 1.05, 0.55, -0.05, 0.12, 0, -s * 1.08, 0.85, 1, 0.22).clone(),
         color: iceColB
       });
       // Второе перо-осколок крыла
       target.push({
-        geo: new THREE.ConeGeometry(0.32, 1.65, 4),
+        geo: new BABYLON.ConeGeometry(0.32, 1.65, 4),
         matrix: computeTransformMatrix(s * 0.88, 0.05, -0.08, 0.15, 0, -s * 1.32, 0.8, 1, 0.2).clone(),
         color: iceColA
       });
       // Нижнее малое крылышко
       target.push({
-        geo: new THREE.ConeGeometry(0.26, 1.2, 4),
+        geo: new BABYLON.ConeGeometry(0.26, 1.2, 4),
         matrix: computeTransformMatrix(s * 0.62, -0.52, -0.08, 0.18, 0, -s * 1.68, 0.75, 1, 0.18).clone(),
         color: iceColA
       });
@@ -87,14 +87,14 @@ function buildOgarekPrototype(towerId = 'ash') {
     const haloPositions = [];
     for (const s of [-1, 1]) {
       outerEyeParts.push({
-        geo: new THREE.OctahedronGeometry(0.18, 0),
+        geo: new BABYLON.OctahedronGeometry(0.18, 0),
         matrix: computeTransformMatrix(s * 0.32, 0.22, 0.68, 0, 0, s * 0.3, 1.1, 0.7, 0.6).clone()
       });
       innerEyeParts.push({
-        geo: new THREE.OctahedronGeometry(0.11, 0),
+        geo: new BABYLON.OctahedronGeometry(0.11, 0),
         matrix: computeTransformMatrix(s * 0.32, 0.22, 0.74, 0, 0, s * 0.3, 1.0, 0.6, 0.6).clone()
       });
-      haloPositions.push(new THREE.Vector3(s * 0.34, 0.22, 0.85));
+      haloPositions.push(new BABYLON.Vector3(s * 0.34, 0.22, 0.85));
     }
 
     return {
@@ -106,33 +106,33 @@ function buildOgarekPrototype(towerId = 'ash') {
       wingGeoR: mergeGeometryParts(wingPartsR),
       eyeOuterGeo: mergeGeometryParts(outerEyeParts),
       eyeInnerGeo: mergeGeometryParts(innerEyeParts),
-      debrisGeo: new THREE.OctahedronGeometry(0.14, 0),
+      debrisGeo: new BABYLON.OctahedronGeometry(0.14, 0),
       haloPositions
     };
   }
 
   if (towerId === 'void') {
     // ТЕНЕВОЙ МОТЫЛЁК: узкое тёмное тельце со светящимся ядром, усиками и 4 резными крыльями
-    const coreGeo = new THREE.SphereGeometry(0.48, 16, 14);
+    const coreGeo = new BABYLON.SphereGeometry(0.48, 16, 14);
     const bodyParts = [];
     const veinParts = [];
-    const darkCol = new THREE.Color(0x16082a);
-    const veinCol = new THREE.Color(0xd858ff);
+    const darkCol = new BABYLON.Color(0x16082a);
+    const veinCol = new BABYLON.Color(0xd858ff);
 
     // Вытянутое сегментированное тельце мотылька и усики
     bodyParts.push({
-      geo: new THREE.CylinderGeometry(0.32, 0.18, 1.55, 8),
+      geo: new BABYLON.CylinderGeometry(0.32, 0.18, 1.55, 8),
       matrix: computeTransformMatrix(0, -0.1, 0, 0.25, 0, 0).clone(),
       color: darkCol
     });
     bodyParts.push({
-      geo: new THREE.SphereGeometry(0.36, 10, 8),
+      geo: new BABYLON.SphereGeometry(0.36, 10, 8),
       matrix: computeTransformMatrix(0, 0.68, 0.18).clone(),
       color: darkCol
     });
     for (const s of [-1, 1]) {
       veinParts.push({
-        geo: new THREE.ConeGeometry(0.06, 0.95, 5),
+        geo: new BABYLON.ConeGeometry(0.06, 0.95, 5),
         matrix: computeTransformMatrix(s * 0.28, 1.18, 0.32, -0.35, 0, -s * 0.48).clone(),
         color: veinCol
       });
@@ -145,24 +145,24 @@ function buildOgarekPrototype(towerId = 'ash') {
       const target = s < 0 ? wingPartsL : wingPartsR;
       // Верхнее крыло
       target.push({
-        geo: new THREE.ConeGeometry(0.68, 2.35, 5),
+        geo: new BABYLON.ConeGeometry(0.68, 2.35, 5),
         matrix: computeTransformMatrix(s * 1.12, 0.55, -0.05, 0.15, 0, -s * 1.12, 1.0, 1.0, 0.12).clone(),
         color: darkCol
       });
       // Светящаяся пурпурная жила верхнего крыла
       target.push({
-        geo: new THREE.ConeGeometry(0.28, 2.15, 4),
+        geo: new BABYLON.ConeGeometry(0.28, 2.15, 4),
         matrix: computeTransformMatrix(s * 1.08, 0.58, 0.02, 0.15, 0, -s * 1.12, 0.65, 1.0, 0.16).clone(),
         color: veinCol
       });
       // Нижнее крыло с острым шлейфом
       target.push({
-        geo: new THREE.ConeGeometry(0.48, 1.75, 5),
+        geo: new BABYLON.ConeGeometry(0.48, 1.75, 5),
         matrix: computeTransformMatrix(s * 0.82, -0.48, -0.1, 0.22, 0, -s * 1.72, 0.9, 1.0, 0.12).clone(),
         color: darkCol
       });
       target.push({
-        geo: new THREE.ConeGeometry(0.18, 1.55, 4),
+        geo: new BABYLON.ConeGeometry(0.18, 1.55, 4),
         matrix: computeTransformMatrix(s * 0.78, -0.46, -0.04, 0.22, 0, -s * 1.72, 0.6, 1.0, 0.16).clone(),
         color: veinCol
       });
@@ -173,14 +173,14 @@ function buildOgarekPrototype(towerId = 'ash') {
     const haloPositions = [];
     for (const s of [-1, 1]) {
       outerEyeParts.push({
-        geo: new THREE.SphereGeometry(0.15, 8, 8),
+        geo: new BABYLON.SphereGeometry(0.15, 8, 8),
         matrix: computeTransformMatrix(s * 0.22, 0.72, 0.46).clone()
       });
       innerEyeParts.push({
-        geo: new THREE.SphereGeometry(0.09, 8, 8),
+        geo: new BABYLON.SphereGeometry(0.09, 8, 8),
         matrix: computeTransformMatrix(s * 0.22, 0.72, 0.52).clone()
       });
-      haloPositions.push(new THREE.Vector3(s * 0.24, 0.72, 0.62));
+      haloPositions.push(new BABYLON.Vector3(s * 0.24, 0.72, 0.62));
     }
 
     return {
@@ -192,15 +192,15 @@ function buildOgarekPrototype(towerId = 'ash') {
       wingGeoR: mergeGeometryParts(wingPartsR),
       eyeOuterGeo: mergeGeometryParts(outerEyeParts),
       eyeInnerGeo: mergeGeometryParts(innerEyeParts),
-      debrisGeo: new THREE.OctahedronGeometry(0.12, 0),
+      debrisGeo: new BABYLON.OctahedronGeometry(0.12, 0),
       haloPositions
     };
   }
 
   // ПЕПЕЛЬНАЯ БАШНЯ — ОГАРЁК: угольно-пепельный шар с раскалёнными щелями, зубастой ухмылкой и короной пламени
-  const coreGeo = new THREE.SphereGeometry(0.94, 24, 24);
-  const rockColors = [0x2a2428, 0x382e32, 0x463a3e, 0x1e181b].map((hex) => new THREE.Color(hex));
-  const burgundyColors = [0x7a1a22, 0x9c2824, 0xb83818].map((hex) => new THREE.Color(hex));
+  const coreGeo = new BABYLON.SphereGeometry(0.94, 24, 24);
+  const rockColors = [0x2a2428, 0x382e32, 0x463a3e, 0x1e181b].map((hex) => new BABYLON.Color(hex));
+  const burgundyColors = [0x7a1a22, 0x9c2824, 0xb83818].map((hex) => new BABYLON.Color(hex));
   const rockParts = [];
   const burgundyParts = [];
 
@@ -212,9 +212,9 @@ function buildOgarekPrototype(towerId = 'ash') {
     const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
     const theta = goldenAngle * i;
 
-    const dir = new THREE.Vector3(Math.cos(theta) * radiusAtY, y, Math.sin(theta) * radiusAtY)
+    const dir = new BABYLON.Vector3(Math.cos(theta) * radiusAtY, y, Math.sin(theta) * radiusAtY)
       .add(
-        new THREE.Vector3(
+        new BABYLON.Vector3(
           (Math.random() - 0.5) * 0.24,
           (Math.random() - 0.5) * 0.24,
           (Math.random() - 0.5) * 0.24
@@ -226,7 +226,7 @@ function buildOgarekPrototype(towerId = 'ash') {
     if (dir.z > 0.65 && dir.y > -0.35 && dir.y < 0.45) continue;
 
     const chunkSize = 0.18 + Math.random() * 0.2;
-    const geo = jitterGeometry(new THREE.DodecahedronGeometry(chunkSize, 0), chunkSize * 0.48);
+    const geo = jitterGeometry(new BABYLON.DodecahedronGeometry(chunkSize, 0), chunkSize * 0.48);
     const baseRadius = 0.96 + chunkSize * 0.38;
 
     _tempTransformObj.position.copy(dir).multiplyScalar(baseRadius);
@@ -254,14 +254,14 @@ function buildOgarekPrototype(towerId = 'ash') {
 
   // Огненный хохолок/корона пламени на макушке Огарька (по референсу мудборда 1)
   const flameParts = [];
-  const flameColOuter = new THREE.Color(0xff5a10);
-  const flameColInner = new THREE.Color(0xffd040);
+  const flameColOuter = new BABYLON.Color(0xff5a10);
+  const flameColInner = new BABYLON.Color(0xffd040);
   for (let f = 0; f < 7; f++) {
     const a = (f / 7) * TWO_PI;
     const r = f === 0 ? 0 : 0.34;
     const h = f === 0 ? 0.95 : 0.65 + (f % 2) * 0.22;
     flameParts.push({
-      geo: jitterGeometry(new THREE.ConeGeometry(0.24, h, 5), 0.06),
+      geo: jitterGeometry(new BABYLON.ConeGeometry(0.24, h, 5), 0.06),
       matrix: computeTransformMatrix(
         Math.cos(a) * r,
         1.05 + h * 0.35,
@@ -274,28 +274,28 @@ function buildOgarekPrototype(towerId = 'ash') {
     });
   }
 
-  const eyeShape = new THREE.Shape();
+  const eyeShape = new BABYLON.Shape();
   eyeShape.moveTo(-0.30, 0.15);
   eyeShape.lineTo(0.30, 0.03);
   eyeShape.lineTo(0.15, -0.16);
   eyeShape.lineTo(-0.18, -0.03);
   eyeShape.closePath();
 
-  const outerEyeBase = new THREE.ExtrudeGeometry(eyeShape, { depth: 0.14, bevelEnabled: false });
-  const innerEyeBase = new THREE.ExtrudeGeometry(eyeShape, { depth: 0.10, bevelEnabled: false });
+  const outerEyeBase = new BABYLON.ExtrudeGeometry(eyeShape, { depth: 0.14, bevelEnabled: false });
+  const innerEyeBase = new BABYLON.ExtrudeGeometry(eyeShape, { depth: 0.10, bevelEnabled: false });
   const outerEyeParts = [];
   const innerEyeParts = [];
   const haloPositions = [];
 
   for (const sign of [-1, 1]) {
-    const dir = new THREE.Vector3(sign * 0.44, 0.28, 0.86).normalize();
-    const eyeGroup = new THREE.Group();
+    const dir = new BABYLON.Vector3(sign * 0.44, 0.28, 0.86).normalize();
+    const eyeGroup = new BABYLON.Group();
     eyeGroup.position.copy(dir).multiplyScalar(1.06);
     eyeGroup.lookAt(dir.clone().multiplyScalar(4));
     eyeGroup.rotateZ(-sign * 0.36);
     eyeGroup.scale.setScalar(1.32);
 
-    const innerObj = new THREE.Object3D();
+    const innerObj = new BABYLON.Object3D();
     innerObj.scale.setScalar(0.55);
     innerObj.position.z = 0.12;
     eyeGroup.add(innerObj);
@@ -303,13 +303,13 @@ function buildOgarekPrototype(towerId = 'ash') {
 
     outerEyeParts.push({ geo: outerEyeBase.clone(), matrix: eyeGroup.matrixWorld.clone() });
     innerEyeParts.push({ geo: innerEyeBase.clone(), matrix: innerObj.matrixWorld.clone() });
-    haloPositions.push(new THREE.Vector3().copy(dir).multiplyScalar(1.28));
+    haloPositions.push(new BABYLON.Vector3().copy(dir).multiplyScalar(1.28));
   }
 
   // Зубастая раскалённая пасть-щель под глазами
   for (let m = -2; m <= 2; m++) {
     outerEyeParts.push({
-      geo: new THREE.BoxGeometry(0.16, 0.12 + (m % 2 === 0 ? 0.06 : 0), 0.12),
+      geo: new BABYLON.BoxGeometry(0.16, 0.12 + (m % 2 === 0 ? 0.06 : 0), 0.12),
       matrix: computeTransformMatrix(
         m * 0.16,
         -0.18 + Math.abs(m) * 0.04,
@@ -329,14 +329,14 @@ function buildOgarekPrototype(towerId = 'ash') {
     flameCrownGeo: mergeGeometryParts(flameParts),
     eyeOuterGeo: mergeGeometryParts(outerEyeParts),
     eyeInnerGeo: mergeGeometryParts(innerEyeParts),
-    debrisGeo: jitterGeometry(new THREE.DodecahedronGeometry(0.13, 0), 0.06),
+    debrisGeo: jitterGeometry(new BABYLON.DodecahedronGeometry(0.13, 0), 0.06),
     haloPositions
   };
 }
 
 function createOgarekInstance(prototype) {
   const towerId = prototype.towerId || 'ash';
-  const group = new THREE.Group();
+  const group = new BABYLON.Group();
 
   const coreTex =
     towerId === 'ice'
@@ -344,11 +344,11 @@ function createOgarekInstance(prototype) {
       : towerId === 'void'
         ? TEXTURES.voidCore
         : TEXTURES.ogarekCore;
-  const coreMat = new THREE.MeshBasicMaterial({ map: coreTex });
-  const core = new THREE.Mesh(prototype.coreGeo, coreMat);
+  const coreMat = new BABYLON.MeshBasicMaterial({ map: coreTex });
+  const core = new BABYLON.Mesh(prototype.coreGeo, coreMat);
   group.add(core);
 
-  const rockMat = new THREE.MeshStandardMaterial({
+  const rockMat = new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     roughness: towerId === 'ice' ? 0.15 : 0.88,
@@ -357,10 +357,10 @@ function createOgarekInstance(prototype) {
     opacity: towerId === 'ice' ? 0.82 : 1.0,
     flatShading: true
   });
-  const chunks = new THREE.Mesh(prototype.chunksRockGeo, rockMat);
+  const chunks = new BABYLON.Mesh(prototype.chunksRockGeo, rockMat);
   group.add(chunks);
 
-  const burgMat = new THREE.MeshStandardMaterial({
+  const burgMat = new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     roughness: towerId === 'ice' ? 0.12 : 0.65,
@@ -369,7 +369,7 @@ function createOgarekInstance(prototype) {
     emissive: towerId === 'ice' ? 0x38a8ff : towerId === 'void' ? 0xb838ff : 0xff4810,
     emissiveIntensity: towerId === 'ash' ? 0.65 : 1.15
   });
-  const burg = new THREE.Mesh(prototype.chunksBurgGeo, burgMat);
+  const burg = new BABYLON.Mesh(prototype.chunksBurgGeo, burgMat);
   group.add(burg);
 
   // Крылья (для Мерзлявки и Теневого Мотылька) или огненный хохолок (для Огарька)
@@ -377,7 +377,7 @@ function createOgarekInstance(prototype) {
   let wingR = null;
   let flameCrown = null;
   if (prototype.wingGeoL && prototype.wingGeoR) {
-    const wingMat = new THREE.MeshStandardMaterial({
+    const wingMat = new BABYLON.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       roughness: 0.18,
@@ -387,26 +387,26 @@ function createOgarekInstance(prototype) {
       opacity: towerId === 'ice' ? 0.78 : 0.88,
       emissive: towerId === 'ice' ? 0x48b8ff : 0x9828e8,
       emissiveIntensity: 0.85,
-      side: THREE.DoubleSide
+      side: BABYLON.DoubleSide
     });
-    wingL = new THREE.Mesh(prototype.wingGeoL, wingMat);
-    wingR = new THREE.Mesh(prototype.wingGeoR, wingMat);
+    wingL = new BABYLON.Mesh(prototype.wingGeoL, wingMat);
+    wingR = new BABYLON.Mesh(prototype.wingGeoR, wingMat);
     group.add(wingL, wingR);
   } else if (prototype.flameCrownGeo) {
-    const flameMat = new THREE.MeshBasicMaterial({
+    const flameMat = new BABYLON.MeshBasicMaterial({
       color: 0xffffff,
       vertexColors: true
     });
-    flameCrown = new THREE.Mesh(prototype.flameCrownGeo, flameMat);
+    flameCrown = new BABYLON.Mesh(prototype.flameCrownGeo, flameMat);
     group.add(flameCrown);
   }
 
   const eyeOuterHex = towerId === 'ice' ? 0x70e4ff : towerId === 'void' ? 0xd868ff : 0xffb820;
   const eyeInnerHex = towerId === 'ice' ? 0xffffff : towerId === 'void' ? 0xf8e0ff : 0xfff8d0;
-  const eyeMatO = new THREE.MeshBasicMaterial({ color: eyeOuterHex });
-  const eyeMatI = new THREE.MeshBasicMaterial({ color: eyeInnerHex });
-  group.add(new THREE.Mesh(prototype.eyeOuterGeo, eyeMatO));
-  group.add(new THREE.Mesh(prototype.eyeInnerGeo, eyeMatI));
+  const eyeMatO = new BABYLON.MeshBasicMaterial({ color: eyeOuterHex });
+  const eyeMatI = new BABYLON.MeshBasicMaterial({ color: eyeInnerHex });
+  group.add(new BABYLON.Mesh(prototype.eyeOuterGeo, eyeMatO));
+  group.add(new BABYLON.Mesh(prototype.eyeInnerGeo, eyeMatI));
 
   const haloTex =
     towerId === 'ice'
@@ -414,23 +414,23 @@ function createOgarekInstance(prototype) {
       : towerId === 'void'
         ? TEXTURES.glowPurple
         : TEXTURES.glowWarm;
-  const haloMat = new THREE.SpriteMaterial({
+  const haloMat = new BABYLON.SpriteMaterial({
     map: haloTex,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.9
   });
   const halos = [];
   for (const haloPos of prototype.haloPositions) {
-    const halo = new THREE.Sprite(haloMat);
+    const halo = new BABYLON.Sprite(haloMat);
     halo.position.copy(haloPos);
     halo.scale.setScalar(1.65);
     group.add(halo);
     halos.push(halo);
   }
 
-  const debrisMatA = new THREE.MeshStandardMaterial({
+  const debrisMatA = new BABYLON.MeshStandardMaterial({
     color: towerId === 'ice' ? 0xa8e8ff : towerId === 'void' ? 0x8a38d8 : 0x3d3d44,
     emissive: towerId === 'ice' ? 0x2088cc : towerId === 'void' ? 0x581898 : 0x3a1005,
     emissiveIntensity: 0.6,
@@ -439,7 +439,7 @@ function createOgarekInstance(prototype) {
   });
   const debris = [];
   for (let i = 0; i < 5; i++) {
-    const piece = new THREE.Mesh(prototype.debrisGeo, debrisMatA);
+    const piece = new BABYLON.Mesh(prototype.debrisGeo, debrisMatA);
     piece.userData = {
       angle: Math.random() * Math.PI * 2,
       radius: 1.7 + Math.random() * 0.7,
@@ -491,22 +491,22 @@ function buildShypPrototype(towerId = 'ash') {
   if (towerId === 'ice') {
     // ИНЕЕВЫЙ КРИСТАЛЛ: шестиугольная ледяная призма с пирамидальными вершинами и короной ледяных игл
     const crystalParts = [];
-    const colMain = new THREE.Color(0xb8ecff);
-    const colTip = new THREE.Color(0xffffff);
+    const colMain = new BABYLON.Color(0xb8ecff);
+    const colTip = new BABYLON.Color(0xffffff);
 
     // Центральный шестиугольный столб льда + верхняя и нижняя шестигранные пирамиды
     crystalParts.push({
-      geo: new THREE.CylinderGeometry(0.68, 0.68, 1.35, 6),
+      geo: new BABYLON.CylinderGeometry(0.68, 0.68, 1.35, 6),
       matrix: computeTransformMatrix(0, 0, 0).clone(),
       color: colMain
     });
     crystalParts.push({
-      geo: new THREE.ConeGeometry(0.68, 0.95, 6),
+      geo: new BABYLON.ConeGeometry(0.68, 0.95, 6),
       matrix: computeTransformMatrix(0, 1.15, 0).clone(),
       color: colTip
     });
     crystalParts.push({
-      geo: new THREE.ConeGeometry(0.68, 1.15, 6),
+      geo: new BABYLON.ConeGeometry(0.68, 1.15, 6),
       matrix: computeTransformMatrix(0, -1.25, 0, Math.PI, 0, 0).clone(),
       color: colTip
     });
@@ -516,7 +516,7 @@ function buildShypPrototype(towerId = 'ash') {
       const a = (i / 6) * TWO_PI;
       const tilt = i % 2 === 0 ? 1.15 : 1.75;
       crystalParts.push({
-        geo: new THREE.ConeGeometry(0.16, 1.25, 5),
+        geo: new BABYLON.ConeGeometry(0.16, 1.25, 5),
         matrix: computeTransformMatrix(
           Math.cos(a) * 0.72,
           i % 2 === 0 ? 0.25 : -0.28,
@@ -530,27 +530,27 @@ function buildShypPrototype(towerId = 'ash') {
     }
 
     const shellGeo = mergeGeometryParts(crystalParts);
-    const edgesGeo = new THREE.EdgesGeometry(new THREE.CylinderGeometry(0.7, 0.7, 1.4, 6));
-    const coreGeo = new THREE.OctahedronGeometry(0.38, 1);
-    const shardGeo = new THREE.ConeGeometry(0.12, 0.55, 5);
+    const edgesGeo = new BABYLON.EdgesGeometry(new BABYLON.CylinderGeometry(0.7, 0.7, 1.4, 6));
+    const coreGeo = new BABYLON.OctahedronGeometry(0.38, 1);
+    const shardGeo = new BABYLON.ConeGeometry(0.12, 0.55, 5);
     return { towerId: 'ice', shellGeo, edgesGeo, coreGeo, shardGeo };
   }
 
   if (towerId === 'void') {
     // ФАЗОВЫЙ ШИП: асимметричный осколок чёрно-фиолетового обсидиана в кольцах искажения
     const parts = [];
-    const darkObs = new THREE.Color(0x280a48);
-    const brightVein = new THREE.Color(0xd868ff);
+    const darkObs = new BABYLON.Color(0x280a48);
+    const brightVein = new BABYLON.Color(0xd868ff);
 
     parts.push({
-      geo: jitterGeometry(new THREE.OctahedronGeometry(0.95, 0), 0.14),
+      geo: jitterGeometry(new BABYLON.OctahedronGeometry(0.95, 0), 0.14),
       matrix: computeTransformMatrix(0, 0, 0, 0.12, 0.3, -0.08, 0.72, 1.65, 0.68).clone(),
       color: darkObs
     });
     // Сросшиеся боковые фазовые лезвия
     for (const s of [-1, 1]) {
       parts.push({
-        geo: new THREE.OctahedronGeometry(0.55, 0),
+        geo: new BABYLON.OctahedronGeometry(0.55, 0),
         matrix: computeTransformMatrix(
           s * 0.42,
           s * 0.22,
@@ -566,26 +566,26 @@ function buildShypPrototype(towerId = 'ash') {
       });
     }
     const shellGeo = mergeGeometryParts(parts);
-    const edgesGeo = new THREE.EdgesGeometry(shellGeo);
-    const coreGeo = new THREE.SphereGeometry(0.34, 20, 16);
-    const shardGeo = new THREE.OctahedronGeometry(0.18, 0);
-    const ringGeo = new THREE.TorusGeometry(1.18, 0.032, 6, 36);
+    const edgesGeo = new BABYLON.EdgesGeometry(shellGeo);
+    const coreGeo = new BABYLON.SphereGeometry(0.34, 20, 16);
+    const shardGeo = new BABYLON.OctahedronGeometry(0.18, 0);
+    const ringGeo = new BABYLON.TorusGeometry(1.18, 0.032, 6, 36);
     return { towerId: 'void', shellGeo, edgesGeo, coreGeo, shardGeo, ringGeo };
   }
 
   // ПЕПЕЛЬНАЯ БАШНЯ — ПУСТОТНЫЙ ШИП: гранёная друза тёмного стекла с боковыми зубцами
   const parts = [];
-  const mainCol = new THREE.Color(0x8838e8);
-  const subCol = new THREE.Color(0xc478ff);
+  const mainCol = new BABYLON.Color(0x8838e8);
+  const subCol = new BABYLON.Color(0xc478ff);
   parts.push({
-    geo: new THREE.OctahedronGeometry(1, 0),
+    geo: new BABYLON.OctahedronGeometry(1, 0),
     matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 0.76, 1.58, 0.76).clone(),
     color: mainCol
   });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + 0.4;
     parts.push({
-      geo: new THREE.OctahedronGeometry(0.42, 0),
+      geo: new BABYLON.OctahedronGeometry(0.42, 0),
       matrix: computeTransformMatrix(
         Math.cos(a) * 0.48,
         (i % 2 ? 0.25 : -0.25),
@@ -601,17 +601,17 @@ function buildShypPrototype(towerId = 'ash') {
     });
   }
   const shellGeo = mergeGeometryParts(parts);
-  const edgesGeo = new THREE.EdgesGeometry(shellGeo);
-  const coreGeo = new THREE.SphereGeometry(0.32, 20, 20);
-  const shardGeo = new THREE.OctahedronGeometry(0.16, 0);
+  const edgesGeo = new BABYLON.EdgesGeometry(shellGeo);
+  const coreGeo = new BABYLON.SphereGeometry(0.32, 20, 20);
+  const shardGeo = new BABYLON.OctahedronGeometry(0.16, 0);
   return { towerId: 'ash', shellGeo, edgesGeo, coreGeo, shardGeo };
 }
 
 function createShypInstance(prototype) {
   const towerId = prototype.towerId || 'ash';
-  const group = new THREE.Group();
+  const group = new BABYLON.Group();
 
-  const shellMat = new THREE.MeshStandardMaterial({
+  const shellMat = new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     roughness: towerId === 'ice' ? 0.08 : 0.15,
@@ -621,28 +621,28 @@ function createShypInstance(prototype) {
     opacity: towerId === 'ice' ? 0.68 : 0.56,
     emissive: towerId === 'ice' ? 0x2898e8 : towerId === 'void' ? 0x581498 : 0x3a0a6a,
     emissiveIntensity: 0.65,
-    side: THREE.DoubleSide,
+    side: BABYLON.DoubleSide,
     depthWrite: false
   });
-  const shell = new THREE.Mesh(prototype.shellGeo, shellMat);
+  const shell = new BABYLON.Mesh(prototype.shellGeo, shellMat);
   shell.renderOrder = 5;
   group.add(shell);
 
-  const edgesMat = new THREE.LineBasicMaterial({
+  const edgesMat = new BABYLON.LineBasicMaterial({
     color: towerId === 'ice' ? 0xe0f8ff : 0xd098ff,
     transparent: true,
     opacity: 0.65,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false
   });
-  const edges = new THREE.LineSegments(prototype.edgesGeo, edgesMat);
+  const edges = new BABYLON.LineSegments(prototype.edgesGeo, edgesMat);
   edges.renderOrder = 6;
   group.add(edges);
 
-  const coreMat = new THREE.MeshBasicMaterial({
+  const coreMat = new BABYLON.MeshBasicMaterial({
     map: towerId === 'ice' ? TEXTURES.iceCore : TEXTURES.voidCore
   });
-  const core = new THREE.Mesh(prototype.coreGeo, coreMat);
+  const core = new BABYLON.Mesh(prototype.coreGeo, coreMat);
   core.renderOrder = 3;
   group.add(core);
 
@@ -656,16 +656,16 @@ function createShypInstance(prototype) {
   // Кольца фазового искажения для Фазового Шипа
   const phaseRings = [];
   if (prototype.ringGeo) {
-    const ringMat = new THREE.MeshBasicMaterial({
+    const ringMat = new BABYLON.MeshBasicMaterial({
       color: 0xc868ff,
       transparent: true,
       opacity: 0.5,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false,
-      side: THREE.DoubleSide
+      side: BABYLON.DoubleSide
     });
     for (let r = 0; r < 2; r++) {
-      const rm = new THREE.Mesh(prototype.ringGeo, ringMat);
+      const rm = new BABYLON.Mesh(prototype.ringGeo, ringMat);
       rm.rotation.set(0.8 + r * 0.9, r * 1.1, 0);
       group.add(rm);
       phaseRings.push(rm);
@@ -673,7 +673,7 @@ function createShypInstance(prototype) {
   }
 
   const stormParticleCount = 120;
-  const stGeo = new THREE.BufferGeometry();
+  const stGeo = new BABYLON.BufferGeometry();
   const stPos = new Float32Array(stormParticleCount * 3);
   const stCol = new Float32Array(stormParticleCount * 3);
   const stData = [];
@@ -689,27 +689,27 @@ function createShypInstance(prototype) {
       phase: Math.random() * Math.PI * 2,
       color:
         Math.random() < 0.18
-          ? new THREE.Color(1, 1, 1)
-          : new THREE.Color().setHSL(hueBase + Math.random() * 0.08, 1, 0.6 + Math.random() * 0.3)
+          ? new BABYLON.Color(1, 1, 1)
+          : new BABYLON.Color().setHSL(hueBase + Math.random() * 0.08, 1, 0.6 + Math.random() * 0.3)
     });
   }
 
-  stGeo.setAttribute('position', new THREE.BufferAttribute(stPos, 3));
-  stGeo.setAttribute('color', new THREE.BufferAttribute(stCol, 3));
-  const storm = new THREE.Points(
+  stGeo.setAttribute('position', new BABYLON.BufferAttribute(stPos, 3));
+  stGeo.setAttribute('color', new BABYLON.BufferAttribute(stCol, 3));
+  const storm = new BABYLON.Points(
     stGeo,
-    new THREE.PointsMaterial({
+    new BABYLON.PointsMaterial({
       size: 0.065,
       vertexColors: true,
       transparent: true,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
   storm.renderOrder = 4;
   group.add(storm);
 
-  const shardMat = new THREE.MeshStandardMaterial({
+  const shardMat = new BABYLON.MeshStandardMaterial({
     color: towerId === 'ice' ? 0x90dcff : 0x6a24b8,
     roughness: 0.2,
     metalness: 0.25,
@@ -719,7 +719,7 @@ function createShypInstance(prototype) {
   });
   const shards = [];
   for (let i = 0; i < 5; i++) {
-    const shard = new THREE.Mesh(prototype.shardGeo, shardMat);
+    const shard = new BABYLON.Mesh(prototype.shardGeo, shardMat);
     shard.scale.setScalar(0.75 + Math.random() * 0.6);
     shard.userData = {
       angle: (i / 5) * TWO_PI,
@@ -774,14 +774,14 @@ function buildGuardPrototype(towerId = 'ash') {
   let stoneColors;
   let accentColor;
   if (towerId === 'ice') {
-    stoneColors = [0x88c8f0, 0x9cd8ff, 0x68a8d8, 0xb8e8ff].map((h) => new THREE.Color(h));
-    accentColor = new THREE.Color(0xe8fbff);
+    stoneColors = [0x88c8f0, 0x9cd8ff, 0x68a8d8, 0xb8e8ff].map((h) => new BABYLON.Color(h));
+    accentColor = new BABYLON.Color(0xe8fbff);
   } else if (towerId === 'void') {
-    stoneColors = [0x241438, 0x2e1a48, 0x1a0c2a, 0x382058].map((h) => new THREE.Color(h));
-    accentColor = new THREE.Color(0xb848ff);
+    stoneColors = [0x241438, 0x2e1a48, 0x1a0c2a, 0x382058].map((h) => new BABYLON.Color(h));
+    accentColor = new BABYLON.Color(0xb848ff);
   } else {
-    stoneColors = [0x4a383c, 0x5c4246, 0x3c2c30, 0x68484c].map((h) => new THREE.Color(h));
-    accentColor = new THREE.Color(0xff6818);
+    stoneColors = [0x4a383c, 0x5c4246, 0x3c2c30, 0x68484c].map((h) => new BABYLON.Color(h));
+    accentColor = new BABYLON.Color(0xff6818);
   }
 
   const pickStoneStyle = () => {
@@ -797,7 +797,7 @@ function buildGuardPrototype(towerId = 'ash') {
       style.tag === 'brick'
         ? partsByLimb[limbName + 'Brick'] || partsByLimb[limbName]
         : partsByLimb[limbName];
-    const geo = jitterGeometry(new THREE.BoxGeometry(w, h, d), Math.min(w, h, d) * 0.18);
+    const geo = jitterGeometry(new BABYLON.BoxGeometry(w, h, d), Math.min(w, h, d) * 0.18);
     targetList.push({
       geo,
       matrix: computeTransformMatrix(
@@ -814,7 +814,7 @@ function buildGuardPrototype(towerId = 'ash') {
 
   function addShard(limbName, r, h, x, y, z, rx, ry, rz, col) {
     partsByLimb[limbName].push({
-      geo: jitterGeometry(new THREE.ConeGeometry(r, h, 5), r * 0.2),
+      geo: jitterGeometry(new BABYLON.ConeGeometry(r, h, 5), r * 0.2),
       matrix: computeTransformMatrix(x, y, z, rx || 0, ry || 0, rz || 0).clone(),
       color: col || accentColor
     });
@@ -913,7 +913,7 @@ function buildGuardPrototype(towerId = 'ash') {
   const eyeParts = [];
   for (const side of [-1, 1]) {
     eyeParts.push({
-      geo: new THREE.BoxGeometry(0.13, 0.08, 0.06),
+      geo: new BABYLON.BoxGeometry(0.13, 0.08, 0.06),
       matrix: computeTransformMatrix(side * 0.15, 0.24, 0.28, 0, 0, side * 0.2).clone()
     });
   }
@@ -924,16 +924,16 @@ function buildGuardPrototype(towerId = 'ash') {
 
 function createGuardInstance(prototype) {
   const towerId = prototype.towerId || 'ash';
-  const root = new THREE.Group();
+  const root = new BABYLON.Group();
 
-  const stoneMat = new THREE.MeshStandardMaterial({
+  const stoneMat = new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     roughness: towerId === 'ice' ? 0.18 : 0.88,
     metalness: towerId === 'ice' ? 0.38 : 0.12,
     flatShading: true
   });
-  const brickMat = new THREE.MeshStandardMaterial({
+  const brickMat = new BABYLON.MeshStandardMaterial({
     map: TEXTURES.guardBrick,
     roughness: 0.9,
     flatShading: true
@@ -941,44 +941,44 @@ function createGuardInstance(prototype) {
 
   const attachVertexColorMesh = (geo, parent, x, y, z) => {
     if (!geo) return null;
-    const mesh = new THREE.Mesh(geo, stoneMat);
+    const mesh = new BABYLON.Mesh(geo, stoneMat);
     mesh.position.set(x || 0, y || 0, z || 0);
     parent.add(mesh);
     return mesh;
   };
 
-  const hips = new THREE.Group();
+  const hips = new BABYLON.Group();
   hips.position.y = 1.5;
   root.add(hips);
 
-  const torsoGroup = new THREE.Group();
+  const torsoGroup = new BABYLON.Group();
   hips.add(torsoGroup);
   attachVertexColorMesh(prototype.merged.torso, torsoGroup);
   if (prototype.merged.torsoBrick) {
-    torsoGroup.add(new THREE.Mesh(prototype.merged.torsoBrick, brickMat));
+    torsoGroup.add(new BABYLON.Mesh(prototype.merged.torsoBrick, brickMat));
   }
 
   // Светящееся ядро / воронка в груди танка (по мудбордам всех 3 башен!)
   if (towerId === 'void') {
     // Страж Бездны: чёрная дыра-воронка с фиолетовым кольцом в груди
-    const bhCore = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 16, 12),
-      new THREE.MeshBasicMaterial({ color: 0x020005 })
+    const bhCore = new BABYLON.Mesh(
+      new BABYLON.SphereGeometry(0.32, 16, 12),
+      new BABYLON.MeshBasicMaterial({ color: 0x020005 })
     );
     bhCore.position.set(0, 1.05, 0.42);
     torsoGroup.add(bhCore);
 
-    const bhRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.38, 0.06, 8, 24),
-      new THREE.MeshBasicMaterial({ color: 0xe078ff })
+    const bhRing = new BABYLON.Mesh(
+      new BABYLON.TorusGeometry(0.38, 0.06, 8, 24),
+      new BABYLON.MeshBasicMaterial({ color: 0xe078ff })
     );
     bhRing.position.set(0, 1.05, 0.48);
     torsoGroup.add(bhRing);
   } else {
     // Каменный Страж (огненное ядро) и Мерзлотный Голем (ледяное ядро)
-    const coreMesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.36, 1),
-      new THREE.MeshBasicMaterial({
+    const coreMesh = new BABYLON.Mesh(
+      new BABYLON.OctahedronGeometry(0.36, 1),
+      new BABYLON.MeshBasicMaterial({
         map: towerId === 'ice' ? TEXTURES.iceCore : TEXTURES.ogarekCore
       })
     );
@@ -1000,16 +1000,16 @@ function createGuardInstance(prototype) {
   const crackMats = [];
   const crackTex = towerId === 'ice' ? TEXTURES.iceCrack : TEXTURES.guardCrack;
   function addCrackDecal(w, h, x, y, z, ry, rx, parent) {
-    const mat = new THREE.MeshBasicMaterial({
+    const mat = new BABYLON.MeshBasicMaterial({
       map: crackTex,
       color: towerId === 'void' ? 0xc858ff : 0xffffff,
       transparent: true,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false,
-      side: THREE.DoubleSide,
+      side: BABYLON.DoubleSide,
       opacity: 0.65
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    const mesh = new BABYLON.Mesh(new BABYLON.PlaneGeometry(w, h), mat);
     mesh.position.set(x, y, z);
     mesh.rotation.set(rx, ry, 0);
     mesh.renderOrder = 5;
@@ -1021,30 +1021,30 @@ function createGuardInstance(prototype) {
   addCrackDecal(0.95, 0.85, 0, 0.85, 0.54, 0, 0, torsoGroup);
   addCrackDecal(0.5, 0.45, 1.05, 1.4, 0.42, 0.5, 0, torsoGroup);
 
-  const head = new THREE.Group();
+  const head = new BABYLON.Group();
   head.position.set(0, 1.6, 0.05);
   torsoGroup.add(head);
   attachVertexColorMesh(prototype.merged.head, head);
 
   const eyeColorHex = towerId === 'ice' ? 0x80f0ff : towerId === 'void' ? 0xd858ff : 0xff4422;
-  const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColorHex });
-  head.add(new THREE.Mesh(prototype.merged.eyes, eyeMat));
+  const eyeMat = new BABYLON.MeshBasicMaterial({ color: eyeColorHex });
+  head.add(new BABYLON.Mesh(prototype.merged.eyes, eyeMat));
 
-  const haloMat = new THREE.SpriteMaterial({
+  const haloMat = new BABYLON.SpriteMaterial({
     map:
       towerId === 'ice'
         ? TEXTURES.glowIce
         : towerId === 'void'
           ? TEXTURES.glowPurple
           : TEXTURES.coal,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.85
   });
   const eyeHalos = [];
   for (const side of [-1, 1]) {
-    const halo = new THREE.Sprite(haloMat);
+    const halo = new BABYLON.Sprite(haloMat);
     halo.position.set(side * 0.15, 0.24, 0.35);
     halo.scale.setScalar(0.7);
     head.add(halo);
@@ -1052,7 +1052,7 @@ function createGuardInstance(prototype) {
   }
 
   function makeArm(side) {
-    const group = new THREE.Group();
+    const group = new BABYLON.Group();
     group.position.set(side * 1.12, 1.32, 0);
     torsoGroup.add(group);
     attachVertexColorMesh(side > 0 ? prototype.merged.armR : prototype.merged.armL, group);
@@ -1066,7 +1066,7 @@ function createGuardInstance(prototype) {
   const armL = makeArm(-1);
 
   function makeLeg(side) {
-    const group = new THREE.Group();
+    const group = new BABYLON.Group();
     group.position.set(side * 0.5, 0, 0);
     hips.add(group);
     attachVertexColorMesh(side > 0 ? prototype.merged.legR : prototype.merged.legL, group);
@@ -1117,22 +1117,22 @@ function createGuardInstance(prototype) {
 function buildLeaperPrototype(towerId = 'ash') {
   const bodyColor =
     towerId === 'ice'
-      ? new THREE.Color(0x98dcff)
+      ? new BABYLON.Color(0x98dcff)
       : towerId === 'void'
-        ? new THREE.Color(0xffffff)
-        : new THREE.Color(0x120f16);
+        ? new BABYLON.Color(0xffffff)
+        : new BABYLON.Color(0x120f16);
   const spineColor =
     towerId === 'ice'
-      ? new THREE.Color(0xe8fbff)
+      ? new BABYLON.Color(0xe8fbff)
       : towerId === 'void'
-        ? new THREE.Color(0xb858ff)
-        : new THREE.Color(0x28181e);
+        ? new BABYLON.Color(0xb858ff)
+        : new BABYLON.Color(0x28181e);
   const toothColor =
     towerId === 'ice'
-      ? new THREE.Color(0xffffff)
+      ? new BABYLON.Color(0xffffff)
       : towerId === 'void'
-        ? new THREE.Color(0xd088ff)
-        : new THREE.Color(0xff9840);
+        ? new BABYLON.Color(0xd088ff)
+        : new BABYLON.Color(0xff9840);
 
   const partsByLimb = {
     hips: [],
@@ -1148,8 +1148,8 @@ function buildLeaperPrototype(towerId = 'ash') {
   };
 
   const makeBox = (w, h, d) =>
-    jitterGeometry(new THREE.BoxGeometry(w, h, d), Math.min(w, h, d) * 0.18);
-  const makeSpike = (r, h, segs = 4) => new THREE.ConeGeometry(r, h, segs);
+    jitterGeometry(new BABYLON.BoxGeometry(w, h, d), Math.min(w, h, d) * 0.18);
+  const makeSpike = (r, h, segs = 4) => new BABYLON.ConeGeometry(r, h, segs);
   const addPart = (limbName, geo, x, y, z, rx, ry, rz, sx, sy, sz, color) => {
     partsByLimb[limbName].push({
       geo,
@@ -1169,7 +1169,7 @@ function buildLeaperPrototype(towerId = 'ash') {
     const side = i % 2 ? 1 : -1;
     addPart(
       'hips',
-      jitterGeometry(new THREE.DodecahedronGeometry(0.16, 0), 0.05),
+      jitterGeometry(new BABYLON.DodecahedronGeometry(0.16, 0), 0.05),
       side * 0.34 * widthProfile,
       0.24 * widthProfile,
       z,
@@ -1185,15 +1185,15 @@ function buildLeaperPrototype(towerId = 'ash') {
 
   if (towerId === 'ice') {
     // ЛЕДЯНОЙ ВОЛК: тёмно-синий внутренний скелет (позвоночник и рёбра), просвечивающий сквозь полупрозрачный лёд!
-    const boneCol = new THREE.Color(0x091e3a);
-    addPart('skeleton', new THREE.CylinderGeometry(0.06, 0.05, 1.75, 6), 0, 0.22, -0.05, Math.PI / 2, 0, 0, 1, 1, 1, boneCol);
+    const boneCol = new BABYLON.Color(0x091e3a);
+    addPart('skeleton', new BABYLON.CylinderGeometry(0.06, 0.05, 1.75, 6), 0, 0.22, -0.05, Math.PI / 2, 0, 0, 1, 1, 1, boneCol);
     for (let r = 0; r < 6; r++) {
       const rz = 0.62 - r * 0.22;
       const ribScale = 1 - r * 0.08;
       for (const s of [-1, 1]) {
         addPart(
           'skeleton',
-          new THREE.CylinderGeometry(0.032, 0.025, 0.48 * ribScale, 5),
+          new BABYLON.CylinderGeometry(0.032, 0.025, 0.48 * ribScale, 5),
           s * 0.22 * ribScale,
           0.06,
           rz,
@@ -1269,7 +1269,7 @@ function buildLeaperPrototype(towerId = 'ash') {
   // Голова
   if (towerId === 'void') {
     // Вытянутая гладкая голова без пасти с большими глазами-провалами (как на мудборде 3)
-    addPart('head', new THREE.SphereGeometry(0.28, 12, 10), 0, 0.04, 0.34, 0.15, 0, 0, 0.88, 0.82, 1.65);
+    addPart('head', new BABYLON.SphereGeometry(0.28, 12, 10), 0, 0.04, 0.34, 0.15, 0, 0, 0.88, 0.82, 1.65);
     for (const s of [-1, 1]) {
       addPart('head', makeSpike(0.045, 0.55, 5), s * 0.16, 0.18, -0.08, -1.2, 0, -s * 0.35, 1, 1, 1, spineColor);
     }
@@ -1320,7 +1320,7 @@ function buildLeaperPrototype(towerId = 'ash') {
   addPart('fFore', makeBox(0.11 * limbThin, 0.34, 0.12 * limbThin), 0, -0.16, 0.04);
   if (towerId === 'ice') {
     // Лезвие-конёк на передней лапе
-    addPart('fFore', new THREE.BoxGeometry(0.04, 0.12, 0.42), 0, -0.32, 0.12, 0, 0, 0, 1, 1, 1, spineColor);
+    addPart('fFore', new BABYLON.BoxGeometry(0.04, 0.12, 0.42), 0, -0.32, 0.12, 0, 0, 0, 1, 1, 1, spineColor);
   } else {
     for (let i = -1; i <= 1; i++) {
       addPart('fFore', makeSpike(0.028, 0.18), i * 0.05, -0.3, 0.12, 2.4, 0, i * 0.25, 1, 1, 1, spineColor);
@@ -1334,7 +1334,7 @@ function buildLeaperPrototype(towerId = 'ash') {
   addPart('bShin', makeBox(0.13 * limbThin, 0.68, 0.15 * limbThin), 0, -0.34, 0);
   addPart('bFoot', makeBox(0.15 * limbThin, 0.1, 0.42), 0, -0.04, 0.14);
   if (towerId === 'ice') {
-    addPart('bFoot', new THREE.BoxGeometry(0.04, 0.12, 0.54), 0, -0.08, 0.18, 0, 0, 0, 1, 1, 1, spineColor);
+    addPart('bFoot', new BABYLON.BoxGeometry(0.04, 0.12, 0.54), 0, -0.08, 0.18, 0, 0, 0, 1, 1, 1, spineColor);
   } else {
     for (let i = -1; i <= 1; i++) {
       addPart('bFoot', makeSpike(0.03, 0.2), i * 0.06, -0.05, 0.36, 1.9, 0, i * 0.2, 1, 1, 1, spineColor);
@@ -1391,28 +1391,28 @@ function buildLeaperPrototype(towerId = 'ash') {
   for (const side of [-1, 1]) {
     const eyeR = towerId === 'void' ? 0.085 : 0.058;
     eyeParts.push({
-      geo: new THREE.SphereGeometry(eyeR, 10, 10),
+      geo: new BABYLON.SphereGeometry(eyeR, 10, 10),
       matrix: computeTransformMatrix(side * 0.16, 0.06, 0.46).clone()
     });
     if (towerId === 'void') {
       eyeParts.push({
-        geo: new THREE.SphereGeometry(0.055, 8, 8),
+        geo: new BABYLON.SphereGeometry(0.055, 8, 8),
         matrix: computeTransformMatrix(side * 0.19, 0.14, 0.28).clone()
       });
     }
   }
   merged.eyes = mergeGeometryParts(eyeParts);
 
-  const coreGeo = new THREE.SphereGeometry(1, 20, 16);
-  const mawGeo = new THREE.BoxGeometry(0.2, 0.05, 0.32);
+  const coreGeo = new BABYLON.SphereGeometry(1, 20, 16);
+  const mawGeo = new BABYLON.BoxGeometry(0.2, 0.05, 0.32);
   return { towerId, merged, coreGeo, mawGeo };
 }
 
 function createLeaperInstance(prototype) {
   const towerId = prototype.towerId || 'ash';
-  const root = new THREE.Group();
+  const root = new BABYLON.Group();
 
-  const bodyMat = new THREE.MeshStandardMaterial({
+  const bodyMat = new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     map: towerId === 'void' ? TEXTURES.voidStarSkin : null,
@@ -1427,27 +1427,27 @@ function createLeaperInstance(prototype) {
 
   const attachBodyMesh = (geo, parent, x, y, z) => {
     if (!geo) return null;
-    const mesh = new THREE.Mesh(geo, bodyMat);
+    const mesh = new BABYLON.Mesh(geo, bodyMat);
     mesh.position.set(x || 0, y || 0, z || 0);
     parent.add(mesh);
     return mesh;
   };
 
-  const hips = new THREE.Group();
+  const hips = new BABYLON.Group();
   hips.position.y = 0.98;
   root.add(hips);
   attachBodyMesh(prototype.merged.hips, hips);
 
   // Для Ледяного Волка добавляем внутренний тёмно-синий скелет!
   if (prototype.merged.skeleton) {
-    const skelMat = new THREE.MeshStandardMaterial({
+    const skelMat = new BABYLON.MeshStandardMaterial({
       color: 0x071a34,
       emissive: 0x0b3260,
       emissiveIntensity: 0.5,
       roughness: 0.6,
       flatShading: true
     });
-    hips.add(new THREE.Mesh(prototype.merged.skeleton, skelMat));
+    hips.add(new BABYLON.Mesh(prototype.merged.skeleton, skelMat));
   }
 
   const coreTex =
@@ -1456,8 +1456,8 @@ function createLeaperInstance(prototype) {
       : towerId === 'void'
         ? TEXTURES.voidCore
         : TEXTURES.leaperLava;
-  const coreMat = new THREE.MeshBasicMaterial({ map: coreTex });
-  const core = new THREE.Mesh(prototype.coreGeo, coreMat);
+  const coreMat = new BABYLON.MeshBasicMaterial({ map: coreTex });
+  const core = new BABYLON.Mesh(prototype.coreGeo, coreMat);
   core.position.set(0, 0.04, 0.05);
   core.scale.set(
     towerId === 'ice' ? 0.38 : 0.56,
@@ -1477,45 +1477,45 @@ function createLeaperInstance(prototype) {
   glow.position.set(0, -0.08, 0);
   hips.add(glow);
 
-  const head = new THREE.Group();
+  const head = new BABYLON.Group();
   head.position.set(0, 0.14, 1.02);
   hips.add(head);
   attachBodyMesh(prototype.merged.head, head);
 
   const eyeColorHex = towerId === 'ice' ? 0xe8fbff : towerId === 'void' ? 0xffffff : 0xff5522;
-  const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColorHex });
-  head.add(new THREE.Mesh(prototype.merged.eyes, eyeMat));
+  const eyeMat = new BABYLON.MeshBasicMaterial({ color: eyeColorHex });
+  head.add(new BABYLON.Mesh(prototype.merged.eyes, eyeMat));
 
-  const haloMat = new THREE.SpriteMaterial({
+  const haloMat = new BABYLON.SpriteMaterial({
     map:
       towerId === 'ice'
         ? TEXTURES.glowIce
         : towerId === 'void'
           ? TEXTURES.glowPurple
           : TEXTURES.coal,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.85
   });
   const eyeHalos = [];
   for (const side of [-1, 1]) {
-    const halo = new THREE.Sprite(haloMat);
+    const halo = new BABYLON.Sprite(haloMat);
     halo.position.set(side * 0.16, 0.06, 0.52);
     halo.scale.setScalar(0.45);
     head.add(halo);
     eyeHalos.push(halo);
   }
 
-  const jaw = new THREE.Group();
+  const jaw = new BABYLON.Group();
   jaw.position.set(0, -0.13, 0.42);
   head.add(jaw);
   attachBodyMesh(prototype.merged.jaw, jaw);
 
-  const mawMat = new THREE.MeshBasicMaterial({
+  const mawMat = new BABYLON.MeshBasicMaterial({
     color: towerId === 'ice' ? 0x70e8ff : towerId === 'void' ? 0xb848ff : 0xff5511
   });
-  const maw = new THREE.Mesh(prototype.mawGeo, mawMat);
+  const maw = new BABYLON.Mesh(prototype.mawGeo, mawMat);
   maw.position.set(0, 0.0, 0.28);
   jaw.add(maw);
 
@@ -1524,7 +1524,7 @@ function createLeaperInstance(prototype) {
   let tailZ = -1.12;
   let tailY = 0.04;
   for (let i = 0; i < 4; i++) {
-    const segGroup = new THREE.Group();
+    const segGroup = new BABYLON.Group();
     segGroup.position.set(0, tailY, tailZ);
     tailParent.add(segGroup);
     attachBodyMesh(prototype.merged.tail[i], segGroup);
@@ -1535,12 +1535,12 @@ function createLeaperInstance(prototype) {
   }
 
   function makeFrontLeg(side) {
-    const upperGroup = new THREE.Group();
+    const upperGroup = new BABYLON.Group();
     upperGroup.position.set(side * 0.42, -0.22, 0.55);
     hips.add(upperGroup);
     attachBodyMesh(prototype.merged.fUpper, upperGroup);
 
-    const foreGroup = new THREE.Group();
+    const foreGroup = new BABYLON.Group();
     foreGroup.position.set(0, -0.34, 0);
     upperGroup.add(foreGroup);
     attachBodyMesh(prototype.merged.fFore, foreGroup);
@@ -1551,17 +1551,17 @@ function createLeaperInstance(prototype) {
   const legFR = makeFrontLeg(1);
 
   function makeBackLeg(side) {
-    const thighGroup = new THREE.Group();
+    const thighGroup = new BABYLON.Group();
     thighGroup.position.set(side * 0.48, -0.12, -0.72);
     hips.add(thighGroup);
     attachBodyMesh(prototype.merged.bThigh, thighGroup);
 
-    const shinGroup = new THREE.Group();
+    const shinGroup = new BABYLON.Group();
     shinGroup.position.set(0, -0.75, 0);
     thighGroup.add(shinGroup);
     attachBodyMesh(prototype.merged.bShin, shinGroup);
 
-    const footGroup = new THREE.Group();
+    const footGroup = new BABYLON.Group();
     footGroup.position.set(0, -0.66, 0);
     shinGroup.add(footGroup);
     attachBodyMesh(prototype.merged.bFoot, footGroup);

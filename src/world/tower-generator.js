@@ -10,24 +10,24 @@
 // 1A. ПРЫЖКОВАЯ ПЛОЩАДКА (ПАД) — Мудборд 6:
 // Низкий восьмигранно-цилиндрический каменный постамент с рунными клеймами по бокам,
 // светящимся бирюзовым магическим кругом сверху и восходящими потоками кинетической энергии
-const jumpPadGroup = new THREE.Group();
+const jumpPadGroup = new BABYLON.Group();
 scene.add(jumpPadGroup);
 
 const jumpPadGeo = (function buildJumpPadGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const darkStone = new THREE.Color(0x1f2b34);
-  const rimStone = new THREE.Color(0x324654);
-  const cyanRune = new THREE.Color(0x45fff0);
+  const tempMat = new BABYLON.Matrix4();
+  const darkStone = new BABYLON.Color(0x1f2b34);
+  const rimStone = new BABYLON.Color(0x324654);
+  const cyanRune = new BABYLON.Color(0x45fff0);
 
   // Нижнее каменное основание
   parts.push({
-    geo: new THREE.CylinderGeometry(1.44, 1.56, 0.22, 16),
+    geo: new BABYLON.CylinderGeometry(1.44, 1.56, 0.22, 16),
     matrix: computeTransformMatrix(0, -0.05, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: darkStone
   });
   // 8 массивных скошенных каменных сегментов бортика вокруг диска
-  const segGeo = new THREE.BoxGeometry(0.82, 0.26, 0.24);
+  const segGeo = new BABYLON.BoxGeometry(0.82, 0.26, 0.24);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TWO_PI;
     computeTransformMatrix(
@@ -45,7 +45,7 @@ const jumpPadGeo = (function buildJumpPadGeometry() {
     parts.push({ geo: segGeo, matrix: tempMat.clone(), color: rimStone });
   }
   // 4 светящихся бирюзовых рунных клейма на боковых гранях цилиндра (как на мудборде 6)
-  const runePlaqueGeo = new THREE.BoxGeometry(0.28, 0.16, 0.06);
+  const runePlaqueGeo = new BABYLON.BoxGeometry(0.28, 0.16, 0.06);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + Math.PI / 4;
     computeTransformMatrix(
@@ -65,7 +65,7 @@ const jumpPadGeo = (function buildJumpPadGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const jumpPadMat = new THREE.MeshStandardMaterial({
+const jumpPadMat = new BABYLON.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
   emissive: 0x0e6b62,
@@ -74,46 +74,46 @@ const jumpPadMat = new THREE.MeshStandardMaterial({
   metalness: 0.45
 });
 
-const jumpPadTopDiscGeo = new THREE.CircleGeometry(1.16, 32);
+const jumpPadTopDiscGeo = new BABYLON.CircleGeometry(1.16, 32);
 jumpPadTopDiscGeo.rotateX(-Math.PI / 2);
-const jumpPadTopDiscMat = new THREE.MeshBasicMaterial({
+const jumpPadTopDiscMat = new BABYLON.MeshBasicMaterial({
   map: TEXTURES.runicJumpPad,
   color: 0x70fff4,
   transparent: true,
   opacity: 0.96,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
-const jumpPadKineticPlumeGeo = new THREE.CylinderGeometry(0.92, 1.12, 1.35, 20, 1, true);
+const jumpPadKineticPlumeGeo = new BABYLON.CylinderGeometry(0.92, 1.12, 1.35, 20, 1, true);
 jumpPadKineticPlumeGeo.translate(0, 0.68, 0);
-const jumpPadKineticPlumeMat = new THREE.MeshBasicMaterial({
+const jumpPadKineticPlumeMat = new BABYLON.MeshBasicMaterial({
   color: 0x38ffe8,
   transparent: true,
   opacity: 0.24,
-  side: THREE.DoubleSide,
-  blending: THREE.AdditiveBlending,
+  side: BABYLON.DoubleSide,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
 function createJumpPadVisualInstance(x, floorY, z) {
-  const g = new THREE.Group();
+  const g = new BABYLON.Group();
   g.position.set(x, floorY + 0.14, z);
 
-  const baseMesh = new THREE.Mesh(jumpPadGeo, jumpPadMat);
+  const baseMesh = new BABYLON.Mesh(jumpPadGeo, jumpPadMat);
   g.add(baseMesh);
 
-  const runeDisc = new THREE.Mesh(jumpPadTopDiscGeo, jumpPadTopDiscMat);
+  const runeDisc = new BABYLON.Mesh(jumpPadTopDiscGeo, jumpPadTopDiscMat);
   runeDisc.position.y = 0.16;
   g.add(runeDisc);
 
-  const plume = new THREE.Mesh(jumpPadKineticPlumeGeo, jumpPadKineticPlumeMat);
+  const plume = new BABYLON.Mesh(jumpPadKineticPlumeGeo, jumpPadKineticPlumeMat);
   plume.position.y = 0.15;
   g.add(plume);
 
   // Восходящее кинетическое кольцо энергии над площадкой
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.96, 0.024, 6, 28),
+  const ring = new BABYLON.Mesh(
+    new BABYLON.TorusGeometry(0.96, 0.024, 6, 28),
     jumpPadKineticPlumeMat
   );
   ring.rotation.x = Math.PI / 2;
@@ -127,11 +127,11 @@ function createJumpPadVisualInstance(x, floorY, z) {
 // 1B. СУНДУК — Мудборд 8:
 // «Золотистый кубический ящик» из тёмного вулканического камня с раскалёнными трещинами лавы,
 // массивной золочёной оковкой граней и «Замком из магмы» спереди, окружённый золотым кольцом ауры
-const chestGroup = new THREE.Group();
+const chestGroup = new BABYLON.Group();
 scene.add(chestGroup);
 
-const chestCubeCoreGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
-const chestCubeCoreMat = new THREE.MeshStandardMaterial({
+const chestCubeCoreGeo = new BABYLON.BoxGeometry(0.96, 0.96, 0.96);
+const chestCubeCoreMat = new BABYLON.MeshStandardMaterial({
   map: TEXTURES.crackedLavaCrust,
   bumpMap: TEXTURES.crackedLavaCrust,
   bumpScale: 0.12,
@@ -145,18 +145,18 @@ const chestCubeCoreMat = new THREE.MeshStandardMaterial({
 
 const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const goldTrim = new THREE.Color(0xffc842);
-  const bronzeDark = new THREE.Color(0xb87618);
-  const magmaBright = new THREE.Color(0xfff098);
-  const keyholeDark = new THREE.Color(0x160708);
+  const tempMat = new BABYLON.Matrix4();
+  const goldTrim = new BABYLON.Color(0xffc842);
+  const bronzeDark = new BABYLON.Color(0xb87618);
+  const magmaBright = new BABYLON.Color(0xfff098);
+  const keyholeDark = new BABYLON.Color(0x160708);
 
   // 12 золотистых рёбер куба
   const edgeLen = 1.02;
   const edgeThick = 0.095;
-  const edgeGeoY = new THREE.BoxGeometry(edgeThick, edgeLen, edgeThick);
-  const edgeGeoX = new THREE.BoxGeometry(edgeLen, edgeThick, edgeThick);
-  const edgeGeoZ = new THREE.BoxGeometry(edgeThick, edgeThick, edgeLen);
+  const edgeGeoY = new BABYLON.BoxGeometry(edgeThick, edgeLen, edgeThick);
+  const edgeGeoX = new BABYLON.BoxGeometry(edgeLen, edgeThick, edgeThick);
+  const edgeGeoZ = new BABYLON.BoxGeometry(edgeThick, edgeThick, edgeLen);
 
   for (const sx of [-0.48, 0.48]) {
     for (const sz of [-0.48, 0.48]) {
@@ -176,7 +176,7 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
   }
 
   // 8 массивных кованых золотых наугольников на вершинах куба
-  const cornerGeo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+  const cornerGeo = new BABYLON.BoxGeometry(0.16, 0.16, 0.16);
   for (const sx of [-0.47, 0.47]) {
     for (const sy of [-0.47, 0.47]) {
       for (const sz of [-0.47, 0.47]) {
@@ -188,12 +188,12 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
 
   // Перекрестные золотые полосы-оковки по граням и крышке (с V-образным замковым профилем, как на мудборде 8)
   parts.push({
-    geo: new THREE.BoxGeometry(1.01, 0.11, 1.01),
+    geo: new BABYLON.BoxGeometry(1.01, 0.11, 1.01),
     matrix: computeTransformMatrix(0, 0.08, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: goldTrim
   });
   parts.push({
-    geo: new THREE.BoxGeometry(0.12, 1.01, 1.01),
+    geo: new BABYLON.BoxGeometry(0.12, 1.01, 1.01),
     matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: bronzeDark
   });
@@ -202,20 +202,20 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
   for (const zSign of [-1, 1]) {
     computeTransformMatrix(0, 0.02, zSign * 0.5, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
-      geo: new THREE.BoxGeometry(0.32, 0.38, 0.08),
+      geo: new BABYLON.BoxGeometry(0.32, 0.38, 0.08),
       matrix: tempMat.clone(),
       color: goldTrim
     });
     computeTransformMatrix(0, 0.02, zSign * 0.525, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
-      geo: new THREE.BoxGeometry(0.22, 0.28, 0.05),
+      geo: new BABYLON.BoxGeometry(0.22, 0.28, 0.05),
       matrix: tempMat.clone(),
       color: magmaBright
     });
     // Тёмная замочная скважина по центру замка из магмы
     computeTransformMatrix(0, 0.03, zSign * 0.55, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
-      geo: new THREE.BoxGeometry(0.065, 0.14, 0.03),
+      geo: new BABYLON.BoxGeometry(0.065, 0.14, 0.03),
       matrix: tempMat.clone(),
       color: keyholeDark
     });
@@ -224,7 +224,7 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const chestMat = new THREE.MeshStandardMaterial({
+const chestMat = new BABYLON.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
   emissive: 0x985200,
@@ -233,26 +233,26 @@ const chestMat = new THREE.MeshStandardMaterial({
   metalness: 0.82
 });
 
-const chestAuraRingGeo = new THREE.TorusGeometry(0.88, 0.03, 6, 32);
+const chestAuraRingGeo = new BABYLON.TorusGeometry(0.88, 0.03, 6, 32);
 chestAuraRingGeo.rotateX(Math.PI / 2);
-const chestAuraRingMat = new THREE.MeshBasicMaterial({
+const chestAuraRingMat = new BABYLON.MeshBasicMaterial({
   color: 0xffaa30,
   transparent: true,
   opacity: 0.72,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
-const chestGlowMat = new THREE.SpriteMaterial({
+const chestGlowMat = new BABYLON.SpriteMaterial({
   map: TEXTURES.glowWarm,
   color: 0xff9820,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false,
   transparent: true,
   opacity: 0.78
 });
 (function prewarmChestShader() {
-  const dummyChest = new THREE.Mesh(chestGeo, chestMat);
+  const dummyChest = new BABYLON.Mesh(chestGeo, chestMat);
   dummyChest.position.y = -80;
   scene.add(dummyChest);
 })();
@@ -260,29 +260,29 @@ const chestGlowMat = new THREE.SpriteMaterial({
 // 1C. АЛТАРЬ ПАКТА — Мудборд 6:
 // «Шестигранный столб» фиолетового кристалла со светящимися вертикальными рунами на ступенчатом
 // каменном постаменте + парящий сверху «Лиловый ореол» и спиральные вихри энергии
-const altarGroup = new THREE.Group();
+const altarGroup = new BABYLON.Group();
 scene.add(altarGroup);
 
 const altarPedestalGeo = (function buildAltarPedestalGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const darkStone = new THREE.Color(0x1b1228);
-  const midStone = new THREE.Color(0x2d1d42);
-  const runeTrim = new THREE.Color(0xa848ff);
+  const tempMat = new BABYLON.Matrix4();
+  const darkStone = new BABYLON.Color(0x1b1228);
+  const midStone = new BABYLON.Color(0x2d1d42);
+  const runeTrim = new BABYLON.Color(0xa848ff);
 
   // Двухступенчатый восьмигранный каменный пьедестал с рунным желобом
   parts.push({
-    geo: new THREE.CylinderGeometry(1.12, 1.28, 0.22, 8),
+    geo: new BABYLON.CylinderGeometry(1.12, 1.28, 0.22, 8),
     matrix: computeTransformMatrix(0, -0.64, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
     color: darkStone
   });
   parts.push({
-    geo: new THREE.CylinderGeometry(0.82, 0.98, 0.26, 8),
+    geo: new BABYLON.CylinderGeometry(0.82, 0.98, 0.26, 8),
     matrix: computeTransformMatrix(0, -0.44, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
     color: midStone
   });
   // Светящееся рунное кольцо в основании столба
-  const ring = new THREE.TorusGeometry(0.68, 0.035, 6, 6);
+  const ring = new BABYLON.TorusGeometry(0.68, 0.035, 6, 6);
   ring.rotateX(Math.PI / 2);
   parts.push({
     geo: ring,
@@ -290,7 +290,7 @@ const altarPedestalGeo = (function buildAltarPedestalGeometry() {
     color: runeTrim
   });
   // 4 каменных упора-контрфорса по углам пьедестала (как на мудборде 6)
-  const buttressGeo = new THREE.BoxGeometry(0.24, 0.34, 0.36);
+  const buttressGeo = new BABYLON.BoxGeometry(0.24, 0.34, 0.36);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + Math.PI / 4;
     computeTransformMatrix(
@@ -312,26 +312,26 @@ const altarPedestalGeo = (function buildAltarPedestalGeometry() {
 
 const altarGeo = (function buildHexagonalCrystalPillarGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const crystalBody = new THREE.Color(0xc868ff);
-  const crystalApex = new THREE.Color(0xf0b8ff);
+  const tempMat = new BABYLON.Matrix4();
+  const crystalBody = new BABYLON.Color(0xc868ff);
+  const crystalApex = new BABYLON.Color(0xf0b8ff);
 
   // Высокий шестигранный кристаллический столб («Шестигранный столб»)
   parts.push({
-    geo: new THREE.CylinderGeometry(0.38, 0.42, 1.72, 6),
+    geo: new BABYLON.CylinderGeometry(0.38, 0.42, 1.72, 6),
     matrix: computeTransformMatrix(0, 0.52, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: crystalBody
   });
   // Шестигранная пирамидальная вершина столба
   parts.push({
-    geo: new THREE.ConeGeometry(0.38, 0.56, 6),
+    geo: new BABYLON.ConeGeometry(0.38, 0.56, 6),
     matrix: computeTransformMatrix(0, 1.66, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: crystalApex
   });
   return mergeGeometryParts(parts);
 })();
 
-const altarPedestalMat = new THREE.MeshStandardMaterial({
+const altarPedestalMat = new BABYLON.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
   emissive: 0x3b1268,
@@ -340,7 +340,7 @@ const altarPedestalMat = new THREE.MeshStandardMaterial({
   metalness: 0.3
 });
 
-const altarMat = new THREE.MeshStandardMaterial({
+const altarMat = new BABYLON.MeshStandardMaterial({
   map: TOWER_WALL_TEXTURES.void.emissive,
   color: 0xd880ff,
   vertexColors: true,
@@ -354,62 +354,62 @@ const altarMat = new THREE.MeshStandardMaterial({
   flatShading: true
 });
 
-const altarHaloGeo = new THREE.TorusGeometry(0.62, 0.038, 8, 32);
+const altarHaloGeo = new BABYLON.TorusGeometry(0.62, 0.038, 8, 32);
 altarHaloGeo.rotateX(Math.PI / 2);
-const altarHaloMat = new THREE.MeshBasicMaterial({
+const altarHaloMat = new BABYLON.MeshBasicMaterial({
   color: 0xe898ff,
   transparent: true,
   opacity: 0.88,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
-const altarSwirlGeo = new THREE.TorusGeometry(0.68, 0.018, 6, 28);
-const altarGlowMat = new THREE.SpriteMaterial({
+const altarSwirlGeo = new BABYLON.TorusGeometry(0.68, 0.018, 6, 28);
+const altarGlowMat = new BABYLON.SpriteMaterial({
   map: TEXTURES.glowPurple,
   color: 0xd878ff,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false,
   transparent: true,
   opacity: 0.88
 });
 (function prewarmAltarShader() {
-  const dummyAltar = new THREE.Mesh(altarGeo, altarMat);
+  const dummyAltar = new BABYLON.Mesh(altarGeo, altarMat);
   dummyAltar.position.y = -80;
   scene.add(dummyAltar);
 })();
 
 // 1D. ПЕЧАТЬ (ВРАТА БОССА) — Мудборд 6:
 // Перекрещивающаяся паутина розово-красных энергетических лучей-цепей (0xff2a60) поперёк лестницы босса
-const bossGateSealGroup = new THREE.Group();
+const bossGateSealGroup = new BABYLON.Group();
 scene.add(bossGateSealGroup);
-let bossGateVisualsByFloor = {};
+var bossGateVisualsByFloor = {};
 
-const bossGateBeamMat = new THREE.MeshBasicMaterial({
+const bossGateBeamMat = new BABYLON.MeshBasicMaterial({
   color: 0xff2a60,
   transparent: true,
   opacity: 0.92,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
-const bossGateCoreMat = new THREE.MeshBasicMaterial({
+const bossGateCoreMat = new BABYLON.MeshBasicMaterial({
   color: 0xffc8d8,
   transparent: true,
   opacity: 0.96,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
-const bossGateGlowMat = new THREE.SpriteMaterial({
+const bossGateGlowMat = new BABYLON.SpriteMaterial({
   map: TEXTURES.glowWhite,
   color: 0xff2a60,
   transparent: true,
   opacity: 0.9,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
 function createBossGateSealVisual(stairSteps, floorY) {
-  const sealGroup = new THREE.Group();
+  const sealGroup = new BABYLON.Group();
   if (!stairSteps || !stairSteps.length) return sealGroup;
 
   // Размещаем энергетическую паутину Печати на входе и середине лестницы босса
@@ -417,7 +417,7 @@ function createBossGateSealVisual(stairSteps, floorY) {
   for (const idx of anchorIndices) {
     if (idx >= stairSteps.length) continue;
     const [sx, sz, stepTopY] = stairSteps[idx];
-    const gateFrame = new THREE.Group();
+    const gateFrame = new BABYLON.Group();
     gateFrame.position.set(sx, stepTopY + 2.2, sz);
     // Поворачиваем плоскость печати поперёк марша лестницы (перпендикулярно радиусу башни)
     gateFrame.rotation.y = Math.atan2(sx, sz) + Math.PI / 2;
@@ -441,16 +441,16 @@ function createBossGateSealVisual(stairSteps, floorY) {
       const cx = (x0 + x1) * 0.5;
       const cy = (y0 + y1) * 0.5;
 
-      const outerBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.065, 0.065, len, 6),
+      const outerBeam = new BABYLON.Mesh(
+        new BABYLON.CylinderGeometry(0.065, 0.065, len, 6),
         bossGateBeamMat
       );
       outerBeam.position.set(cx, cy, 0);
       outerBeam.rotation.z = ang;
       gateFrame.add(outerBeam);
 
-      const innerCore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, len, 5),
+      const innerCore = new BABYLON.Mesh(
+        new BABYLON.CylinderGeometry(0.025, 0.025, len, 5),
         bossGateCoreMat
       );
       innerCore.position.set(cx, cy, 0);
@@ -459,7 +459,7 @@ function createBossGateSealVisual(stairSteps, floorY) {
     }
 
     // Центральный пылающий узел Печати
-    const nexusGlow = new THREE.Sprite(bossGateGlowMat);
+    const nexusGlow = new BABYLON.Sprite(bossGateGlowMat);
     nexusGlow.scale.setScalar(3.4);
     gateFrame.add(nexusGlow);
 
@@ -470,60 +470,60 @@ function createBossGateSealVisual(stairSteps, floorY) {
   return sealGroup;
 }
 
-const forkSpriteGroup = new THREE.Group();
+const forkSpriteGroup = new BABYLON.Group();
 scene.add(forkSpriteGroup);
 const FORK_ROUTE_MATERIALS = {
-  1: new THREE.SpriteMaterial({
+  1: new BABYLON.SpriteMaterial({
     map: TEXTURES.glowWhite,
     color: 0x40ff90,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.9
   }),
-  2: new THREE.SpriteMaterial({
+  2: new BABYLON.SpriteMaterial({
     map: TEXTURES.glowWhite,
     color: 0xff3a2a,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.9
   })
 };
 
-const towerDecorGroup = new THREE.Group();
+const towerDecorGroup = new BABYLON.Group();
 scene.add(towerDecorGroup);
 
 // Скульптурная геометрия каменной/ледяной/пустотной плиты (вписана в 1×1×1)
 const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
   const parts = [];
-  const topColor = new THREE.Color(0xffffff);
-  const bevelColor = new THREE.Color(0xebe6f0);
-  const midColor = new THREE.Color(0xd0cad8);
-  const bottomColor = new THREE.Color(0x8e8898);
+  const topColor = new BABYLON.Color(0xffffff);
+  const bevelColor = new BABYLON.Color(0xebe6f0);
+  const midColor = new BABYLON.Color(0xd0cad8);
+  const bottomColor = new BABYLON.Color(0x8e8898);
 
   // Верхняя основная плита (y ∈ [0.16, 0.50])
   parts.push({
-    geo: new THREE.BoxGeometry(1.0, 0.34, 1.0),
-    matrix: computeTransformMatrix(0, 0.33, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.BoxGeometry(1.0, 0.34, 1.0),
+    matrix: computeTransformMatrix(0, 0.33, 0, 0, 0, 0, 1, 1, 1, new BABYLON.Matrix4()),
     color: topColor
   });
   // Ступенчатый карниз под верхней плитой
   parts.push({
-    geo: new THREE.BoxGeometry(0.96, 0.14, 0.96),
-    matrix: computeTransformMatrix(0, 0.1, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.BoxGeometry(0.96, 0.14, 0.96),
+    matrix: computeTransformMatrix(0, 0.1, 0, 0, 0, 0, 1, 1, 1, new BABYLON.Matrix4()),
     color: bevelColor
   });
   // Утопленный фриз-поясок посередине блока
   parts.push({
-    geo: new THREE.BoxGeometry(0.88, 0.24, 0.88),
-    matrix: computeTransformMatrix(0, -0.08, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.BoxGeometry(0.88, 0.24, 0.88),
+    matrix: computeTransformMatrix(0, -0.08, 0, 0, 0, 0, 1, 1, 1, new BABYLON.Matrix4()),
     color: midColor
   });
   // Нижний сужающийся замковый свод/консоль под плитой
   parts.push({
-    geo: new THREE.CylinderGeometry(0.64, 0.44, 0.3, 4),
-    matrix: computeTransformMatrix(0, -0.35, 0, 0, Math.PI / 4, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.64, 0.44, 0.3, 4),
+    matrix: computeTransformMatrix(0, -0.35, 0, 0, Math.PI / 4, 0, 1, 1, 1, new BABYLON.Matrix4()),
     color: bottomColor
   });
 
@@ -531,7 +531,7 @@ const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
 })();
 
 const TOWER_SLAB_MATERIALS = {
-  ash: new THREE.MeshStandardMaterial({
+  ash: new BABYLON.MeshStandardMaterial({
     map: TOWER_FLOOR_TEXTURES.ash.map,
     bumpMap: TOWER_FLOOR_TEXTURES.ash.bump,
     bumpScale: 0.32,
@@ -542,7 +542,7 @@ const TOWER_SLAB_MATERIALS = {
     roughness: 0.8,
     metalness: 0.15
   }),
-  ice: new THREE.MeshStandardMaterial({
+  ice: new BABYLON.MeshStandardMaterial({
     map: TOWER_FLOOR_TEXTURES.ice.map,
     bumpMap: TOWER_FLOOR_TEXTURES.ice.bump,
     bumpScale: 0.22,
@@ -553,7 +553,7 @@ const TOWER_SLAB_MATERIALS = {
     roughness: 0.14,
     metalness: 0.38
   }),
-  void: new THREE.MeshStandardMaterial({
+  void: new BABYLON.MeshStandardMaterial({
     map: TOWER_FLOOR_TEXTURES.void.map,
     bumpMap: TOWER_FLOOR_TEXTURES.void.bump,
     bumpScale: 0.28,
@@ -566,14 +566,14 @@ const TOWER_SLAB_MATERIALS = {
   })
 };
 
-let blocks = [];
-let jumpPads = [];
-let chests = [];
-let altars = [];
-let floorLayouts = [];
-let forkMarkers = [];
-let bossGateBlockIndices = {};
-let towerInstancedMesh = null;
+var blocks = [];
+var jumpPads = [];
+var chests = [];
+var altars = [];
+var floorLayouts = [];
+var forkMarkers = [];
+var bossGateBlockIndices = {};
+var towerInstancedMesh = null;
 
 let activeVoidFloatingMesh = null;
 let activeVoidFloatingData = [];
@@ -689,7 +689,7 @@ function openBossGate(floorIndex) {
   if (sealVisual) {
     sealVisual.traverse((child) => {
       if (child.isSprite && typeof spawnSparkBurst === 'function') {
-        const wp = new THREE.Vector3();
+        const wp = new BABYLON.Vector3();
         child.getWorldPosition(wp);
         spawnSparkBurst(wp.x, wp.y, wp.z, 24, 'fire');
       }
@@ -703,54 +703,54 @@ function openBossGate(floorIndex) {
 
 function buildFrozenSilhouetteBaseGeometry() {
   const parts = [];
-  const darkIceColor = new THREE.Color(0x0c2240);
-  const cloakColor = new THREE.Color(0x14365e);
-  const frostCoreColor = new THREE.Color(0x88dcff);
+  const darkIceColor = new BABYLON.Color(0x0c2240);
+  const cloakColor = new BABYLON.Color(0x14365e);
+  const frostCoreColor = new BABYLON.Color(0x88dcff);
 
   // Остроконечный монашеский капюшон Ордена Инея
   parts.push({
-    geo: new THREE.ConeGeometry(0.42, 0.85, 6),
-    matrix: computeTransformMatrix(0, 1.72, 0, 0.12, 0, 0, 0.95, 1.0, 0.85, new THREE.Matrix4()),
+    geo: new BABYLON.ConeGeometry(0.42, 0.85, 6),
+    matrix: computeTransformMatrix(0, 1.72, 0, 0.12, 0, 0, 0.95, 1.0, 0.85, new BABYLON.Matrix4()),
     color: darkIceColor
   });
   // Массивные наплечники
   parts.push({
-    geo: new THREE.CylinderGeometry(0.68, 0.82, 0.55, 6),
-    matrix: computeTransformMatrix(0, 1.12, 0, 0, 0, 0, 1.15, 1.0, 0.65, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.68, 0.82, 0.55, 6),
+    matrix: computeTransformMatrix(0, 1.12, 0, 0, 0, 0, 1.15, 1.0, 0.65, new BABYLON.Matrix4()),
     color: cloakColor
   });
   // Торс и длинная мантия, вмёрзшая в лёд
   parts.push({
-    geo: new THREE.CylinderGeometry(0.52, 0.85, 2.2, 7),
-    matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 1.0, 1.0, 0.62, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.52, 0.85, 2.2, 7),
+    matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 1.0, 1.0, 0.62, new BABYLON.Matrix4()),
     color: darkIceColor
   });
   // Сложенные перед грудью руки, сжимающие меч/посох
   parts.push({
-    geo: new THREE.CylinderGeometry(0.15, 0.18, 1.05, 6),
-    matrix: computeTransformMatrix(-0.42, 0.72, 0.18, 0.35, 0, -0.45, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.15, 0.18, 1.05, 6),
+    matrix: computeTransformMatrix(-0.42, 0.72, 0.18, 0.35, 0, -0.45, 1, 1, 1, new BABYLON.Matrix4()),
     color: cloakColor
   });
   parts.push({
-    geo: new THREE.CylinderGeometry(0.15, 0.18, 1.05, 6),
-    matrix: computeTransformMatrix(0.42, 0.72, 0.18, 0.35, 0, 0.45, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.15, 0.18, 1.05, 6),
+    matrix: computeTransformMatrix(0.42, 0.72, 0.18, 0.35, 0, 0.45, 1, 1, 1, new BABYLON.Matrix4()),
     color: cloakColor
   });
   // Посох/клинок в руках замёрзшего стража
   parts.push({
-    geo: new THREE.CylinderGeometry(0.06, 0.06, 2.7, 5),
-    matrix: computeTransformMatrix(0, 0.55, 0.28, 0.05, 0, 0, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.CylinderGeometry(0.06, 0.06, 2.7, 5),
+    matrix: computeTransformMatrix(0, 0.55, 0.28, 0.05, 0, 0, 1, 1, 1, new BABYLON.Matrix4()),
     color: darkIceColor
   });
   // Застывшее ледяное ядро и кристаллы льда, пронзающие фигуру
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.32, 0),
-    matrix: computeTransformMatrix(0, 0.88, 0.22, 0.2, 0.3, 0, 0.9, 1.4, 0.8, new THREE.Matrix4()),
+    geo: new BABYLON.OctahedronGeometry(0.32, 0),
+    matrix: computeTransformMatrix(0, 0.88, 0.22, 0.2, 0.3, 0, 0.9, 1.4, 0.8, new BABYLON.Matrix4()),
     color: frostCoreColor
   });
   parts.push({
-    geo: new THREE.ConeGeometry(0.35, 1.8, 5),
-    matrix: computeTransformMatrix(0.55, 0.4, 0.15, -0.2, 0, -0.65, 1, 1, 1, new THREE.Matrix4()),
+    geo: new BABYLON.ConeGeometry(0.35, 1.8, 5),
+    matrix: computeTransformMatrix(0.55, 0.4, 0.15, -0.2, 0, -0.65, 1, 1, 1, new BABYLON.Matrix4()),
     color: frostCoreColor
   });
 
@@ -788,33 +788,33 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
   const structureParts = [];
   const accentParts = [];
-  const tempMat = new THREE.Matrix4();
+  const tempMat = new BABYLON.Matrix4();
 
   const pillarCount = 8;
   const wallRadius = 30.18;
 
   const pillarPrimaryColor =
     towerId === 'ash'
-      ? new THREE.Color(0x361318)
+      ? new BABYLON.Color(0x361318)
       : towerId === 'ice'
-        ? new THREE.Color(0x5da8dc)
-        : new THREE.Color(0x1f0f38);
+        ? new BABYLON.Color(0x5da8dc)
+        : new BABYLON.Color(0x1f0f38);
   const pillarSecondaryColor =
     towerId === 'ash'
-      ? new THREE.Color(0x220a0d)
+      ? new BABYLON.Color(0x220a0d)
       : towerId === 'ice'
-        ? new THREE.Color(0x98dcff)
-        : new THREE.Color(0x34195e);
+        ? new BABYLON.Color(0x98dcff)
+        : new BABYLON.Color(0x34195e);
   const accentGlowColor =
     towerId === 'ash'
-      ? new THREE.Color(0xff6a15)
+      ? new BABYLON.Color(0xff6a15)
       : towerId === 'ice'
-        ? new THREE.Color(0x88e4ff)
-        : new THREE.Color(0xc458ff);
+        ? new BABYLON.Color(0x88e4ff)
+        : new BABYLON.Color(0xc458ff);
 
-  const pillarSectionGeo = new THREE.CylinderGeometry(0.95, 1.15, 14, 6);
-  const capitalGeo = new THREE.CylinderGeometry(1.5, 1.08, 1.35, 6);
-  const archSegmentGeo = new THREE.BoxGeometry(5.6, 0.95, 0.95);
+  const pillarSectionGeo = new BABYLON.CylinderGeometry(0.95, 1.15, 14, 6);
+  const capitalGeo = new BABYLON.CylinderGeometry(1.5, 1.08, 1.35, 6);
+  const archSegmentGeo = new BABYLON.BoxGeometry(5.6, 0.95, 0.95);
 
   // 1. Периметральные контрфорсы, капители и стрельчатые арки
   for (let p = 0; p < pillarCount; p++) {
@@ -859,8 +859,8 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
   }
 
   // 2. Детализация винтовых лестниц (карнизы ступеней, опорные колонны, балюстрады с огнями)
-  const stairStepTrimGeo = new THREE.BoxGeometry(4.18, 0.34, 4.18);
-  const stairPostGeo = new THREE.CylinderGeometry(0.25, 0.34, 1.4, 6);
+  const stairStepTrimGeo = new BABYLON.BoxGeometry(4.18, 0.34, 4.18);
+  const stairPostGeo = new BABYLON.CylinderGeometry(0.25, 0.34, 1.4, 6);
 
   for (let floor = 0; floor < 11; floor++) {
     const stairs = stairPositionsByFloor[floor] || [];
@@ -903,7 +903,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             color: pillarPrimaryColor
           });
           accentParts.push({
-            geo: new THREE.OctahedronGeometry(0.3, 0),
+            geo: new BABYLON.OctahedronGeometry(0.3, 0),
             matrix: computeTransformMatrix(
               sx + sign * 1.65,
               topY + 1.52,
@@ -914,7 +914,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
               1,
               1.35,
               1,
-              new THREE.Matrix4()
+              new BABYLON.Matrix4()
             ),
             color: accentGlowColor
           });
@@ -925,11 +925,11 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
   // 3. Специфические для каждой башни 3D-детали (по мудбордам)
   if (towerId === 'ash') {
-    const slitGeo = new THREE.BoxGeometry(0.9, 5.2, 0.38);
-    const lavaFallGeo = new THREE.CylinderGeometry(0.22, 0.48, 7.0, 6);
-    const stalactiteGeo = new THREE.ConeGeometry(0.45, 2.4, 5);
-    const chainLinkGeo = new THREE.CylinderGeometry(0.14, 0.14, 6.2, 5);
-    const cragGeo = jitterGeometry(new THREE.ConeGeometry(1.1, 3.4, 5), 0.18);
+    const slitGeo = new BABYLON.BoxGeometry(0.9, 5.2, 0.38);
+    const lavaFallGeo = new BABYLON.CylinderGeometry(0.22, 0.48, 7.0, 6);
+    const stalactiteGeo = new BABYLON.ConeGeometry(0.45, 2.4, 5);
+    const chainLinkGeo = new BABYLON.CylinderGeometry(0.14, 0.14, 6.2, 5);
+    const cragGeo = jitterGeometry(new BABYLON.ConeGeometry(1.1, 3.4, 5), 0.18);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
@@ -944,21 +944,21 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           accentParts.push({
             geo: slitGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0xff7818)
+            color: new BABYLON.Color(0xff7818)
           });
 
           computeTransformMatrix(wx * 0.99, floorY + 3.4, wz * 0.99, 0, rotY, 0, 1, 1, 0.55, tempMat);
           accentParts.push({
             geo: lavaFallGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0xffaa30)
+            color: new BABYLON.Color(0xffaa30)
           });
         } else {
           computeTransformMatrix(wx * 0.98, floorY + 9.2, wz * 0.98, 0.1, rotY, 0.14, 1, 1, 1, tempMat);
           structureParts.push({
             geo: chainLinkGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0x1c080a)
+            color: new BABYLON.Color(0x1c080a)
           });
         }
       }
@@ -971,14 +971,14 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         structureParts.push({
           geo: stalactiteGeo,
           matrix: tempMat.clone(),
-          color: new THREE.Color(0x2d0f12)
+          color: new BABYLON.Color(0x2d0f12)
         });
         if (e % 6 === 0) {
           computeTransformMatrix(ex, floorY - 1.0 - dropH * 0.92, ez, Math.PI, 0, 0, 0.58, 0.55, 0.58, tempMat);
           accentParts.push({
             geo: stalactiteGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0xff6a10)
+            color: new BABYLON.Color(0xff6a10)
           });
         }
       }
@@ -1002,7 +1002,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           structureParts.push({
             geo: cragGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0x280c10)
+            color: new BABYLON.Color(0x280c10)
           });
         }
       }
@@ -1014,13 +1014,13 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         accentParts.push({
           geo: lavaFallGeo,
           matrix: tempMat.clone(),
-          color: new THREE.Color(0xff8420)
+          color: new BABYLON.Color(0xff8420)
         });
       }
     }
   } else if (towerId === 'ice') {
-    const icicleGeo = new THREE.ConeGeometry(0.32, 2.4, 5);
-    const crystalSpikeGeo = new THREE.CylinderGeometry(0.06, 0.44, 2.9, 6);
+    const icicleGeo = new BABYLON.ConeGeometry(0.32, 2.4, 5);
+    const crystalSpikeGeo = new BABYLON.CylinderGeometry(0.06, 0.44, 2.9, 6);
     const silhouetteParts = [];
 
     for (let floor = 0; floor < 12; floor++) {
@@ -1071,7 +1071,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           accentParts.push({
             geo: crystalSpikeGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0x98dcff)
+            color: new BABYLON.Color(0x98dcff)
           });
         }
       }
@@ -1085,7 +1085,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         accentParts.push({
           geo: crystalSpikeGeo,
           matrix: tempMat.clone(),
-          color: new THREE.Color(0xb8eeff)
+          color: new BABYLON.Color(0xb8eeff)
         });
       }
 
@@ -1108,7 +1108,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         accentParts.push({
           geo: icicleGeo,
           matrix: tempMat.clone(),
-          color: new THREE.Color(0xcff2ff)
+          color: new BABYLON.Color(0xcff2ff)
         });
       }
 
@@ -1132,7 +1132,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           accentParts.push({
             geo: icicleGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0xdcf6ff)
+            color: new BABYLON.Color(0xdcf6ff)
           });
         }
       }
@@ -1140,13 +1140,13 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       if (edgeCells.length > 0) {
         for (let m = 0; m < 2; m++) {
           const [mx, mz] = edgeCells[(m * 7 + floor * 3) % edgeCells.length];
-          const mistSprite = new THREE.Sprite(
-            new THREE.SpriteMaterial({
+          const mistSprite = new BABYLON.Sprite(
+            new BABYLON.SpriteMaterial({
               map: TEXTURES.glowIce,
               color: 0xb8ecff,
               transparent: true,
               opacity: 0.32,
-              blending: THREE.AdditiveBlending,
+              blending: BABYLON.AdditiveBlending,
               depthWrite: false
             })
           );
@@ -1159,20 +1159,20 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
     if (silhouetteParts.length) {
       const mergedSilGeo = mergeGeometryParts(silhouetteParts);
-      const silMat = new THREE.MeshStandardMaterial({
+      const silMat = new BABYLON.MeshStandardMaterial({
         color: 0x16385e,
         emissive: 0x2468a8,
         emissiveIntensity: 0.75,
         roughness: 0.35,
         metalness: 0.25
       });
-      const silMesh = new THREE.Mesh(mergedSilGeo, silMat);
+      const silMesh = new BABYLON.Mesh(mergedSilGeo, silMat);
       silMesh.userData.disposeMaterial = true;
       towerDecorGroup.add(silMesh);
     }
   } else if (towerId === 'void') {
-    const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.4, 0.34);
-    const tendrilSegGeo = new THREE.CylinderGeometry(0.18, 0.38, 4.6, 6);
+    const runeTabletGeo = new BABYLON.BoxGeometry(0.95, 5.4, 0.34);
+    const tendrilSegGeo = new BABYLON.CylinderGeometry(0.18, 0.38, 4.6, 6);
 
     for (let floor = 0; floor < 12; floor++) {
       const floorY = floor * 14;
@@ -1187,7 +1187,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           accentParts.push({
             geo: runeTabletGeo,
             matrix: tempMat.clone(),
-            color: new THREE.Color(0xd478ff)
+            color: new BABYLON.Color(0xd478ff)
           });
         }
 
@@ -1212,7 +1212,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             structureParts.push({
               geo: tendrilSegGeo,
               matrix: tempMat.clone(),
-              color: new THREE.Color(0x120624)
+              color: new BABYLON.Color(0x120624)
             });
           }
         }
@@ -1234,17 +1234,17 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           tempMat
         );
         accentParts.push({
-          geo: new THREE.OctahedronGeometry(0.45, 0),
+          geo: new BABYLON.OctahedronGeometry(0.45, 0),
           matrix: tempMat.clone(),
-          color: new THREE.Color(0xc868ff)
+          color: new BABYLON.Color(0xc868ff)
         });
       }
     }
 
     // Парящие в невесомости обломки ступеней и рунные монолиты
     const floatingCount = 84;
-    const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.25, 0.85, 1.25), 0.12);
-    const floatingMat = new THREE.MeshStandardMaterial({
+    const floatingGeo = jitterGeometry(new BABYLON.BoxGeometry(1.25, 0.85, 1.25), 0.12);
+    const floatingMat = new BABYLON.MeshStandardMaterial({
       map: TOWER_FLOOR_TEXTURES.void.map,
       emissive: 0x9030ff,
       emissiveMap: TOWER_FLOOR_TEXTURES.void.emissive,
@@ -1252,11 +1252,11 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       roughness: 0.5,
       metalness: 0.3
     });
-    activeVoidFloatingMesh = new THREE.InstancedMesh(floatingGeo, floatingMat, floatingCount);
+    activeVoidFloatingMesh = new BABYLON.InstancedMesh(floatingGeo, floatingMat, floatingCount);
     activeVoidFloatingMesh.userData.disposeMaterial = true;
     activeVoidFloatingData = [];
 
-    const dummy = new THREE.Object3D();
+    const dummy = new BABYLON.Object3D();
     for (let i = 0; i < floatingCount; i++) {
       const floor = i % 12;
       const angle = seededRandom(seed, 'vfltA', i) * TWO_PI;
@@ -1293,7 +1293,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
   if (structureParts.length) {
     const mergedStructGeo = mergeGeometryParts(structureParts);
-    const structMat = new THREE.MeshStandardMaterial({
+    const structMat = new BABYLON.MeshStandardMaterial({
       map: TOWER_WALL_TEXTURES[towerId].map,
       bumpMap: TOWER_WALL_TEXTURES[towerId].bump,
       bumpScale: 0.3,
@@ -1302,7 +1302,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       roughness: towerId === 'ice' ? 0.2 : 0.82,
       metalness: towerId === 'ice' ? 0.35 : 0.2
     });
-    const structMesh = new THREE.Mesh(mergedStructGeo, structMat);
+    const structMesh = new BABYLON.Mesh(mergedStructGeo, structMat);
     structMesh.userData.disposeMaterial = true;
     towerDecorGroup.add(structMesh);
   }
@@ -1311,7 +1311,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     const mergedAccentGeo = mergeGeometryParts(accentParts);
     let accentMat;
     if (towerId === 'ash') {
-      accentMat = new THREE.MeshStandardMaterial({
+      accentMat = new BABYLON.MeshStandardMaterial({
         map: lavaTexture,
         color: 0xffffff,
         vertexColors: true,
@@ -1322,7 +1322,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       });
       activeAshLavaStreamMat = accentMat;
     } else if (towerId === 'ice') {
-      accentMat = new THREE.MeshStandardMaterial({
+      accentMat = new BABYLON.MeshStandardMaterial({
         color: 0xd8f4ff,
         vertexColors: true,
         emissive: 0x3898e0,
@@ -1333,7 +1333,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         opacity: 0.84
       });
     } else {
-      accentMat = new THREE.MeshStandardMaterial({
+      accentMat = new BABYLON.MeshStandardMaterial({
         map: TOWER_WALL_TEXTURES.void.emissive,
         color: 0xffffff,
         vertexColors: true,
@@ -1344,7 +1344,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       });
       activeVoidRunePillarMat = accentMat;
     }
-    const accentMesh = new THREE.Mesh(mergedAccentGeo, accentMat);
+    const accentMesh = new BABYLON.Mesh(mergedAccentGeo, accentMat);
     accentMesh.userData.disposeMaterial = true;
     towerDecorGroup.add(accentMesh);
   }
@@ -1615,7 +1615,7 @@ function buildTower(seed) {
           }
 
           if (isForkFloor && (stepIdx === 1 || stepIdx === 6)) {
-            const markerSprite = new THREE.Sprite(FORK_ROUTE_MATERIALS[routeTag]);
+            const markerSprite = new BABYLON.Sprite(FORK_ROUTE_MATERIALS[routeTag]);
             markerSprite.scale.setScalar(stepIdx === 1 ? 5 : 6);
             markerSprite.position.set(x, floorY + 2 * stepIdx + 3, z);
             forkSpriteGroup.add(markerSprite);
@@ -1676,12 +1676,12 @@ function buildTower(seed) {
           continue;
         }
 
-        const group = new THREE.Group();
-        const coreCube = new THREE.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
-        const frameMesh = new THREE.Mesh(chestGeo, chestMat);
-        const auraRing = new THREE.Mesh(chestAuraRingGeo, chestAuraRingMat);
+        const group = new BABYLON.Group();
+        const coreCube = new BABYLON.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
+        const frameMesh = new BABYLON.Mesh(chestGeo, chestMat);
+        const auraRing = new BABYLON.Mesh(chestAuraRingGeo, chestAuraRingMat);
         auraRing.position.y = -0.18;
-        const glow = new THREE.Sprite(chestGlowMat);
+        const glow = new BABYLON.Sprite(chestGlowMat);
         glow.scale.setScalar(3.4);
         glow.position.y = 0.2;
         group.add(coreCube, frameMesh, auraRing, glow);
@@ -1719,18 +1719,18 @@ function buildTower(seed) {
         continue;
       }
 
-      const group = new THREE.Group();
-      const pedestal = new THREE.Mesh(altarPedestalGeo, altarPedestalMat);
-      const pillar = new THREE.Mesh(altarGeo, altarMat);
-      const halo = new THREE.Mesh(altarHaloGeo, altarHaloMat);
+      const group = new BABYLON.Group();
+      const pedestal = new BABYLON.Mesh(altarPedestalGeo, altarPedestalMat);
+      const pillar = new BABYLON.Mesh(altarGeo, altarMat);
+      const halo = new BABYLON.Mesh(altarHaloGeo, altarHaloMat);
       halo.position.y = 2.18;
-      const swirl1 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      const swirl1 = new BABYLON.Mesh(altarSwirlGeo, altarHaloMat);
       swirl1.position.y = 0.65;
       swirl1.rotation.set(1.15, 0, 0.35);
-      const swirl2 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      const swirl2 = new BABYLON.Mesh(altarSwirlGeo, altarHaloMat);
       swirl2.position.y = 1.05;
       swirl2.rotation.set(-1.15, 0, -0.35);
-      const glow = new THREE.Sprite(altarGlowMat);
+      const glow = new BABYLON.Sprite(altarGlowMat);
       glow.scale.setScalar(3.8);
       glow.position.y = 0.85;
       group.add(pedestal, pillar, halo, swirl1, swirl2, glow);
@@ -1743,9 +1743,9 @@ function buildTower(seed) {
   }
 
   const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
-  const dummyObj = new THREE.Object3D();
-  const blockColor = new THREE.Color();
-  towerInstancedMesh = new THREE.InstancedMesh(
+  const dummyObj = new BABYLON.Object3D();
+  const blockColor = new BABYLON.Color();
+  towerInstancedMesh = new BABYLON.InstancedMesh(
     sculptedSlabGeometry,
     TOWER_SLAB_MATERIALS[towerId] || TOWER_SLAB_MATERIALS.ash,
     blocks.length

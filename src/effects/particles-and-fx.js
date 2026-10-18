@@ -13,16 +13,16 @@ const boltPool = [];
 function acquireBolt(parentObj, fromX, fromY, fromZ, toX, toY, toZ, amplitude, segmentCount, maxLifetime, customColorHex) {
   let bolt = boltPool.pop();
   if (!bolt) {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BOLT_MAX_SEGMENTS * 3), 3));
-    const mat = new THREE.LineBasicMaterial({
+    const geo = new BABYLON.BufferGeometry();
+    geo.setAttribute('position', new BABYLON.BufferAttribute(new Float32Array(BOLT_MAX_SEGMENTS * 3), 3));
+    const mat = new BABYLON.LineBasicMaterial({
       color: 0xe8ccff,
       transparent: true,
       opacity: 1,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     });
-    const line = new THREE.Line(geo, mat);
+    const line = new BABYLON.Line(geo, mat);
     line.frustumCulled = false;
     line.renderOrder = 7;
     bolt = {
@@ -235,22 +235,22 @@ function releaseAllGlobalBolts() {
 
 const bossRingGeo = (function buildBossRing3DGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const torus = new THREE.TorusGeometry(1.0, 0.075, 8, 40);
+  const tempMat = new BABYLON.Matrix4();
+  const torus = new BABYLON.TorusGeometry(1.0, 0.075, 8, 40);
   torus.rotateX(Math.PI / 2);
   parts.push({
     geo: torus,
     matrix: computeTransformMatrix(0, 0.06, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xffffff)
+    color: new BABYLON.Color(0xffffff)
   });
-  const baseRing = new THREE.RingGeometry(0.84, 1.16, 40);
+  const baseRing = new BABYLON.RingGeometry(0.84, 1.16, 40);
   baseRing.rotateX(-Math.PI / 2);
   parts.push({
     geo: baseRing,
     matrix: computeTransformMatrix(0, 0.01, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xffd890)
+    color: new BABYLON.Color(0xffd890)
   });
-  const spikeGeo = new THREE.ConeGeometry(0.06, 0.28, 4);
+  const spikeGeo = new BABYLON.ConeGeometry(0.06, 0.28, 4);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TWO_PI;
     computeTransformMatrix(
@@ -265,22 +265,22 @@ const bossRingGeo = (function buildBossRing3DGeo() {
       1,
       tempMat
     );
-    parts.push({ geo: spikeGeo, matrix: tempMat.clone(), color: new THREE.Color(0xffffff) });
+    parts.push({ geo: spikeGeo, matrix: tempMat.clone(), color: new BABYLON.Color(0xffffff) });
   }
   return mergeGeometryParts(parts);
 })();
 
 const bossRings = [];
 for (let i = 0; i < 6; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     bossRingGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xff8c30,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -308,17 +308,17 @@ function spawnBossRing(x, y, z, damage, speed, maxRadius) {
   return ring;
 }
 
-const bossArcGeo = new THREE.RingGeometry(0.95, 1.25, 52, 1, 0, Math.PI * 1.5);
+const bossArcGeo = new BABYLON.RingGeometry(0.95, 1.25, 52, 1, 0, Math.PI * 1.5);
 const bossArcs = [];
 for (let i = 0; i < 4; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     bossArcGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xff7a20,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -348,18 +348,18 @@ function spawnBossArc(x, y, z, gapAngle, damage) {
 }
 
 const bossGeysers = [];
-const geyserJetGeo = new THREE.CylinderGeometry(0.28, 0.62, 7, 10, 1, true);
+const geyserJetGeo = new BABYLON.CylinderGeometry(0.28, 0.62, 7, 10, 1, true);
 geyserJetGeo.translate(0, 3.5, 0);
 
 for (let i = 0; i < 3; i++) {
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(1.1, 1.5, 32),
-    new THREE.MeshBasicMaterial({
+  const ring = new BABYLON.Mesh(
+    new BABYLON.RingGeometry(1.1, 1.5, 32),
+    new BABYLON.MeshBasicMaterial({
       color: 0xffd060,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -368,15 +368,15 @@ for (let i = 0; i < 3; i++) {
   ring.renderOrder = 4;
   scene.add(ring);
 
-  const jet = new THREE.Mesh(
+  const jet = new BABYLON.Mesh(
     geyserJetGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffc050,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false,
-      side: THREE.DoubleSide
+      side: BABYLON.DoubleSide
     })
   );
   jet.visible = false;
@@ -421,15 +421,15 @@ function placeGeysersNear(playerX, playerY, playerZ) {
   }
 }
 
-const golemDecalMat = new THREE.MeshBasicMaterial({
+const golemDecalMat = new BABYLON.MeshBasicMaterial({
   map: TEXTURES.golemFloor,
   color: 0xff6a18,
   transparent: true,
   opacity: 0,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
-const golemDecal = new THREE.Mesh(new THREE.CircleGeometry(8.5, 40), golemDecalMat);
+const golemDecal = new BABYLON.Mesh(new BABYLON.CircleGeometry(8.5, 40), golemDecalMat);
 golemDecal.rotation.x = -Math.PI / 2;
 golemDecal.visible = false;
 golemDecal.renderOrder = 3;
@@ -437,15 +437,15 @@ golemDecal.position.y = -500;
 scene.add(golemDecal);
 let golemDecalTargetOpacity = 0;
 
-const runeMat = new THREE.MeshBasicMaterial({
+const runeMat = new BABYLON.MeshBasicMaterial({
   map: TEXTURES.wombRune,
   color: 0xc070ff,
   transparent: true,
   opacity: 0,
-  blending: THREE.AdditiveBlending,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
-const wombRune = new THREE.Mesh(new THREE.CircleGeometry(7.5, 44), runeMat);
+const wombRune = new BABYLON.Mesh(new BABYLON.CircleGeometry(7.5, 44), runeMat);
 wombRune.rotation.x = -Math.PI / 2;
 wombRune.visible = false;
 wombRune.renderOrder = 3;
@@ -455,14 +455,14 @@ let wombRuneTargetOpacity = 0;
 
 const summonRings = [];
 for (let i = 0; i < 4; i++) {
-  const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(1.0, 1.45, 32),
-    new THREE.MeshBasicMaterial({
+  const mesh = new BABYLON.Mesh(
+    new BABYLON.RingGeometry(1.0, 1.45, 32),
+    new BABYLON.MeshBasicMaterial({
       color: 0xc070ff,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -493,20 +493,20 @@ function placeSummonRings(bossEntity) {
 }
 
 const SLAG_COUNT = 28;
-const slagGeo = jitterGeometry(new THREE.DodecahedronGeometry(0.16, 0), 0.05);
-const slagMat = new THREE.MeshStandardMaterial({
+const slagGeo = jitterGeometry(new BABYLON.DodecahedronGeometry(0.16, 0), 0.05);
+const slagMat = new BABYLON.MeshStandardMaterial({
   color: 0x3e383c,
   roughness: 0.85,
   flatShading: true,
   emissive: 0xff4400,
   emissiveIntensity: 1.5
 });
-const slagInstancedMesh = new THREE.InstancedMesh(slagGeo, slagMat, SLAG_COUNT);
+const slagInstancedMesh = new BABYLON.InstancedMesh(slagGeo, slagMat, SLAG_COUNT);
 slagInstancedMesh.frustumCulled = false;
 scene.add(slagInstancedMesh);
 
 const slagData = [];
-const _bossDummyObj = new THREE.Object3D();
+const _bossDummyObj = new BABYLON.Object3D();
 for (let i = 0; i < SLAG_COUNT; i++) {
   slagData.push({
     active: 0,
@@ -558,10 +558,10 @@ function spawnSlagBurst(x, y, z, count, power) {
 }
 
 const DRIP_COUNT = 18;
-const dripGeo = new THREE.SphereGeometry(0.09, 6, 6);
+const dripGeo = new BABYLON.SphereGeometry(0.09, 6, 6);
 dripGeo.scale(1, 2.4, 1);
-const dripMat = new THREE.MeshBasicMaterial({ color: 0xffc040 });
-const dripInstancedMesh = new THREE.InstancedMesh(dripGeo, dripMat, DRIP_COUNT);
+const dripMat = new BABYLON.MeshBasicMaterial({ color: 0xffc040 });
+const dripInstancedMesh = new BABYLON.InstancedMesh(dripGeo, dripMat, DRIP_COUNT);
 dripInstancedMesh.frustumCulled = false;
 scene.add(dripInstancedMesh);
 
@@ -592,20 +592,20 @@ function spawnMagmaDripAt(x, y, z, floorY) {
 // Слой 1 — сферическое расплавленное ядро + спиральные огненные вихри вокруг оси + кометный шлейф пламени
 const fireballCoreGeometry = (function buildFireballCoreGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const whiteHot = new THREE.Color(0xfffbe0);
-  const goldHot = new THREE.Color(0xffb828);
-  const flameOrange = new THREE.Color(0xff5208);
-  const tailCrimson = new THREE.Color(0xd82000);
+  const tempMat = new BABYLON.Matrix4();
+  const whiteHot = new BABYLON.Color(0xfffbe0);
+  const goldHot = new BABYLON.Color(0xffb828);
+  const flameOrange = new BABYLON.Color(0xff5208);
+  const tailCrimson = new BABYLON.Color(0xd82000);
 
   // Сферическое расплавленное ядро внутри потрескавшейся корки
   parts.push({
-    geo: new THREE.IcosahedronGeometry(0.285, 2),
+    geo: new BABYLON.IcosahedronGeometry(0.285, 2),
     matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 1.0, 1.0, 1.0, tempMat).clone(),
     color: whiteHot
   });
   // Два тонких огненных вихревых кольца вокруг сферы («вращение по оси» на мудборде)
-  const swirlRingGeo = new THREE.TorusGeometry(0.33, 0.022, 6, 20);
+  const swirlRingGeo = new BABYLON.TorusGeometry(0.33, 0.022, 6, 20);
   parts.push({
     geo: swirlRingGeo,
     matrix: computeTransformMatrix(0, 0, 0, 0.72, 0.45, 0, 1.0, 1.0, 1.0, tempMat).clone(),
@@ -618,21 +618,21 @@ const fireballCoreGeometry = (function buildFireballCoreGeometry() {
   });
 
   // Кометный огненный хвост строго позади сферы (-Z)
-  const tailCone1 = new THREE.ConeGeometry(0.22, 0.78, 8);
+  const tailCone1 = new BABYLON.ConeGeometry(0.22, 0.78, 8);
   tailCone1.rotateX(-Math.PI / 2);
   parts.push({
     geo: tailCone1,
     matrix: computeTransformMatrix(0, 0, -0.38, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: goldHot
   });
-  const tailCone2 = new THREE.ConeGeometry(0.15, 1.05, 7);
+  const tailCone2 = new BABYLON.ConeGeometry(0.15, 1.05, 7);
   tailCone2.rotateX(-Math.PI / 2);
   parts.push({
     geo: tailCone2,
     matrix: computeTransformMatrix(0, 0, -0.58, 0, 0, 0.4, 1, 1, 1, tempMat).clone(),
     color: flameOrange
   });
-  const tailCone3 = new THREE.ConeGeometry(0.08, 1.28, 6);
+  const tailCone3 = new BABYLON.ConeGeometry(0.08, 1.28, 6);
   tailCone3.rotateX(-Math.PI / 2);
   parts.push({
     geo: tailCone3,
@@ -646,15 +646,15 @@ const fireballCoreGeometry = (function buildFireballCoreGeometry() {
 // Слой 2 — плотная сферическая потрескавшаяся лавовая корка из 20 тектонических плит (по мудборду 1)
 const fireballCrustGeometry = (function buildFireballCrustGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const darkObsidian = new THREE.Color(0x230e12);
-  const charCoal = new THREE.Color(0x3a1618);
-  const rimGlow = new THREE.Color(0x7a2208);
+  const tempMat = new BABYLON.Matrix4();
+  const darkObsidian = new BABYLON.Color(0x230e12);
+  const charCoal = new BABYLON.Color(0x3a1618);
+  const rimGlow = new BABYLON.Color(0x7a2208);
 
   const plateCount = 20;
   const goldenRatio = (1 + Math.sqrt(5)) / 2;
-  const plateGeo = jitterGeometry(new THREE.CylinderGeometry(0.115, 0.135, 0.048, 6), 0.012);
-  const dummy = new THREE.Object3D();
+  const plateGeo = jitterGeometry(new BABYLON.CylinderGeometry(0.115, 0.135, 0.048, 6), 0.012);
+  const dummy = new BABYLON.Object3D();
 
   for (let i = 0; i < plateCount; i++) {
     const t = (i + 0.5) / plateCount;
@@ -682,9 +682,9 @@ const fireballCrustGeometry = (function buildFireballCrustGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const playerFireballInstancedMesh = new THREE.InstancedMesh(
+const playerFireballInstancedMesh = new BABYLON.InstancedMesh(
   fireballCoreGeometry,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     emissive: 0xff6200,
@@ -695,9 +695,9 @@ const playerFireballInstancedMesh = new THREE.InstancedMesh(
   250
 );
 
-const playerFireballCrustInstancedMesh = new THREE.InstancedMesh(
+const playerFireballCrustInstancedMesh = new BABYLON.InstancedMesh(
   fireballCrustGeometry,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     map: TEXTURES.crackedLavaCrust,
     color: 0xffffff,
     vertexColors: true,
@@ -716,17 +716,17 @@ playerFireballCrustInstancedMesh.count = 0;
 // 3B. ВРАЖЕСКИЕ СНАРЯДЫ («Осколок Искажения / Ледяное Веретено»):
 const enemyProjectileGeometry = (function buildEnemyProjectileGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const brightTip = new THREE.Color(0xffffff);
-  const bodyShade = new THREE.Color(0xd8b8ff);
-  const darkFin = new THREE.Color(0x683890);
+  const tempMat = new BABYLON.Matrix4();
+  const brightTip = new BABYLON.Color(0xffffff);
+  const bodyShade = new BABYLON.Color(0xd8b8ff);
+  const darkFin = new BABYLON.Color(0x683890);
 
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.24, 0),
+    geo: new BABYLON.OctahedronGeometry(0.24, 0),
     matrix: computeTransformMatrix(0, 0, 0.08, 0, 0, 0, 0.78, 0.78, 1.95, tempMat).clone(),
     color: brightTip
   });
-  const ringGeo = new THREE.TorusGeometry(0.27, 0.032, 6, 14);
+  const ringGeo = new BABYLON.TorusGeometry(0.27, 0.032, 6, 14);
   parts.push({
     geo: ringGeo,
     matrix: computeTransformMatrix(0, 0, 0, 0.65, 0.35, 0, 1, 1, 1, tempMat).clone(),
@@ -737,7 +737,7 @@ const enemyProjectileGeometry = (function buildEnemyProjectileGeometry() {
     matrix: computeTransformMatrix(0, 0, 0, -0.65, -0.35, Math.PI / 2, 0.88, 0.88, 0.88, tempMat).clone(),
     color: bodyShade
   });
-  const finGeo = new THREE.ConeGeometry(0.065, 0.38, 4);
+  const finGeo = new BABYLON.ConeGeometry(0.065, 0.38, 4);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + Math.PI / 4;
     computeTransformMatrix(
@@ -757,7 +757,7 @@ const enemyProjectileGeometry = (function buildEnemyProjectileGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const enemyProjectileMat = new THREE.MeshStandardMaterial({
+const enemyProjectileMat = new BABYLON.MeshStandardMaterial({
   color: 0xff58b0,
   vertexColors: true,
   emissive: 0xff0080,
@@ -767,7 +767,7 @@ const enemyProjectileMat = new THREE.MeshStandardMaterial({
   flatShading: true
 });
 
-const enemyProjectileInstancedMesh = new THREE.InstancedMesh(
+const enemyProjectileInstancedMesh = new BABYLON.InstancedMesh(
   enemyProjectileGeometry,
   enemyProjectileMat,
   100
@@ -778,23 +778,23 @@ const enemyProjectileInstancedMesh = new THREE.InstancedMesh(
 // с тёмным долом, парными боковыми крыльями-выступами у основания и кристаллической кромкой
 const bladeGeometry = (function buildGuardianShardBladeGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
+  const tempMat = new BABYLON.Matrix4();
 
-  const silverEdge = new THREE.Color(0xf2faff);
-  const steelBevel = new THREE.Color(0xb8d0e8);
-  const darkFuller = new THREE.Color(0x1e2836);
-  const darkBase = new THREE.Color(0x2c3848);
+  const silverEdge = new BABYLON.Color(0xf2faff);
+  const steelBevel = new BABYLON.Color(0xb8d0e8);
+  const darkFuller = new BABYLON.Color(0x1e2836);
+  const darkBase = new BABYLON.Color(0x2c3848);
 
   // 1. Вытянутое верхнее ромбовидное лезвие (от y = -0.18 до y = +1.05)
   parts.push({
-    geo: new THREE.ConeGeometry(0.155, 1.24, 4),
+    geo: new BABYLON.ConeGeometry(0.155, 1.24, 4),
     matrix: computeTransformMatrix(0, 0.44, 0, 0, Math.PI / 4, 0, 0.92, 1.0, 0.22, tempMat).clone(),
     color: steelBevel
   });
   // Бритвенные серебристые режущие кромки по бокам
   for (const s of [-1, 1]) {
     parts.push({
-      geo: new THREE.ConeGeometry(0.088, 1.18, 4),
+      geo: new BABYLON.ConeGeometry(0.088, 1.18, 4),
       matrix: computeTransformMatrix(
         s * 0.068,
         0.42,
@@ -813,7 +813,7 @@ const bladeGeometry = (function buildGuardianShardBladeGeometry() {
 
   // 2. Тёмный утопленный центральный дол (Fuller) с гранёным обрамлением
   parts.push({
-    geo: new THREE.BoxGeometry(0.068, 0.86, 0.048),
+    geo: new BABYLON.BoxGeometry(0.068, 0.86, 0.048),
     matrix: computeTransformMatrix(0, 0.28, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: darkFuller
   });
@@ -822,7 +822,7 @@ const bladeGeometry = (function buildGuardianShardBladeGeometry() {
   for (const s of [-1, 1]) {
     // Верхний скошенный зубец-крыло
     parts.push({
-      geo: new THREE.ConeGeometry(0.064, 0.36, 4),
+      geo: new BABYLON.ConeGeometry(0.064, 0.36, 4),
       matrix: computeTransformMatrix(
         s * 0.125,
         -0.06,
@@ -839,7 +839,7 @@ const bladeGeometry = (function buildGuardianShardBladeGeometry() {
     });
     // Нижний встречный шип у пяты осколка
     parts.push({
-      geo: new THREE.ConeGeometry(0.048, 0.26, 4),
+      geo: new BABYLON.ConeGeometry(0.048, 0.26, 4),
       matrix: computeTransformMatrix(
         s * 0.105,
         -0.25,
@@ -858,7 +858,7 @@ const bladeGeometry = (function buildGuardianShardBladeGeometry() {
 
   // 4. Гранёный хвостовой шип осколка (сужается книзу к магической нити, без рукояти)
   parts.push({
-    geo: new THREE.ConeGeometry(0.11, 0.44, 4),
+    geo: new BABYLON.ConeGeometry(0.11, 0.44, 4),
     matrix: computeTransformMatrix(0, -0.38, 0, Math.PI, Math.PI / 4, 0, 0.85, 1.0, 0.24, tempMat).clone(),
     color: darkBase
   });
@@ -871,30 +871,30 @@ const bladeGeometry = (function buildGuardianShardBladeGeometry() {
 // Светящееся кристаллическое ядро и магическая жила «Осколка Хранителя»
 const bladeEnergyCoreGeometry = (function buildBladeEnergyCoreGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const coreBright = new THREE.Color(0xffffff);
-  const veinGlow = new THREE.Color(0x88f4ff);
+  const tempMat = new BABYLON.Matrix4();
+  const coreBright = new BABYLON.Color(0xffffff);
+  const veinGlow = new BABYLON.Color(0x88f4ff);
 
   // Центральный ромбовидный кристалл в основании осколка
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.072, 0),
+    geo: new BABYLON.OctahedronGeometry(0.072, 0),
     matrix: computeTransformMatrix(0, -0.14, 0, 0, 0, 0, 0.85, 1.85, 0.55, tempMat).clone(),
     color: coreBright
   });
   // Длинная светящаяся жила вдоль всего дола до острия
   parts.push({
-    geo: new THREE.BoxGeometry(0.032, 0.88, 0.056),
+    geo: new BABYLON.BoxGeometry(0.032, 0.88, 0.056),
     matrix: computeTransformMatrix(0, 0.34, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: coreBright
   });
   // Светящееся остриё и хвостовой кристалл привязки к магической нити
   parts.push({
-    geo: new THREE.ConeGeometry(0.052, 0.38, 4),
+    geo: new BABYLON.ConeGeometry(0.052, 0.38, 4),
     matrix: computeTransformMatrix(0, 0.92, 0, 0, Math.PI / 4, 0, 0.78, 1, 0.36, tempMat).clone(),
     color: veinGlow
   });
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.044, 0),
+    geo: new BABYLON.OctahedronGeometry(0.044, 0),
     matrix: computeTransformMatrix(0, -0.52, 0, 0, 0, 0, 0.7, 1.5, 0.5, tempMat).clone(),
     color: veinGlow
   });
@@ -957,18 +957,18 @@ const bladeSlashTrailGeometry = (function buildBladeSlashTrailGeometry() {
     }
   }
 
-  const ribbonGeo = new THREE.BufferGeometry();
-  ribbonGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  ribbonGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-  ribbonGeo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  ribbonGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const ribbonGeo = new BABYLON.BufferGeometry();
+  ribbonGeo.setAttribute('position', new BABYLON.BufferAttribute(positions, 3));
+  ribbonGeo.setAttribute('normal', new BABYLON.BufferAttribute(normals, 3));
+  ribbonGeo.setAttribute('uv', new BABYLON.BufferAttribute(uvs, 2));
+  ribbonGeo.setAttribute('color', new BABYLON.BufferAttribute(colors, 3));
   ribbonGeo.setIndex(indices);
   return ribbonGeo.toNonIndexed();
 })();
 
-const orbitalBladeInstancedMesh = new THREE.InstancedMesh(
+const orbitalBladeInstancedMesh = new BABYLON.InstancedMesh(
   bladeGeometry,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     emissive: 0x243b52,
@@ -980,7 +980,7 @@ const orbitalBladeInstancedMesh = new THREE.InstancedMesh(
   50
 );
 
-const orbitalBladeCoreMat = new THREE.MeshStandardMaterial({
+const orbitalBladeCoreMat = new BABYLON.MeshStandardMaterial({
   color: 0xffffff,
   vertexColors: true,
   emissive: 0x50ecff,
@@ -989,58 +989,58 @@ const orbitalBladeCoreMat = new THREE.MeshStandardMaterial({
   flatShading: true
 });
 
-const orbitalBladeCoreInstancedMesh = new THREE.InstancedMesh(
+const orbitalBladeCoreInstancedMesh = new BABYLON.InstancedMesh(
   bladeEnergyCoreGeometry,
   orbitalBladeCoreMat,
   50
 );
 
-const orbitalBladeTrailMat = new THREE.MeshBasicMaterial({
+const orbitalBladeTrailMat = new BABYLON.MeshBasicMaterial({
   color: 0x70f4ff,
   vertexColors: true,
   transparent: true,
   opacity: 0.68,
-  side: THREE.DoubleSide,
-  blending: THREE.AdditiveBlending,
+  side: BABYLON.DoubleSide,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
-const orbitalBladeTrailInstancedMesh = new THREE.InstancedMesh(
+const orbitalBladeTrailInstancedMesh = new BABYLON.InstancedMesh(
   bladeSlashTrailGeometry,
   orbitalBladeTrailMat,
   50
 );
 
 // 3D-комплекс «Магическая нить» и «Орбитальная защита» (сферические орбитальные вихри на высоких уровнях клинков, мудборд 1)
-const orbitalDefenseGroup = new THREE.Group();
+const orbitalDefenseGroup = new BABYLON.Group();
 orbitalDefenseGroup.visible = false;
 scene.add(orbitalDefenseGroup);
 
-const orbitalThreadMat = new THREE.MeshBasicMaterial({
+const orbitalThreadMat = new BABYLON.MeshBasicMaterial({
   color: 0x78f4ff,
   transparent: true,
   opacity: 0.42,
-  side: THREE.DoubleSide,
-  blending: THREE.AdditiveBlending,
+  side: BABYLON.DoubleSide,
+  blending: BABYLON.AdditiveBlending,
   depthWrite: false
 });
 
 // Основное кольцо «Магической нити» радиуса 2.8 м в плоскости вращения клинков
-const primaryOrbitThreadRing = new THREE.Mesh(
-  new THREE.TorusGeometry(2.8, 0.022, 8, 64),
+const primaryOrbitThreadRing = new BABYLON.Mesh(
+  new BABYLON.TorusGeometry(2.8, 0.022, 8, 64),
   orbitalThreadMat
 );
 primaryOrbitThreadRing.rotation.x = Math.PI / 2;
 orbitalDefenseGroup.add(primaryOrbitThreadRing);
 
-const secondaryOrbitThreadRing = new THREE.Mesh(
-  new THREE.RingGeometry(2.68, 2.92, 64),
-  new THREE.MeshBasicMaterial({
+const secondaryOrbitThreadRing = new BABYLON.Mesh(
+  new BABYLON.RingGeometry(2.68, 2.92, 64),
+  new BABYLON.MeshBasicMaterial({
     color: 0x58e4ff,
     transparent: true,
     opacity: 0.18,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
+    side: BABYLON.DoubleSide,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false
   })
 );
@@ -1050,13 +1050,13 @@ orbitalDefenseGroup.add(secondaryOrbitThreadRing);
 // Наклонные сферические дуги «Орбитальной защиты» (проявляются с ростом уровня клинков до 8 ур.)
 const orbitalCageRings = [];
 for (let c = 0; c < 4; c++) {
-  const cageRing = new THREE.Mesh(
-    new THREE.TorusGeometry(2.65, 0.018, 6, 56),
-    new THREE.MeshBasicMaterial({
+  const cageRing = new BABYLON.Mesh(
+    new BABYLON.TorusGeometry(2.65, 0.018, 6, 56),
+    new BABYLON.MeshBasicMaterial({
       color: 0x88f8ff,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1085,7 +1085,7 @@ scene.add(
 
 /* ---------- 4. Частицы: пыль, искры и дым ---------- */
 
-const dustGeo = new THREE.BufferGeometry();
+const dustGeo = new BABYLON.BufferGeometry();
 const DUST_PARTICLE_COUNT = 200;
 const dustPositions = new Float32Array(DUST_PARTICLE_COUNT * 3);
 for (let i = 0; i < DUST_PARTICLE_COUNT * 3; i += 3) {
@@ -1093,18 +1093,18 @@ for (let i = 0; i < DUST_PARTICLE_COUNT * 3; i += 3) {
   dustPositions[i + 1] = Math.random() * 180;
   dustPositions[i + 2] = (Math.random() - 0.5) * 60;
 }
-dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-const dustMat = new THREE.PointsMaterial({
+dustGeo.setAttribute('position', new BABYLON.BufferAttribute(dustPositions, 3));
+const dustMat = new BABYLON.PointsMaterial({
   color: 0xffaa66,
   size: 0.3,
   transparent: true,
   opacity: 0.4
 });
-const dustParticles = new THREE.Points(dustGeo, dustMat);
+const dustParticles = new BABYLON.Points(dustGeo, dustMat);
 scene.add(dustParticles);
 
 const SPARK_PARTICLE_COUNT = 450;
-const sparkGeo = new THREE.BufferGeometry();
+const sparkGeo = new BABYLON.BufferGeometry();
 const sparkPositions = new Float32Array(SPARK_PARTICLE_COUNT * 3);
 const sparkColors = new Float32Array(SPARK_PARTICLE_COUNT * 3);
 const sparkData = [];
@@ -1114,23 +1114,23 @@ for (let i = 0; i < SPARK_PARTICLE_COUNT; i++) {
   sparkPositions[i * 3 + 1] = -100;
   sparkPositions[i * 3 + 2] = 0;
   sparkData[i] = {
-    velocity: new THREE.Vector3(),
+    velocity: new BABYLON.Vector3(),
     life: 0,
     max: 0,
     active: false,
-    color: new THREE.Color()
+    color: new BABYLON.Color()
   };
 }
-sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
-sparkGeo.setAttribute('color', new THREE.BufferAttribute(sparkColors, 3));
+sparkGeo.setAttribute('position', new BABYLON.BufferAttribute(sparkPositions, 3));
+sparkGeo.setAttribute('color', new BABYLON.BufferAttribute(sparkColors, 3));
 
-const sparkPoints = new THREE.Points(
+const sparkPoints = new BABYLON.Points(
   sparkGeo,
-  new THREE.PointsMaterial({
+  new BABYLON.PointsMaterial({
     size: 0.095,
     vertexColors: true,
     transparent: true,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false
   })
 );
@@ -1208,25 +1208,25 @@ function spawnSparkBurst(x, y, z, count, mode) {
 }
 
 const SMOKE_PARTICLE_COUNT = 200;
-const smokeGeo = new THREE.BufferGeometry();
+const smokeGeo = new BABYLON.BufferGeometry();
 const smokePositions = new Float32Array(SMOKE_PARTICLE_COUNT * 3);
 const smokeColors = new Float32Array(SMOKE_PARTICLE_COUNT * 3);
 const smokeData = [];
-const smokeStartColor = new THREE.Color(0x2e2c30);
-const smokeEndColor = new THREE.Color(0x140a18);
+const smokeStartColor = new BABYLON.Color(0x2e2c30);
+const smokeEndColor = new BABYLON.Color(0x140a18);
 
 for (let i = 0; i < SMOKE_PARTICLE_COUNT; i++) {
   smokePositions[i * 3] = 0;
   smokePositions[i * 3 + 1] = -100;
   smokePositions[i * 3 + 2] = 0;
-  smokeData[i] = { velocity: new THREE.Vector3(), life: 0, max: 0, active: false };
+  smokeData[i] = { velocity: new BABYLON.Vector3(), life: 0, max: 0, active: false };
 }
-smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePositions, 3));
-smokeGeo.setAttribute('color', new THREE.BufferAttribute(smokeColors, 3));
+smokeGeo.setAttribute('position', new BABYLON.BufferAttribute(smokePositions, 3));
+smokeGeo.setAttribute('color', new BABYLON.BufferAttribute(smokeColors, 3));
 
-const smokePoints = new THREE.Points(
+const smokePoints = new BABYLON.Points(
   smokeGeo,
-  new THREE.PointsMaterial({
+  new BABYLON.PointsMaterial({
     size: 0.5,
     vertexColors: true,
     transparent: true,
@@ -1263,22 +1263,22 @@ function spawnSmokePuff(x, y, z, count) {
 
 const fireLandingRingGeo = (function build3DFireLandingCrownGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const baseRing = new THREE.RingGeometry(0.75, 1.04, 28);
+  const tempMat = new BABYLON.Matrix4();
+  const baseRing = new BABYLON.RingGeometry(0.75, 1.04, 28);
   baseRing.rotateX(-Math.PI / 2);
   parts.push({
     geo: baseRing,
     matrix: computeTransformMatrix(0, 0.01, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xff9830)
+    color: new BABYLON.Color(0xff9830)
   });
-  const torus = new THREE.TorusGeometry(0.9, 0.045, 6, 28);
+  const torus = new BABYLON.TorusGeometry(0.9, 0.045, 6, 28);
   torus.rotateX(Math.PI / 2);
   parts.push({
     geo: torus,
     matrix: computeTransformMatrix(0, 0.04, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xffe080)
+    color: new BABYLON.Color(0xffe080)
   });
-  const toothGeo = new THREE.ConeGeometry(0.075, 0.32, 4);
+  const toothGeo = new BABYLON.ConeGeometry(0.075, 0.32, 4);
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * TWO_PI;
     computeTransformMatrix(
@@ -1296,7 +1296,7 @@ const fireLandingRingGeo = (function build3DFireLandingCrownGeo() {
     parts.push({
       geo: toothGeo,
       matrix: tempMat.clone(),
-      color: i % 2 ? new THREE.Color(0xffffff) : new THREE.Color(0xffa838)
+      color: i % 2 ? new BABYLON.Color(0xffffff) : new BABYLON.Color(0xffa838)
     });
   }
   return mergeGeometryParts(parts);
@@ -1304,22 +1304,22 @@ const fireLandingRingGeo = (function build3DFireLandingCrownGeo() {
 
 const voidLandingRingGeo = (function build3DVoidLandingCrownGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const baseRing = new THREE.RingGeometry(0.48, 0.72, 28);
+  const tempMat = new BABYLON.Matrix4();
+  const baseRing = new BABYLON.RingGeometry(0.48, 0.72, 28);
   baseRing.rotateX(-Math.PI / 2);
   parts.push({
     geo: baseRing,
     matrix: computeTransformMatrix(0, 0.01, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xc878ff)
+    color: new BABYLON.Color(0xc878ff)
   });
-  const torus = new THREE.TorusGeometry(0.6, 0.036, 6, 24);
+  const torus = new BABYLON.TorusGeometry(0.6, 0.036, 6, 24);
   torus.rotateX(Math.PI / 2);
   parts.push({
     geo: torus,
     matrix: computeTransformMatrix(0, 0.04, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xf0d0ff)
+    color: new BABYLON.Color(0xf0d0ff)
   });
-  const shardGeo = new THREE.OctahedronGeometry(0.08, 0);
+  const shardGeo = new BABYLON.OctahedronGeometry(0.08, 0);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TWO_PI;
     computeTransformMatrix(
@@ -1334,22 +1334,22 @@ const voidLandingRingGeo = (function build3DVoidLandingCrownGeo() {
       0.7,
       tempMat
     );
-    parts.push({ geo: shardGeo, matrix: tempMat.clone(), color: new THREE.Color(0xffffff) });
+    parts.push({ geo: shardGeo, matrix: tempMat.clone(), color: new BABYLON.Color(0xffffff) });
   }
   return mergeGeometryParts(parts);
 })();
 
 const fireLandingRings = [];
 for (let i = 0; i < 15; i++) {
-  const ring = new THREE.Mesh(
+  const ring = new BABYLON.Mesh(
     fireLandingRingGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xff7a20,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1370,15 +1370,15 @@ function spawnFireLandingRing(x, y, z) {
 
 const voidLandingRings = [];
 for (let i = 0; i < 12; i++) {
-  const ring = new THREE.Mesh(
+  const ring = new BABYLON.Mesh(
     voidLandingRingGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xa060ff,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1401,13 +1401,13 @@ function spawnVoidLandingRing(x, y, z) {
 // Полупрозрачный купол искажения воздуха + концентрические рунные кольца на полу + вихревые потоки воздуха по фронту
 const wave3DGeometry = (function build3DWaveShockGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const brightCol = new THREE.Color(0xffffff);
-  const cyanCol = new THREE.Color(0x90ecff);
-  const softDomeCol = new THREE.Color(0x48b8e8);
+  const tempMat = new BABYLON.Matrix4();
+  const brightCol = new BABYLON.Color(0xffffff);
+  const cyanCol = new BABYLON.Color(0x90ecff);
+  const softDomeCol = new BABYLON.Color(0x48b8e8);
 
   // Полупрозрачный купол искажения воздуха («Полупрозрачное кольцо / Искажение воздуха» на мудборде 1)
-  const domeGeo = new THREE.SphereGeometry(0.95, 24, 10, 0, TWO_PI, 0, Math.PI * 0.44);
+  const domeGeo = new BABYLON.SphereGeometry(0.95, 24, 10, 0, TWO_PI, 0, Math.PI * 0.44);
   parts.push({
     geo: domeGeo,
     matrix: computeTransformMatrix(0, 0.02, 0, 0, 0, 0, 1.0, 0.62, 1.0, tempMat).clone(),
@@ -1420,7 +1420,7 @@ const wave3DGeometry = (function build3DWaveShockGeometry() {
     [0.72, 0.032, 0.09, cyanCol],
     [0.44, 0.024, 0.04, cyanCol]
   ]) {
-    const torus = new THREE.TorusGeometry(rad, tube, 8, 36);
+    const torus = new BABYLON.TorusGeometry(rad, tube, 8, 36);
     torus.rotateX(Math.PI / 2);
     parts.push({
       geo: torus,
@@ -1430,7 +1430,7 @@ const wave3DGeometry = (function build3DWaveShockGeometry() {
   }
 
   // 16 закрученных вихревых гребней воздуха вдоль периметра волны
-  const swirlBladeGeo = new THREE.ConeGeometry(0.058, 0.44, 4);
+  const swirlBladeGeo = new BABYLON.ConeGeometry(0.058, 0.44, 4);
   for (let i = 0; i < 16; i++) {
     const a = (i / 16) * TWO_PI;
     computeTransformMatrix(
@@ -1454,31 +1454,31 @@ const wave3DGeometry = (function build3DWaveShockGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const waveFloorRuneGeo = new THREE.CircleGeometry(1.02, 36);
+const waveFloorRuneGeo = new BABYLON.CircleGeometry(1.02, 36);
 waveFloorRuneGeo.rotateX(-Math.PI / 2);
 
 const waveEffectRings = [...Array(10)].map(() => {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     wave3DGeometry,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
   // Напольный рунный круг с радиальными линиями (как на нижних кадрах мудборда 1)
-  const floorDisc = new THREE.Mesh(
+  const floorDisc = new BABYLON.Mesh(
     waveFloorRuneGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       map: TEXTURES.shockwaveRunes,
       color: 0x98f2ff,
       transparent: true,
       opacity: 0.85,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1512,16 +1512,16 @@ function spawnWaveRingEffect(x, y, z, radius, colorHex) {
 // Растрескавшаяся каменная кладка с лавой в швах + бушующее огненное кольцо пламени + разлетающиеся камни
 const coalSpikesRingGeo = (function buildCoalBootFlameRingGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const darkBasalt = new THREE.Color(0x281012);
-  const redMagma = new THREE.Color(0xff4a00);
-  const brightGold = new THREE.Color(0xffe068);
+  const tempMat = new BABYLON.Matrix4();
+  const darkBasalt = new BABYLON.Color(0x281012);
+  const redMagma = new BABYLON.Color(0xff4a00);
+  const brightGold = new BABYLON.Color(0xffe068);
 
   // Густое внешнее огненное кольцо из 24 языков пламени (как на правом нижнем кадре мудборда 4)
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * TWO_PI;
     const h = 0.85 + (i % 3) * 0.32;
-    const flameGeo = new THREE.ConeGeometry(0.18, h, 5);
+    const flameGeo = new BABYLON.ConeGeometry(0.18, h, 5);
     computeTransformMatrix(
       Math.cos(a) * 2.15,
       h * 0.42,
@@ -1544,7 +1544,7 @@ const coalSpikesRingGeo = (function buildCoalBootFlameRingGeometry() {
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * TWO_PI + 0.15;
     const h = 0.68 + (i % 2) * 0.25;
-    const spikeGeo = jitterGeometry(new THREE.ConeGeometry(0.16, h, 5), 0.025);
+    const spikeGeo = jitterGeometry(new BABYLON.ConeGeometry(0.16, h, 5), 0.025);
     computeTransformMatrix(
       Math.cos(a) * 0.95,
       h * 0.38,
@@ -1560,7 +1560,7 @@ const coalSpikesRingGeo = (function buildCoalBootFlameRingGeometry() {
     parts.push({ geo: spikeGeo, matrix: tempMat.clone(), color: i % 2 ? brightGold : redMagma });
   }
   // Подброшенные каменные булыжники по внешнему кольцу удара
-  const boulderGeo = jitterGeometry(new THREE.DodecahedronGeometry(0.2, 0), 0.05);
+  const boulderGeo = jitterGeometry(new BABYLON.DodecahedronGeometry(0.2, 0), 0.05);
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * TWO_PI + 0.2;
     computeTransformMatrix(
@@ -1580,25 +1580,25 @@ const coalSpikesRingGeo = (function buildCoalBootFlameRingGeometry() {
   return mergeGeometryParts(parts);
 })();
 
-const coalPlumeGeo = new THREE.CylinderGeometry(2.25, 1.85, 1.15, 24, 1, true);
+const coalPlumeGeo = new BABYLON.CylinderGeometry(2.25, 1.85, 1.15, 24, 1, true);
 coalPlumeGeo.translate(0, 0.58, 0);
 
-const coalTorusGeo = new THREE.TorusGeometry(2.15, 0.12, 8, 36);
+const coalTorusGeo = new BABYLON.TorusGeometry(2.15, 0.12, 8, 36);
 coalTorusGeo.rotateX(Math.PI / 2);
 
 const coalBootEruptions = [];
 for (let i = 0; i < 6; i++) {
-  const group = new THREE.Group();
+  const group = new BABYLON.Group();
   group.visible = false;
 
-  const crater = new THREE.Mesh(
-    new THREE.CircleGeometry(3.0, 36),
-    new THREE.MeshBasicMaterial({
+  const crater = new BABYLON.Mesh(
+    new BABYLON.CircleGeometry(3.0, 36),
+    new BABYLON.MeshBasicMaterial({
       map: TEXTURES.coalCraterDecal,
       color: 0xff9830,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1606,9 +1606,9 @@ for (let i = 0; i < 6; i++) {
   crater.position.y = 0.03;
   group.add(crater);
 
-  const spikes = new THREE.Mesh(
+  const spikes = new BABYLON.Mesh(
     coalSpikesRingGeo,
-    new THREE.MeshStandardMaterial({
+    new BABYLON.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       emissive: 0xff5800,
@@ -1620,27 +1620,27 @@ for (let i = 0; i < 6; i++) {
   );
   group.add(spikes);
 
-  const plume = new THREE.Mesh(
+  const plume = new BABYLON.Mesh(
     coalPlumeGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       map: lavaTexture,
       color: 0xffb838,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
   group.add(plume);
 
-  const torus = new THREE.Mesh(
+  const torus = new BABYLON.Mesh(
     coalTorusGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffe070,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1691,26 +1691,26 @@ function spawnCoalBootEruption(x, y, z, stacks = 1) {
 // Напольная ледяная пластина с внутренними трещинами + гребень острых осколков льда
 const frostClusterGeo = (function buildFrostSlideClusterGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const iceBright = new THREE.Color(0xf0fcff);
-  const iceCyan = new THREE.Color(0x80e2ff);
-  const iceDeep = new THREE.Color(0x3898e0);
+  const tempMat = new BABYLON.Matrix4();
+  const iceBright = new BABYLON.Color(0xf0fcff);
+  const iceCyan = new BABYLON.Color(0x80e2ff);
+  const iceDeep = new BABYLON.Color(0x3898e0);
 
   // Плоская напольная пластина льда с трещинами («Морозный след» на мудборде 2)
   parts.push({
-    geo: new THREE.CylinderGeometry(0.56, 0.62, 0.035, 7),
+    geo: new BABYLON.CylinderGeometry(0.56, 0.62, 0.035, 7),
     matrix: computeTransformMatrix(0, 0.02, 0, 0, 0, 0, 1.0, 1.0, 1.35, tempMat).clone(),
     color: iceDeep
   });
   // Центральный и боковые острые осколки льда, наклоненные назад по ходу скольжения
   parts.push({
-    geo: new THREE.ConeGeometry(0.14, 0.78, 5),
+    geo: new BABYLON.ConeGeometry(0.14, 0.78, 5),
     matrix: computeTransformMatrix(0, 0.34, 0, -0.35, 0, 0, 0.85, 1, 1.1, tempMat).clone(),
     color: iceBright
   });
   for (const s of [-1, 1]) {
     parts.push({
-      geo: new THREE.ConeGeometry(0.11, 0.58, 4),
+      geo: new BABYLON.ConeGeometry(0.11, 0.58, 4),
       matrix: computeTransformMatrix(
         s * 0.26,
         0.24,
@@ -1726,7 +1726,7 @@ const frostClusterGeo = (function buildFrostSlideClusterGeo() {
       color: iceCyan
     });
     parts.push({
-      geo: new THREE.OctahedronGeometry(0.12, 0),
+      geo: new BABYLON.OctahedronGeometry(0.12, 0),
       matrix: computeTransformMatrix(
         s * 0.38,
         0.1,
@@ -1747,9 +1747,9 @@ const frostClusterGeo = (function buildFrostSlideClusterGeo() {
 
 const frostSlideCrystals = [];
 for (let i = 0; i < 20; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     frostClusterGeo,
-    new THREE.MeshStandardMaterial({
+    new BABYLON.MeshStandardMaterial({
       map: TEXTURES.iceSoleCrack,
       color: 0xffffff,
       vertexColors: true,
@@ -1787,14 +1787,14 @@ function spawnFrostSlideCrystal(x, y, z, facingAngle) {
 // Клубящиеся облака белого пара + огненное ядро + разлетающиеся во все стороны голубые осколки льда
 const steamCloudGeo = (function buildSteamCloudClusterGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const cWhite = new THREE.Color(0xffffff);
-  const cFire = new THREE.Color(0xff9838);
-  const cIce = new THREE.Color(0x88e8ff);
+  const tempMat = new BABYLON.Matrix4();
+  const cWhite = new BABYLON.Color(0xffffff);
+  const cFire = new BABYLON.Color(0xff9838);
+  const cIce = new BABYLON.Color(0x88e8ff);
 
   // Огненное ядро в эпицентре парового взрыва
   parts.push({
-    geo: new THREE.IcosahedronGeometry(0.38, 1),
+    geo: new BABYLON.IcosahedronGeometry(0.38, 1),
     matrix: computeTransformMatrix(0, 0.48, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: cFire
   });
@@ -1810,14 +1810,14 @@ const steamCloudGeo = (function buildSteamCloudClusterGeo() {
   ];
   for (const [px, py, pz, r, col] of puffOffsets) {
     parts.push({
-      geo: new THREE.IcosahedronGeometry(r, 1),
+      geo: new BABYLON.IcosahedronGeometry(r, 1),
       matrix: computeTransformMatrix(px, py, pz, px, py, pz, 1.18, 0.92, 1.18, tempMat).clone(),
       color: col
     });
   }
 
   // 10 разлетающихся острых осколков расколотого льда (как на правом нижнем кадре мудборда 2)
-  const shardGeo = new THREE.ConeGeometry(0.11, 0.52, 4);
+  const shardGeo = new BABYLON.ConeGeometry(0.11, 0.52, 4);
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * TWO_PI;
     const h = 0.25 + (i % 3) * 0.28;
@@ -1840,14 +1840,14 @@ const steamCloudGeo = (function buildSteamCloudClusterGeo() {
 
 const steamBurstEffects = [];
 for (let i = 0; i < 6; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     steamCloudGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1877,26 +1877,26 @@ function spawnSteamBurstEffect(x, y, z) {
 // Жёлто-белые и лазурно-синие ветвящиеся молнии + наземные электрические разряды
 const thunderCageGeo = (function buildThunderCageGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const cYellowWhite = new THREE.Color(0xfff8b0);
-  const cElectricBlue = new THREE.Color(0x60dcff);
+  const tempMat = new BABYLON.Matrix4();
+  const cYellowWhite = new BABYLON.Color(0xfff8b0);
+  const cElectricBlue = new BABYLON.Color(0x60dcff);
 
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.54, 0),
+    geo: new BABYLON.OctahedronGeometry(0.54, 0),
     matrix: computeTransformMatrix(0, 0.65, 0, 0, 0, 0, 0.85, 1.45, 0.85, tempMat).clone(),
     color: cYellowWhite
   });
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.46, 0),
+    geo: new BABYLON.OctahedronGeometry(0.46, 0),
     matrix: computeTransformMatrix(0, 0.65, 0, 0.6, Math.PI / 4, 0.6, 1.15, 0.95, 1.15, tempMat).clone(),
     color: cElectricBlue
   });
   parts.push({
-    geo: new THREE.ConeGeometry(0.14, 2.2, 4),
+    geo: new BABYLON.ConeGeometry(0.14, 2.2, 4),
     matrix: computeTransformMatrix(0, 1.1, 0, 0, Math.PI / 4, 0, 1, 1, 1, tempMat).clone(),
     color: cYellowWhite
   });
-  const ring = new THREE.TorusGeometry(0.82, 0.042, 6, 20);
+  const ring = new BABYLON.TorusGeometry(0.82, 0.042, 6, 20);
   ring.rotateX(Math.PI / 2);
   parts.push({
     geo: ring,
@@ -1908,14 +1908,14 @@ const thunderCageGeo = (function buildThunderCageGeometry() {
 
 const thunderStrikeEffects = [];
 for (let i = 0; i < 10; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     thunderCageGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -1947,9 +1947,9 @@ function spawnThunderChainEffect(fromX, fromY, fromZ, toX, toY, toZ) {
 // Вспышка кристалла и золотисто-янтарные «Искры опыта», летящие от убитого горящего врага к герою
 const smeltBurstGeo = (function buildSmeltCrystalBurstGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const cGold = new THREE.Color(0xffe880);
-  const cAmber = new THREE.Color(0xff8418);
+  const tempMat = new BABYLON.Matrix4();
+  const cGold = new BABYLON.Color(0xffe880);
+  const cAmber = new BABYLON.Color(0xff8418);
 
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TWO_PI;
@@ -1966,7 +1966,7 @@ const smeltBurstGeo = (function buildSmeltCrystalBurstGeo() {
       tempMat
     );
     parts.push({
-      geo: new THREE.OctahedronGeometry(0.18, 0),
+      geo: new BABYLON.OctahedronGeometry(0.18, 0),
       matrix: tempMat.clone(),
       color: i % 2 === 0 ? cGold : cAmber
     });
@@ -1976,14 +1976,14 @@ const smeltBurstGeo = (function buildSmeltCrystalBurstGeo() {
 
 const smeltCrystalBursts = [];
 for (let i = 0; i < 8; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     smeltBurstGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -2038,14 +2038,14 @@ function spawnSmeltCrystalBurst(x, y, z) {
 // Изумрудный смазанный след и зеленоватая вспышка у ног бегущего героя
 const speedTomeTrailGeo = (function buildSpeedTomeTrailGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const cEmerald = new THREE.Color(0x45ff88);
-  const cMint = new THREE.Color(0xb8ffd8);
+  const tempMat = new BABYLON.Matrix4();
+  const cEmerald = new BABYLON.Color(0x45ff88);
+  const cMint = new BABYLON.Color(0xb8ffd8);
 
   // Две горизонтальные скоростные ленты-стрелы + напольная вспышка
   for (const s of [-1, 1]) {
     parts.push({
-      geo: new THREE.ConeGeometry(0.08, 0.85, 4),
+      geo: new BABYLON.ConeGeometry(0.08, 0.85, 4),
       matrix: computeTransformMatrix(
         s * 0.18,
         0.38,
@@ -2062,7 +2062,7 @@ const speedTomeTrailGeo = (function buildSpeedTomeTrailGeo() {
     });
   }
   parts.push({
-    geo: new THREE.RingGeometry(0.18, 0.44, 16),
+    geo: new BABYLON.RingGeometry(0.18, 0.44, 16),
     matrix: computeTransformMatrix(0, 0.03, 0, -Math.PI / 2, 0, 0, 1, 1, 1, tempMat).clone(),
     color: cMint
   });
@@ -2071,15 +2071,15 @@ const speedTomeTrailGeo = (function buildSpeedTomeTrailGeo() {
 
 const speedTomeTrails = [];
 for (let i = 0; i < 14; i++) {
-  const mesh = new THREE.Mesh(
+  const mesh = new BABYLON.Mesh(
     speedTomeTrailGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0x50ff90,
       vertexColors: true,
       transparent: true,
       opacity: 0,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -2105,25 +2105,25 @@ function spawnSpeedTomeTrail(x, y, z, facingAngle) {
 // Нестабильный багрово-малиновый сгусток энергии с изогнутыми рогами-разрядами + пульсирующее красное кольцо на земле
 const bombModelGeo = (function build3DBombModelGeometry() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const darkTendrilCol = new THREE.Color(0x280614);
-  const crimsonCol = new THREE.Color(0xff1848);
-  const hotCoreCol = new THREE.Color(0xffe8f0);
+  const tempMat = new BABYLON.Matrix4();
+  const darkTendrilCol = new BABYLON.Color(0x280614);
+  const crimsonCol = new BABYLON.Color(0xff1848);
+  const hotCoreCol = new BABYLON.Color(0xffe8f0);
 
   // Внутреннее бело-розовое нестабильное ядро
   parts.push({
-    geo: new THREE.IcosahedronGeometry(0.34, 1),
+    geo: new BABYLON.IcosahedronGeometry(0.34, 1),
     matrix: computeTransformMatrix(0, 0.65, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: hotCoreCol
   });
   // Багровая энергетическая оболочка
   parts.push({
-    geo: jitterGeometry(new THREE.DodecahedronGeometry(0.44, 0), 0.04),
+    geo: jitterGeometry(new BABYLON.DodecahedronGeometry(0.44, 0), 0.04),
     matrix: computeTransformMatrix(0, 0.65, 0, 0.4, 0.4, 0, 1, 1, 1, tempMat).clone(),
     color: crimsonCol
   });
   // 12 рваных тёмно-багровых энергетических протуберанцев/молний вокруг сгустка (как на мудборде 6)
-  const hornGeo = new THREE.ConeGeometry(0.075, 0.46, 4);
+  const hornGeo = new BABYLON.ConeGeometry(0.075, 0.46, 4);
   for (let i = 0; i < 12; i++) {
     const phi = Math.acos(1 - (2 * (i + 0.5)) / 12);
     const theta = Math.PI * (1 + Math.sqrt(5)) * i;
@@ -2153,31 +2153,31 @@ const bombModelGeo = (function build3DBombModelGeometry() {
 
 const bombGroundRingGeo = (function buildBombWarningGroundGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const outerRing = new THREE.RingGeometry(0.86, 1.0, 36);
+  const tempMat = new BABYLON.Matrix4();
+  const outerRing = new BABYLON.RingGeometry(0.86, 1.0, 36);
   outerRing.rotateX(-Math.PI / 2);
   parts.push({
     geo: outerRing,
     matrix: computeTransformMatrix(0, 0.02, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xff2040)
+    color: new BABYLON.Color(0xff2040)
   });
-  const innerRing = new THREE.RingGeometry(0.45, 0.54, 32);
+  const innerRing = new BABYLON.RingGeometry(0.45, 0.54, 32);
   innerRing.rotateX(-Math.PI / 2);
   parts.push({
     geo: innerRing,
     matrix: computeTransformMatrix(0, 0.02, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
-    color: new THREE.Color(0xff6888)
+    color: new BABYLON.Color(0xff6888)
   });
   return mergeGeometryParts(parts);
 })();
 
 const bombVisualPool = [...Array(12)].map(() => {
-  const group = new THREE.Group();
+  const group = new BABYLON.Group();
   group.visible = false;
 
-  const orbMesh = new THREE.Mesh(
+  const orbMesh = new BABYLON.Mesh(
     bombModelGeo,
-    new THREE.MeshStandardMaterial({
+    new BABYLON.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       emissive: 0xff1844,
@@ -2189,27 +2189,27 @@ const bombVisualPool = [...Array(12)].map(() => {
   );
   group.add(orbMesh);
 
-  const groundRing = new THREE.Mesh(
+  const groundRing = new BABYLON.Mesh(
     bombGroundRingGeo,
-    new THREE.MeshBasicMaterial({
+    new BABYLON.MeshBasicMaterial({
       color: 0xff2448,
       vertexColors: true,
       transparent: true,
       opacity: 0.85,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
+      side: BABYLON.DoubleSide,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
   group.add(groundRing);
 
-  const glowSprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({
+  const glowSprite = new BABYLON.Sprite(
+    new BABYLON.SpriteMaterial({
       map: TEXTURES.glowWhite,
       color: 0xff2858,
       transparent: true,
       opacity: 0.85,
-      blending: THREE.AdditiveBlending,
+      blending: BABYLON.AdditiveBlending,
       depthWrite: false
     })
   );
@@ -2280,26 +2280,26 @@ const MAX_PICKUPS = 400;
 // 7A. КРИСТАЛЛЫ ОПЫТА (по мудборду 8: чистый гранёный бирюзовый октаэдр с ярким внутренним кристаллом и сияющими гранями)
 const xpPickupGeo = (function buildDetailedXpCrystalGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const brightCore = new THREE.Color(0xe8ffff);
-  const turquoiseFacet = new THREE.Color(0x38f2dc);
-  const edgeHighlight = new THREE.Color(0x98fff4);
+  const tempMat = new BABYLON.Matrix4();
+  const brightCore = new BABYLON.Color(0xe8ffff);
+  const turquoiseFacet = new BABYLON.Color(0x38f2dc);
+  const edgeHighlight = new BABYLON.Color(0x98fff4);
 
   // Внешний гранёный бирюзовый октаэдр
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.32, 0),
+    geo: new BABYLON.OctahedronGeometry(0.32, 0),
     matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 0.88, 1.32, 0.88, tempMat).clone(),
     color: turquoiseFacet
   });
   // Внутренняя яркая призма, создающая эффект глубины и свечения рёбер
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.21, 0),
+    geo: new BABYLON.OctahedronGeometry(0.21, 0),
     matrix: computeTransformMatrix(0, 0, 0, 0, Math.PI / 4, 0, 0.92, 1.38, 0.92, tempMat).clone(),
     color: brightCore
   });
   // Экваториальная гранёная фаска
   parts.push({
-    geo: new THREE.TorusGeometry(0.24, 0.015, 4, 4),
+    geo: new BABYLON.TorusGeometry(0.24, 0.015, 4, 4),
     matrix: computeTransformMatrix(0, 0, 0, Math.PI / 2, 0, Math.PI / 4, 1, 1, 1, tempMat).clone(),
     color: edgeHighlight
   });
@@ -2309,32 +2309,32 @@ const xpPickupGeo = (function buildDetailedXpCrystalGeo() {
 // 7B. КРИСТАЛЛ ЗДОРОВЬЯ (по мудборду 8: рубиновый октаэдр «капля крови башни» + пульсирующие красные кольца ауры внизу)
 const healPickupGeo = (function buildDetailedHealCrystalGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const rubyFacet = new THREE.Color(0xe81838);
-  const rubyHotCore = new THREE.Color(0xff98a8);
-  const auraRingCol = new THREE.Color(0xff3858);
+  const tempMat = new BABYLON.Matrix4();
+  const rubyFacet = new BABYLON.Color(0xe81838);
+  const rubyHotCore = new BABYLON.Color(0xff98a8);
+  const auraRingCol = new BABYLON.Color(0xff3858);
 
   // Главный рубиновый октаэдр
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.34, 0),
+    geo: new BABYLON.OctahedronGeometry(0.34, 0),
     matrix: computeTransformMatrix(0, 0.06, 0, 0, 0, 0, 0.88, 1.34, 0.88, tempMat).clone(),
     color: rubyFacet
   });
   // Внутреннее алое сердце кристалла
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.22, 0),
+    geo: new BABYLON.OctahedronGeometry(0.22, 0),
     matrix: computeTransformMatrix(0, 0.06, 0, 0, Math.PI / 4, 0, 0.9, 1.38, 0.9, tempMat).clone(),
     color: rubyHotCore
   });
   // Двойное пульсирующее кольцо рубиновой ауры внизу (как на кадре 4 мудборда 8)
-  const ring1 = new THREE.RingGeometry(0.28, 0.36, 24);
+  const ring1 = new BABYLON.RingGeometry(0.28, 0.36, 24);
   ring1.rotateX(-Math.PI / 2);
   parts.push({
     geo: ring1,
     matrix: computeTransformMatrix(0, -0.34, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: auraRingCol
   });
-  const ring2 = new THREE.RingGeometry(0.44, 0.50, 24);
+  const ring2 = new BABYLON.RingGeometry(0.44, 0.50, 24);
   ring2.rotateX(-Math.PI / 2);
   parts.push({
     geo: ring2,
@@ -2347,24 +2347,24 @@ const healPickupGeo = (function buildDetailedHealCrystalGeo() {
 // 7C. ЗОЛОТАЯ МОНЕТА — ОКТАЭДР (по мудборду 8: золотистый октаэдр с металлическим блеском + вихревой шлейф и чешуйки латуни)
 const goldPickupGeo = (function buildDetailedGoldOctahedronGeo() {
   const parts = [];
-  const tempMat = new THREE.Matrix4();
-  const goldBright = new THREE.Color(0xffe878);
-  const goldOrange = new THREE.Color(0xf89818);
-  const brassScale = new THREE.Color(0xfff6c0);
+  const tempMat = new BABYLON.Matrix4();
+  const goldBright = new BABYLON.Color(0xffe878);
+  const goldOrange = new BABYLON.Color(0xf89818);
+  const brassScale = new BABYLON.Color(0xfff6c0);
 
   // Центральный золотой октаэдр, ловящий оранжевые блики лавы
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.3, 0),
+    geo: new BABYLON.OctahedronGeometry(0.3, 0),
     matrix: computeTransformMatrix(0, 0, 0, 0, 0, 0, 0.9, 1.28, 0.9, tempMat).clone(),
     color: goldBright
   });
   parts.push({
-    geo: new THREE.OctahedronGeometry(0.2, 0),
+    geo: new BABYLON.OctahedronGeometry(0.2, 0),
     matrix: computeTransformMatrix(0, 0, 0, 0, Math.PI / 4, 0, 0.94, 1.32, 0.94, tempMat).clone(),
     color: goldOrange
   });
   // Золотистое вихревое кольцо быстрого вращения и чешуйки латуни (кадр 6 мудборда 8)
-  const swirl = new THREE.TorusGeometry(0.38, 0.022, 6, 20);
+  const swirl = new BABYLON.TorusGeometry(0.38, 0.022, 6, 20);
   swirl.rotateX(Math.PI / 2);
   parts.push({
     geo: swirl,
@@ -2386,7 +2386,7 @@ const goldPickupGeo = (function buildDetailedGoldOctahedronGeo() {
       tempMat
     );
     parts.push({
-      geo: new THREE.OctahedronGeometry(0.085, 0),
+      geo: new BABYLON.OctahedronGeometry(0.085, 0),
       matrix: tempMat.clone(),
       color: goldBright
     });
@@ -2394,9 +2394,9 @@ const goldPickupGeo = (function buildDetailedGoldOctahedronGeo() {
   return mergeGeometryParts(parts);
 })();
 
-const pickupInstancedMesh = new THREE.InstancedMesh(
+const pickupInstancedMesh = new BABYLON.InstancedMesh(
   xpPickupGeo,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     emissive: 0x18b8a8,
@@ -2410,9 +2410,9 @@ const pickupInstancedMesh = new THREE.InstancedMesh(
 pickupInstancedMesh.frustumCulled = false;
 pickupInstancedMesh.count = 0;
 
-const healPickupInstancedMesh = new THREE.InstancedMesh(
+const healPickupInstancedMesh = new BABYLON.InstancedMesh(
   healPickupGeo,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     emissive: 0xe81438,
@@ -2426,9 +2426,9 @@ const healPickupInstancedMesh = new THREE.InstancedMesh(
 healPickupInstancedMesh.frustumCulled = false;
 healPickupInstancedMesh.count = 0;
 
-const goldPickupInstancedMesh = new THREE.InstancedMesh(
+const goldPickupInstancedMesh = new BABYLON.InstancedMesh(
   goldPickupGeo,
-  new THREE.MeshStandardMaterial({
+  new BABYLON.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
     emissive: 0xc87800,
@@ -2445,13 +2445,13 @@ goldPickupInstancedMesh.count = 0;
 scene.add(pickupInstancedMesh, healPickupInstancedMesh, goldPickupInstancedMesh);
 
 const PICKUP_COLORS = [
-  new THREE.Color(0x68f8e8),
-  new THREE.Color(0xff4d4d),
-  new THREE.Color(0xffc83d),
-  new THREE.Color(0xc8ffff)
+  new BABYLON.Color(0x68f8e8),
+  new BABYLON.Color(0xff4d4d),
+  new BABYLON.Color(0xffc83d),
+  new BABYLON.Color(0xc8ffff)
 ];
 pickupInstancedMesh.setColorAt(0, PICKUP_COLORS[0]);
-const _pickupDummyObj = new THREE.Object3D();
+const _pickupDummyObj = new BABYLON.Object3D();
 
 // 7D. МАРКЕРЫ ЭЛИТНЫХ МОБОВ (по мудборду 6: светящийся зубчатый ореол над головой моба,
 // Бронированный — синий, Стремительный — жёлтый, Взрывной — красный, пульсирует меняя размер)
@@ -2461,10 +2461,10 @@ for (const [eliteKey, colorHex] of [
   ['swift', 0xffe038],
   ['volt', 0xff2838]
 ]) {
-  ELITE_MARKER_MATERIALS[eliteKey] = new THREE.SpriteMaterial({
+  ELITE_MARKER_MATERIALS[eliteKey] = new BABYLON.SpriteMaterial({
     map: TEXTURES.eliteHalo,
     color: colorHex,
-    blending: THREE.AdditiveBlending,
+    blending: BABYLON.AdditiveBlending,
     depthWrite: false,
     transparent: true,
     opacity: 0.96
@@ -2472,7 +2472,7 @@ for (const [eliteKey, colorHex] of [
 }
 
 const eliteMarkerSprites = [...Array(10)].map(() => {
-  const sprite = new THREE.Sprite(ELITE_MARKER_MATERIALS.armor);
+  const sprite = new BABYLON.Sprite(ELITE_MARKER_MATERIALS.armor);
   sprite.visible = false;
   scene.add(sprite);
   return sprite;

@@ -2,8 +2,10 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Lava Tower</title>
+  <title>Lava Tower — Babylon.js Edition</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;600&display=swap">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -31,37 +33,27 @@
     <div class="pn" id="pn"></div>
   </div>
 
-  <!-- Библиотека 3D-рендеринга Three.js r128 -->
-  <script src="vendor/three.min.js"></script>
+  <!-- Сторонняя библиотека 3D-рендеринга Babylon.js (локальный автономный рантайм) -->
+  <script src="vendor/babylon.min.js"></script>
 
-  <!-- Базовые утилиты, звук и конфигурация -->
+  <!-- Модули игры (подключаются в порядке зависимостей графа сцены Babylon.js) -->
   <script src="src/utils/math-and-rng.js"></script>
   <script src="src/audio/sound-engine.js"></script>
   <script src="src/config/game-data.js"></script>
-
-  <!-- Сцена, освещение и генератор процедурных текстур -->
   <script src="src/graphics/scene-setup.js"></script>
   <script src="src/graphics/procedural-textures.js"></script>
-
-  <!-- Утилиты геометрии, 3D-модели героя, врагов, боссов и объектный пул мешей -->
   <script src="src/models/geometry-utils.js"></script>
   <script src="src/models/player-model.js"></script>
   <script src="src/models/enemy-models.js"></script>
   <script src="src/models/boss-models.js"></script>
   <script src="src/models/mob-factory.js"></script>
-
-  <!-- Пулы частиц, молний, снарядов и генератор уровней башни -->
   <script src="src/effects/particles-and-fx.js"></script>
   <script src="src/world/tower-generator.js"></script>
-
-  <!-- Боевая система, ИИ боссов, физика, рендер кадра и UI -->
   <script src="src/game/combat-and-loot.js"></script>
   <script src="src/game/boss-ai.js"></script>
   <script src="src/game/physics-and-step.js"></script>
   <script src="src/game/renderer.js"></script>
   <script src="src/ui/menus-and-hud.js"></script>
-
-  <!-- Точка входа и главный игровой цикл -->
   <script src="src/main.js"></script>
 </body>
 </html>

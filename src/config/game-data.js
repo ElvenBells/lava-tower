@@ -542,3 +542,23 @@ const TOWER_BOSS_TINTS = {
   ice: [0, 0, 0],
   void: [0, 0, 0]
 };
+
+// Предварительное объявление глобальных переменных состояния между модулями
+var currentTowerTheme = TOWERS.ash;
+var state = null;
+var selectedHeroId = 'wan';
+var selectedTowerId = 'ash';
+var blocks = [];
+var jumpPads = [];
+var chests = [];
+var altars = [];
+var floorLayouts = [];
+var forkMarkers = [];
+var bossGateBlockIndices = {};
+var bossGateVisualsByFloor = {};
+var towerInstancedMesh = null;
+var lastBossWidthText = '';
+var lastBossHpText = '';
+var lastBossNameText = '';
+var lastBossShownState = 0;
+var DOM_CACHE = null;

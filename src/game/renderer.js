@@ -4,7 +4,7 @@
    и 9 боссов, обновление 3D-буферов оружия, снарядов, лута, частиц и HUD
    ========================================================================== */
 
-const DOM_CACHE = {
+var DOM_CACHE = {
   healthBar: getById('hb'),
   xpBar: getById('xb'),
   statsText: getById('st'),
@@ -13,11 +13,11 @@ const DOM_CACHE = {
   bossHpContainer: getById('bossHp')
 };
 
-const _projectileDummyObj = new THREE.Object3D();
-const _tempVec3 = new THREE.Vector3();
-const _tempQuatA = new THREE.Quaternion();
-const _tempQuatB = new THREE.Quaternion();
-const _tempEuler = new THREE.Euler();
+const _projectileDummyObj = new BABYLON.Object3D();
+const _tempVec3 = new BABYLON.Vector3();
+const _tempQuatA = new BABYLON.Quaternion();
+const _tempQuatB = new BABYLON.Quaternion();
+const _tempEuler = new BABYLON.Euler();
 
 const _leaperPose = {
   hipY: 0,
@@ -34,10 +34,10 @@ const _leaperPose = {
 
 const LOD_DISTANCE = 32;
 
-let lastBossWidthText = '';
-let lastBossHpText = '';
-let lastBossNameText = '';
-let lastBossShownState = 0;
+var lastBossWidthText = '';
+var lastBossHpText = '';
+var lastBossNameText = '';
+var lastBossShownState = 0;
 
 /**
  * Отрисовывает один кадр активного забега.
