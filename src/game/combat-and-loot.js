@@ -1,10 +1,12 @@
 /* ==========================================================================
-   Боевая система, пространственная сетка врагов, спавн мобов, элиты, лут и события
+   Боевая система, пространственная сетка врагов (расширенная до R=50 м под 23×23),
+   спавн мобов, элиты, лут, переключение 3 актов и события этажей
    ========================================================================== */
 
-/* ---------- 1. Пространственная сетка врагов (ячейки 10×10 м) ---------- */
+/* ---------- 1. Пространственная сетка врагов (ячейки 10×10 м, до ±50 м) ---------- */
 
-const ENEMY_GRID_DIM = 7;
+const ENEMY_GRID_DIM = 11;
+const ENEMY_GRID_OFFSET = 5;
 const ENEMY_GRID_CELL_SIZE = 10;
 const enemySpatialGrid = [];
 for (let i = 0; i < ENEMY_GRID_DIM * ENEMY_GRID_DIM; i++) {
@@ -20,8 +22,8 @@ function buildEnemyGrid() {
   }
   for (let i = 0; i < state.enemies.length; i++) {
     const enemy = state.enemies[i];
-    const ix = Math.round(enemy.x / ENEMY_GRID_CELL_SIZE) + 3;
-    const iz = Math.round(enemy.z / ENEMY_GRID_CELL_SIZE) + 3;
+    const ix = Math.round(enemy.x / ENEMY_GRID_CELL_SIZE) + ENEMY_GRID_OFFSET;
+    const iz = Math.round(enemy.z / ENEMY_GRID_CELL_SIZE) + ENEMY_GRID_OFFSET;
     if (ix < 0 || ix >= ENEMY_GRID_DIM || iz < 0 || iz >= ENEMY_GRID_DIM) continue;
     enemySpatialGrid[ix * ENEMY_GRID_DIM + iz].push(i);
   }
@@ -32,10 +34,10 @@ function collectNearbyEnemies(x, z, outEnemies) {
   const ix0 = Math.round(x / ENEMY_GRID_CELL_SIZE);
   const iz0 = Math.round(z / ENEMY_GRID_CELL_SIZE);
   for (let a = ix0 - 1; a <= ix0 + 1; a++) {
-    if (a < -3 || a > 3) continue;
+    if (a < -ENEMY_GRID_OFFSET || a > ENEMY_GRID_OFFSET) continue;
     for (let c = iz0 - 1; c <= iz0 + 1; c++) {
-      if (c < -3 || c > 3) continue;
-      const cell = enemySpatialGrid[(a + 3) * ENEMY_GRID_DIM + (c + 3)];
+      if (c < -ENEMY_GRID_OFFSET || c > ENEMY_GRID_OFFSET) continue;
+      const cell = enemySpatialGrid[(a + ENEMY_GRID_OFFSET) * ENEMY_GRID_DIM + (c + ENEMY_GRID_OFFSET)];
       for (let k = 0; k < cell.length; k++) {
         outEnemies.push(state.enemies[cell[k]]);
       }
@@ -43,11 +45,13 @@ function collectNearbyEnemies(x, z, outEnemies) {
   }
 }
 
-function findNearestEnemy(maxRadius) {
+function findNearestEnemy(maxRadius, fromX, fromZ) {
+  const ox = fromX !== undefined ? fromX : state.player.x;
+  const oz = fromZ !== undefined ? fromZ : state.player.z;
   let nearest = null;
   let minDistance = maxRadius;
   for (const enemy of state.enemies) {
-    const dist = hypot2D(enemy.x - state.player.x, enemy.z - state.player.z);
+    const dist = hypot2D(enemy.x - ox, enemy.z - oz);
     if (dist < minDistance) {
       minDistance = dist;
       nearest = enemy;
@@ -95,6 +99,10 @@ function calculateDamageMultiplier(tags) {
   }
   if (owned.heart && state.player.y - state.lavaY < 6) {
     additiveBonus += 0.25 * owned.heart;
+  }
+  // Бонус снайперской позиции при стрельбе с вертикального полуэтажа-балкона (floorY + 6)
+  if (state.isOnBalcony) {
+    additiveBonus += 0.2;
   }
 
   for (const tag of tags) {
@@ -229,7 +237,7 @@ function damagePlayer(amount, isLavaDamage) {
   if (!isLavaDamage) {
     if (state.invulnerabilityTimer > 0) return;
     state.invulnerabilityTimer = 0.4;
-    amount *= 1 + 0.04 * state.maxFloorReached;
+    amount *= 1 + 0.035 * state.maxFloorReached;
   }
   state.timeSinceLastHit = 0;
   state.player.hp -= amount;
@@ -257,6 +265,10 @@ function releaseAllEnemies() {
 
 function spawnEnemy(type, x, z, hpScale, bossKind) {
   hpScale *= (state.towerConfig && state.towerConfig.enemyHpMul) || 1;
+  // Небольшое кооперативное масштабирование здоровья под размер группы
+  const coopHpFactor = 1 + Math.max(0, (state.playerCount || 1) - 1) * (type === 'b' ? 0.28 : 0.15);
+  hpScale *= coopHpFactor;
+
   const baseStats = ENEMY_TYPES[type];
 
   const enemy = {
@@ -419,7 +431,9 @@ function promoteToElite(enemy, floorIndex, forceElite) {
   for (const other of state.enemies) {
     if (other.eliteType) activeElites++;
   }
-  if (!forceElite && activeElites >= 2 + ((floorIndex / 4) | 0)) return;
+  if (!forceElite && activeElites >= 2 + ((floorIndex / 4) | 0) + (state.playerCount > 2 ? 1 : 0)) {
+    return;
+  }
 
   const eliteKeys = Object.keys(ELITE_MODIFIERS);
   const chosenKey = eliteKeys[Math.floor(Math.random() * eliteKeys.length)];
@@ -474,7 +488,13 @@ function dropEnemyLoot(enemy, xpValue) {
   const dropY = groundY + 0.7;
   const isElite = enemy.eliteType;
 
-  spawnPickup(0, enemy.x, dropY, enemy.z, xpValue * (state.chosenRoute === 2 ? 1.3 : 1));
+  // Проверяем маршрут как глобально, так и по конкретному сектору разделённого этажа
+  const enemySectorRoute =
+    typeof getSectorRouteAtPosition === 'function'
+      ? getSectorRouteAtPosition(state.maxFloorReached, enemy.x, enemy.z) || state.chosenRoute
+      : state.chosenRoute;
+
+  spawnPickup(0, enemy.x, dropY, enemy.z, xpValue * (enemySectorRoute === 2 ? 1.35 : 1));
 
   if (isElite) {
     const coinCount = 3 + ((Math.random() * 3) | 0);
@@ -491,14 +511,14 @@ function dropEnemyLoot(enemy, xpValue) {
     Math.random() <
     GOLD_DROP_CHANCE[enemy.type] *
       (state.activeEvent && state.activeEvent.key === 'gold' ? 3 : 1) *
-      (state.chosenRoute === 2 ? 2 : 1)
+      (enemySectorRoute === 2 ? 2 : 1)
   ) {
     spawnPickup(2, enemy.x, dropY, enemy.z, state.isGreedPactActive ? 2 : 1);
   }
 
   if (
     Math.random() <
-    (isElite ? 0.4 : HEAL_DROP_CHANCE[enemy.type]) * (state.chosenRoute === 1 ? 2 : 1)
+    (isElite ? 0.4 : HEAL_DROP_CHANCE[enemy.type]) * (enemySectorRoute === 1 ? 2.4 : 1)
   ) {
     spawnPickup(1, enemy.x + 0.5, dropY, enemy.z + 0.5, 0.12);
   }
@@ -507,12 +527,12 @@ function dropEnemyLoot(enemy, xpValue) {
 function dropBossLoot(boss) {
   const groundY = getGroundHeightAt(boss.x, boss.y + 1, boss.z);
   const dropY = groundY + 0.7;
-  for (let i = 0; i < 2; i++) {
-    const angle = i * Math.PI;
-    spawnPickup(1, boss.x + Math.cos(angle) * 2.5, dropY, boss.z + Math.sin(angle) * 2.5, 0.2);
+  for (let i = 0; i < 3; i++) {
+    const angle = (i * TWO_PI) / 3;
+    spawnPickup(1, boss.x + Math.cos(angle) * 2.5, dropY, boss.z + Math.sin(angle) * 2.5, 0.22);
   }
-  for (let i = 0; i < 8; i++) {
-    const angle = (i * TWO_PI) / 8 + 0.4;
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * TWO_PI) / 10 + 0.4;
     spawnPickup(2, boss.x + Math.cos(angle) * 3.2, dropY, boss.z + Math.sin(angle) * 3.2, 1);
   }
 }
@@ -578,9 +598,20 @@ function killEnemy(enemyIndex) {
     state.lavaY -= 12;
     state.activeBossCount = Math.max(0, (state.activeBossCount || 0) - 1);
 
-    if (enemy.gateFloor !== undefined && enemy.gateFloor < 11) {
+    if (enemy.gateFloor !== undefined && enemy.gateFloor < GRID_FLOORS - 1) {
       openBossGate(enemy.gateFloor);
-      showToast('🔓 Печать снята — путь наверх открыт', 3.2);
+      // Если после этого босса есть безопасный «Зал Кузницы», ставим подъём лавы на паузу,
+      // пока все игроки не соберутся на стартовой плите следующего яруса!
+      if (typeof forgeHallsByFloor !== 'undefined' && forgeHallsByFloor[enemy.gateFloor]) {
+        state.activeForgeHallFloor = enemy.gateFloor;
+        state.isLavaPausedByForgeHall = 1;
+        showToast(
+          '🔓 Печать снята! Впереди Зал Кузницы — лава на паузе, пока отряд не встанет на стартовую плиту!',
+          4.6
+        );
+      } else {
+        showToast('🔓 Печать снята — путь наверх открыт', 3.2);
+      }
     }
 
     playSound('win');
@@ -624,10 +655,11 @@ function killEnemy(enemyIndex) {
   checkLevelUp();
 }
 
-/* ---------- 5. События этажей ---------- */
+/* ---------- 5. События этажей и бесшовный переход между 3 актами ---------- */
 
 function startFloorEvent(eventKey) {
   const player = state.player;
+  const maxSpawnR = TOWER_FLOOR_RADIUS - 4;
   if (eventKey === 'hunt') {
     for (let q = 0; q < 2; q++) {
       for (let attempt = 0; attempt < 8; attempt++) {
@@ -635,9 +667,9 @@ function startFloorEvent(eventKey) {
         let x = player.x + Math.cos(angle) * 13;
         let z = player.z + Math.sin(angle) * 13;
         const radialDist = hypot2D(x, z);
-        if (radialDist > 24) {
-          x *= 24 / radialDist;
-          z *= 24 / radialDist;
+        if (radialDist > maxSpawnR) {
+          x *= maxSpawnR / radialDist;
+          z *= maxSpawnR / radialDist;
         }
         if (getGroundHeightAt(x, player.lastGroundY, z) < player.lastGroundY - 3) continue;
         spawnEnemy(state.maxFloorReached >= 2 ? 't' : 'l', x, z, 1 + state.maxFloorReached * 0.12);
@@ -670,6 +702,7 @@ function endFloorEvent(silent) {
 function updateFloorEvent(dt) {
   const ev = state.activeEvent;
   const player = state.player;
+  const maxBombR = TOWER_FLOOR_RADIUS - 1.5;
   if (ev.key === 'storm') {
     ev.actionTimer -= dt;
     if (ev.actionTimer <= 0) {
@@ -682,9 +715,9 @@ function updateFloorEvent(dt) {
         z = player.z;
       }
       const radialDist = hypot2D(x, z);
-      if (radialDist > 27) {
-        x *= 27 / radialDist;
-        z *= 27 / radialDist;
+      if (radialDist > maxBombR) {
+        x *= maxBombR / radialDist;
+        z *= maxBombR / radialDist;
       }
       state.activeBombs.push({
         x,
@@ -701,7 +734,30 @@ function updateFloorEvent(dt) {
 
 function onFloorEnter() {
   const floor = state.maxFloorReached;
-  let message = 'Этаж ' + (floor + 1) + ' · ' + FLOOR_LAYOUT_NAMES[floorLayouts[floor] || 'disc'];
+
+  // Бесшовное переключение биома и темы башни при переходе в новый Акт (Пепел -> Лёд -> Пустота)
+  let actTransitionBanner = '';
+  if (state.isThreeActRun && typeof getFloorBiomeId === 'function') {
+    const targetBiomeId = getFloorBiomeId(floor);
+    if (targetBiomeId && targetBiomeId !== state.towerId && TOWERS[targetBiomeId]) {
+      state.towerId = targetBiomeId;
+      state.towerConfig = TOWERS[targetBiomeId];
+      state.gravity = (state.unscaledBaseGravity || 24) * (state.towerConfig.gravityMul || 1);
+      state.baseGravity = state.gravity;
+      applyTowerTheme(state.towerConfig);
+      playSound('win');
+      actTransitionBanner = '🌟 ' + (state.towerConfig.actTitle || state.towerConfig.name) + ' · ';
+    }
+  }
+
+  let message =
+    actTransitionBanner +
+    'Этаж ' +
+    (floor + 1) +
+    '/' +
+    GRID_FLOORS +
+    ' · ' +
+    (FLOOR_LAYOUT_NAMES[floorLayouts[floor] || 'disc'] || 'Арена');
 
   const prevForks = forkMarkers.filter((f) => f.floor === floor - 1);
   if (prevForks.length) {
@@ -714,28 +770,43 @@ function onFloorEnter() {
         chosenRoute = marker.route;
       }
     }
+    if (floorLayouts[floor] === 'split_ring' && typeof getSectorRouteAtPosition === 'function') {
+      const secRoute = getSectorRouteAtPosition(floor, state.player.x, state.player.z);
+      if (secRoute) chosenRoute = secRoute;
+    }
     state.chosenRoute = chosenRoute;
     message +=
       ' · ' +
       (chosenRoute === 1
-        ? 'тихий путь: меньше мобов, больше лечения'
-        : 'опасный путь: больше мобов и элит, но золото ×2 и опыт +30%');
+        ? '🌿 Тихий сектор: меньше мобов, лечение ×2.4'
+        : '🔥 Опасный сектор: больше элит, золото ×2 и опыт +35%');
+  } else {
+    state.chosenRoute = 0;
   }
 
-  if (FORK_FLOORS.includes(floor) && floor < 11) {
-    message += ' · РАЗВИЛКА: зелёная лестница — тихий путь, красная — опасный';
+  if (FORK_FLOORS.includes(floor) && !isBossFloorIndex(floor) && floor < GRID_FLOORS - 1) {
+    message += ' · РАЗВИЛКА: зелёная лестница — тихий сектор, красная — опасный сектор';
   }
 
   if (state.activeEvent) {
     endFloorEvent(1);
   }
 
-  if (floor >= 1 && floor % 4 !== 3 && floor < 11 && seededRandom(state.seed, 'evp', floor) < 0.55) {
+  if (
+    floor >= 1 &&
+    !isBossFloorIndex(floor) &&
+    floor < GRID_FLOORS - 1 &&
+    !state.isLavaPausedByForgeHall &&
+    seededRandom(state.seed, 'evp', floor) < 0.55
+  ) {
     const eventKey =
       FLOOR_EVENT_KEYS[Math.floor(seededRandom(state.seed, 'ev', floor) * FLOOR_EVENT_KEYS.length)];
     startFloorEvent(eventKey);
     message += ' · ' + FLOOR_EVENTS[eventKey].name;
   }
 
-  showToast(message, FORK_FLOORS.includes(floor) || prevForks.length ? 4.5 : 2.8);
+  showToast(
+    message,
+    actTransitionBanner || FORK_FLOORS.includes(floor) || prevForks.length ? 4.8 : 2.8
+  );
 }

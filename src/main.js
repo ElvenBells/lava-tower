@@ -88,10 +88,11 @@ function gameLoop(timestamp) {
       (window.menuStormPreviewFactor || 0) +
       (targetMenuStorm - (window.menuStormPreviewFactor || 0)) * Math.min(1, frameDelta * 2.5);
 
+    const menuOrbitR = (typeof TOWER_FLOOR_RADIUS !== 'undefined' ? TOWER_FLOOR_RADIUS : 28) * 0.82;
     camera.position.set(
-      Math.sin(timestamp * 0.00022) * 23,
+      Math.sin(timestamp * 0.00022) * menuOrbitR,
       16 + Math.sin(timestamp * 0.00015) * 6,
-      Math.cos(timestamp * 0.00022) * 23
+      Math.cos(timestamp * 0.00022) * menuOrbitR
     );
     camera.lookAt(0, 11 + Math.sin(timestamp * 0.00015) * 3, 0);
 
@@ -107,7 +108,7 @@ function gameLoop(timestamp) {
 }
 
 applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
-buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
+buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId), selectedPlayerCount, selectedCampaignModeId);
 
 // Прогрев шейдеров: компилируем мобов и боссов выбранной башни на старте
 (function prewarmShaders() {

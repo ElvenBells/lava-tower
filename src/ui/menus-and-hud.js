@@ -1,7 +1,8 @@
 /* ==========================================================================
    Интерфейс пользователя (UI):
-   главное меню, выбор башни и героя, кузница, карточки наград, пакты, пауза,
-   таблица рекордов и сохранение прогресса
+   главное меню, выбор числа игроков (1–4, масштаб 15×15 / 19×19 / 23×23),
+   выбор структуры забега (3 Акта на 24/18 этажей или 1 Акт на 12 этажей),
+   выбор башни и героя, кузница, карточки наград, пакты, пауза и таблица рекордов
    ========================================================================== */
 
 /* ---------- 1. Загрузка и нормализация сохранений localStorage ---------- */
@@ -16,7 +17,6 @@ if (typeof playerNickname !== 'string') {
   playerNickname = 'Игрок';
 }
 
-// Поддержка обратной совместимости структуры мета-прогресса с форматом lt_meta (u, tu, f, a)
 let rawMeta = storage.get('lt_meta');
 if (!rawMeta || typeof rawMeta !== 'object' || !rawMeta.u) {
   rawMeta = { u: { wan: 1 }, tu: { ash: 1 }, f: {}, a: 0 };
@@ -63,6 +63,16 @@ if (!TOWERS[selectedTowerId] || !metaProgress.unlockedTowers[selectedTowerId]) {
   selectedTowerId = 'ash';
 }
 
+let selectedPlayerCount = Number(storage.get('lt_pcount')) || 2;
+if (![1, 2, 3, 4].includes(selectedPlayerCount)) {
+  selectedPlayerCount = 2;
+}
+
+let selectedCampaignModeId = storage.get('lt_camp') || 'acts3_24';
+if (typeof RUN_CAMPAIGN_MODES !== 'undefined' && !RUN_CAMPAIGN_MODES[selectedCampaignModeId]) {
+  selectedCampaignModeId = 'acts3_24';
+}
+
 function saveNicknameFromInput() {
   const inputEl = getById('nk');
   if (inputEl && inputEl.value) {
@@ -71,7 +81,68 @@ function saveNicknameFromInput() {
   }
 }
 
-/* ---------- 2. Открытие героев, башен и Кузница ---------- */
+/* ---------- 2. Выбор числа игроков (масштаб сетки), режима 3 актов, героев и Кузница ---------- */
+
+function selectPlayerCount(count) {
+  saveNicknameFromInput();
+  selectedPlayerCount = Math.max(1, Math.min(4, count | 0));
+  storage.set('lt_pcount', selectedPlayerCount);
+  buildTower(
+    hashString('lava' + getCurrentDateCode() + selectedTowerId),
+    selectedPlayerCount,
+    selectedCampaignModeId
+  );
+  showMainMenu();
+}
+
+function selectCampaignMode(modeId) {
+  saveNicknameFromInput();
+  if (RUN_CAMPAIGN_MODES[modeId]) {
+    selectedCampaignModeId = modeId;
+    storage.set('lt_camp', modeId);
+    buildTower(
+      hashString('lava' + getCurrentDateCode() + selectedTowerId),
+      selectedPlayerCount,
+      selectedCampaignModeId
+    );
+  }
+  showMainMenu();
+}
+
+function buildCoopAndCampaignSelectHtml() {
+  const btnStyle = 'font-size:12.5px;padding:6px 12px;margin:4px 0;';
+  const smallStyle = 'font-family:Rubik;font-weight:400';
+
+  const coopButtons = [1, 2, 3, 4]
+    .map((cnt) => {
+      const preset = COOP_SCALE_PRESETS[cnt];
+      const isSel = selectedPlayerCount === cnt;
+      return (
+        `<button onclick="selectPlayerCount(${cnt})" style="display:inline-block;width:48%;margin:1%;padding:7px 10px;font-size:12px;${isSel ? 'border-color:#45fff0;background:#163d3a' : ''}">` +
+        `${isSel ? '▶ ' : ''}${cnt} игр. · ${preset.gridDim}×${preset.gridDim}<br>` +
+        `<small style="${smallStyle};opacity:.85">Радиус ${preset.radiusMeters} м</small>` +
+        `</button>`
+      );
+    })
+    .join('');
+
+  const campButtons = Object.values(RUN_CAMPAIGN_MODES)
+    .map((m) => {
+      const isSel = selectedCampaignModeId === m.id;
+      return (
+        `<button onclick="selectCampaignMode('${m.id}')" style="${btnStyle}${isSel ? 'border-color:#ffd040;background:#4a1d0f' : ''}">` +
+        `${isSel ? '▶ ' : ''}${m.name}<br>` +
+        `<small style="${smallStyle};opacity:.85">${m.description}</small>` +
+        `</button>`
+      );
+    })
+    .join('');
+
+  return (
+    `<h4>Масштаб этажа (Кооп 1–4 игрока)</h4><div>${coopButtons}</div>` +
+    `<h4>Структура забега (3 Акта / 1 Акт)</h4>${campButtons}`
+  );
+}
 
 function unlockHero(heroId) {
   if (metaProgress.unlockedHeroes[heroId]) return;
@@ -93,7 +164,7 @@ function buildHeroSelectHtml() {
   const smallStyle = 'font-family:Rubik;font-weight:400';
 
   return (
-    '<h4>Герой (стандартный забег)</h4>' +
+    '<h4>Герой</h4>' +
     Object.entries(HEROES)
       .map(([heroId, hero]) => {
         const isUnlocked = metaProgress.unlockedHeroes[heroId];
@@ -132,7 +203,11 @@ function selectTower(towerId) {
   storage.set('lt_tower', towerId);
   if (TOWERS[towerId]) {
     applyTowerTheme(TOWERS[towerId]);
-    buildTower(hashString('lava' + getCurrentDateCode() + towerId));
+    buildTower(
+      hashString('lava' + getCurrentDateCode() + towerId),
+      selectedPlayerCount,
+      selectedCampaignModeId
+    );
   }
   showMainMenu();
 }
@@ -154,7 +229,7 @@ function buildTowerSelectHtml() {
   const hasLockedTowers = TOWER_IDS.some((id) => !metaProgress.unlockedTowers[id]);
 
   return (
-    '<h4>Башня (стандартный забег)</h4>' +
+    '<h4>Стартовая башня (и предпросмотр в меню)</h4>' +
     TOWER_IDS.map((towerId) => {
       const tower = TOWERS[towerId];
       const isUnlocked = metaProgress.unlockedTowers[towerId];
@@ -222,14 +297,76 @@ function buyForgeUpgrade(upgradeKey) {
   openForgeMenu();
 }
 
-/* ---------- 3. Пауза, выбор наград и алтари пактов ---------- */
+/* ---------- 3. Пауза, быстрые телепорты тестирования механик, выбор наград и алтари ---------- */
+
+function debugTeleportToBalcony() {
+  if (!state || state.isGameOver) return;
+  const f = state.maxFloorReached;
+  const bals = (typeof balconiesByFloor !== 'undefined' && balconiesByFloor[f]) || [];
+  if (bals.length > 0) {
+    const b = bals[0];
+    state.player.x = b.centerX;
+    state.player.y = b.y + 0.1;
+    state.player.z = b.centerZ;
+    state.player.vy = 0;
+    state.player.lastGroundY = b.y;
+    resumeGame();
+    showToast('🎯 Телепорт на полуэтаж-балкон (floorY + 6 м)!', 2.6);
+  } else {
+    resumeGame();
+  }
+}
+
+function debugTeleportToSplitFloor() {
+  if (!state || state.isGameOver) return;
+  const targetForkFloor = [1, 5, 9, 13, 17, 21].find((fl) => fl >= state.maxFloorReached) || 1;
+  const floorY = targetForkFloor * 14;
+  state.player.x = 0;
+  state.player.y = floorY + 0.1;
+  state.player.z = 0;
+  state.player.vy = 0;
+  state.player.lastGroundY = floorY;
+  state.maxFloorReached = targetForkFloor;
+  state.lavaY = floorY - 8;
+  resumeGame();
+  onFloorEnter();
+}
+
+function debugTeleportToForgeHall() {
+  if (!state || state.isGameOver) return;
+  const fhKeys = Object.keys(forgeHallsByFloor).map(Number);
+  if (!fhKeys.length) {
+    resumeGame();
+    return;
+  }
+  const fKey = fhKeys.find((k) => k >= state.maxFloorReached) ?? fhKeys[0];
+  const fh = forgeHallsByFloor[fKey];
+  if (fh) {
+    openBossGate(fh.bossFloor);
+    state.activeForgeHallFloor = fh.bossFloor;
+    state.isLavaPausedByForgeHall = 1;
+    state.maxFloorReached = fh.bossFloor;
+    state.player.x = fh.hallX;
+    state.player.y = fh.hallY + 0.15;
+    state.player.z = fh.hallZ;
+    state.player.vy = 0;
+    state.player.lastGroundY = fh.hallY;
+    state.lavaY = fh.bossFloor * 14 - 4;
+    resumeGame();
+    showToast('⚒ Вы в безопасном «Зале Кузницы»! Лава на паузе до сбора отряда на плите.', 3.8);
+  }
+}
 
 function pauseGame() {
   if (!state || state.isGameOver) return;
   state.pauseState = 2;
   getById('pn').innerHTML = `
     <h2>ПАУЗА</h2>
+    <p style="font-size:12px;opacity:.85">Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · Сетка ${GRID_DIM}×${GRID_DIM} (R=${TOWER_FLOOR_RADIUS} м) · Игроков: ${state.playerCount}</p>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
+    <button onclick="debugTeleportToBalcony()">🎯 ТЕСТ: На балкон полуэтажа (floorY + 6)</button>
+    <button onclick="debugTeleportToSplitFloor()">🔀 ТЕСТ: На этаж-развилку (2 сектора)</button>
+    <button onclick="debugTeleportToForgeHall()">⚒ ТЕСТ: В безопасный «Зал Кузницы»</button>
     <button onclick="triggerOrToggleStorm()">🌪 ВЫЗВАТЬ / ПЕРЕКЛЮЧИТЬ БУРЮ (B)</button>
     <button onclick="toggleGameAudioMute()">🔊 ПЕРЕКЛЮЧИТЬ ЗВУК БАШНИ</button>
     <button onclick="quitToMenu()">✕ ВЫЙТИ В ГЛАВНОЕ МЕНЮ</button>
@@ -251,6 +388,7 @@ function quitToMenu() {
   if (!state) return;
   releaseAllEnemies();
   releaseAllGlobalBolts();
+  if (typeof coopAlliesGroup !== 'undefined') coopAlliesGroup.clear();
   resetBossEffects();
   state.projectiles.length = 0;
   state.bladePositions.length = 0;
@@ -260,7 +398,11 @@ function quitToMenu() {
   getById('bossHp').classList.remove('visible');
   state = null;
   applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
-  buildTower(hashString('lava' + getCurrentDateCode() + selectedTowerId));
+  buildTower(
+    hashString('lava' + getCurrentDateCode() + selectedTowerId),
+    selectedPlayerCount,
+    selectedCampaignModeId
+  );
   showMainMenu();
 }
 
@@ -471,19 +613,21 @@ function finishRun(isVictory) {
   if (state.isGameOver) return;
   state.isGameOver = 1;
   releaseAllGlobalBolts();
+  if (typeof coopAlliesGroup !== 'undefined') coopAlliesGroup.clear();
   resetBossEffects();
 
   const durationSec = state.elapsedTime | 0;
-  const floorsCleared = isVictory ? 12 : state.maxFloorReached;
+  const totalF = state.totalFloors || GRID_FLOORS || 24;
+  const floorsCleared = isVictory ? totalF : state.maxFloorReached + 1;
   const totalScore =
     1000 * floorsCleared +
     2500 * state.bossesDefeated +
     2 * state.kills +
-    (isVictory ? 10000 + 20 * Math.max(0, 600 - durationSec) : 0);
+    (isVictory ? 15000 + 20 * Math.max(0, 900 - durationSec) : 0);
 
   const unlockedTowerHtml = isVictory ? unlockNextTower(state.towerId) : '';
   const earnedAsh = Math.floor(
-    floorsCleared * 3 + state.bossesDefeated * 12 + state.kills * 0.12 + (isVictory ? 60 : 0)
+    floorsCleared * 3 + state.bossesDefeated * 12 + state.kills * 0.12 + (isVictory ? 80 : 0)
   );
   metaProgress.ash = (metaProgress.ash || 0) + earnedAsh;
   metaProgress.save();
@@ -508,7 +652,7 @@ function finishRun(isVictory) {
     `<h2>${isVictory ? 'ПОБЕДА!' : state.towerConfig.loseTitle}</h2>` +
     `${unlockedTowerHtml}` +
     `<p style="color:#ffd040">Пепел: +${earnedAsh} (всего ${metaProgress.ash})</p>` +
-    `<p>Этажей: ${floorsCleared}/12 · боссов: ${state.bossesDefeated} · убийств: ${state.kills} · время ${formatTime(durationSec)}<br>` +
+    `<p>Этажей: ${floorsCleared}/${totalF} · боссов: ${state.bossesDefeated} · убийств: ${state.kills} · время ${formatTime(durationSec)}<br>` +
     `Очки: <b style="color:var(--accent)">${totalScore}</b></p>` +
     `${state.mode ? buildLeaderboardHtml() : '<p><small>Стандартный режим в таблицу не попадает.</small></p>'}` +
     `<button onclick="openForgeMenu()">⚒ КУЗНИЦА</button>` +
@@ -529,16 +673,17 @@ function showMainMenu() {
     Object.values(WEAPONS)[Math.floor(seededRandom(dailySeed, 'hero', 0) * 3)].name;
 
   getById('pn').innerHTML =
-    `<h1>LAVA TOWER</h1>` +
-    `<p>Беги вверх: оружие бьёт само, снизу поднимается лава. 12 этажей, 3 босса на этажах 4, 8 и 12 (свои у каждой башни). Пока босс жив, лестница наверх запечатана. За забег копится пепел — тратьте его в кузнице.</p>` +
+    `<h1>LAVA TOWER · CO-OP</h1>` +
+    `<p>Расширенная генерация башни для 1–4 игроков: масштабируемые этажи (15×15 / 19×19 / 23×23), широкие мосты и кольца (8 м), снайперские полуэтажи-балконы (+6 м), изолированные сектора после развилок, 3 последовательных Акта и безопасные «Залы Кузницы» с паузой лавы.</p>` +
     `<p>Ник: <input id="nk" value="${escapeHtml(playerNickname)}" maxlength="16"></p>` +
+    `<button onclick="startRun(0)" style="background:#4a1d0f;border-color:#ffd040;font-size:16px">▶ НАЧАТЬ ЗАБЕГ (${COOP_SCALE_PRESETS[selectedPlayerCount].label})</button>` +
+    `${buildCoopAndCampaignSelectHtml()}` +
     `<button onclick="openForgeMenu()">⚒ КУЗНИЦА · пепел: ${metaProgress.ash | 0}</button>` +
     `${buildTowerSelectHtml()}` +
     `${buildHeroSelectHtml()}` +
-    `<button onclick="startRun(0)">▶ СТАНДАРТНЫЙ ЗАБЕГ</button>` +
-    `<button onclick="startRun(1)">☀ РЕЙТИНГ ДНЯ<br><small style="color:#c9a2ff;font-family:Rubik">Сид ${todayCode} · башня: ${dailyTowerName} · старт: ${dailyWeaponName} · мутатор: ${dailyMutatorName}</small></button>` +
+    `<button onclick="startRun(1)">☀ РЕЙТИНГ ДНЯ<br><small style="color:#c9a2ff;font-family:Rubik">Сид ${todayCode} · 3 Акта · старт: ${dailyWeaponName} · мутатор: ${dailyMutatorName}</small></button>` +
     `${buildLeaderboardHtml()}` +
-    `<small style="font-size:11px;opacity:0.7">WASD — бег, пробел — прыжок (двойной), Shift — рывок-скольжение (на миг неуязвим), сундуки открываются за золото, мышь — камера. <b>ESC — пауза.</b></small>`;
+    `<small style="font-size:11px;opacity:0.7">WASD — бег, пробел — прыжок (двойной), Shift — рывок, прыжковые пады — взлёт на балконы (+6 м). <b>ESC — пауза и быстрые телепорты теста механик.</b></small>`;
 
   getById('ov').style.display = 'flex';
 }
@@ -551,6 +696,11 @@ window.forge = openForgeMenu;
 window.buyF = buyForgeUpgrade;
 window.selH = selectHero;
 window.selT = selectTower;
+window.selectPlayerCount = selectPlayerCount;
+window.selectCampaignMode = selectCampaignMode;
+window.debugTeleportToBalcony = debugTeleportToBalcony;
+window.debugTeleportToSplitFloor = debugTeleportToSplitFloor;
+window.debugTeleportToForgeHall = debugTeleportToForgeHall;
 window.unlockAllTowersForPreview = unlockAllTowersForPreview;
 window.menu = showMainMenu;
 window.pick = pickUpgrade;

@@ -1,15 +1,21 @@
 /* ==========================================================================
-   Генерация башни и пространственная сетка блоков:
-   12 этажей, планировки (Арена, Кольцо, Мосты, Острова), лестницы, развилки,
-   печати боссов, прыжковые площадки, сундуки, алтари пактов и художественное
-   3D-оформление окружения для Пепельной, Ледяной и Пустотной башен
+   Генерация башни и пространственная сетка блоков (Кооперативное расширение 2–4 игрока):
+   - Динамическое масштабирование сетки: 15×15 (R=28 м, 1 игр.), 19×19 (R=36 м, 2 игр.),
+     23×23 (R=44 м, 3–4 игр.) + расширение узких перешейков ring и spokes до ≥2 клеток (8 м)
+   - Вертикальные полуэтажи (балконы на высоте floorY + 6) по периметру башни с доступом
+     через прыжковые площадки (jumpPads) и точками интереса для снайперских билдов
+   - Разделение маршрутов на этажах-развилках (FORK_FLOORS: 2, 6, 10 / 14, 18, 22):
+     зелёная («тихий путь») и красная («опасный путь») лестницы ведут в два параллельных
+     изолированных полукольца (сектора) следующего этажа
+   - Расширение структуры забега до 3 актов (18–24 этажа: бесшовное объединение
+     Пепельной, Ледяной и Пустотной башен в одно большое приключение)
+   - Безопасные «Залы Кузницы» после этажей боссов (между 4–5, 8–9 и далее), где подъём
+     лавы (state.lavaY) ставится на паузу, пока все игроки не встанут на стартовую плиту
    ========================================================================== */
 
-/* ---------- 1. Детализированные 3D-модели объектов на карте (Мудборды 6 и 8) ---------- */
+/* ---------- 1. Детализированные 3D-модели объектов на карте (Мудборды 6 и 8 + Балконы и Залы Кузницы) ---------- */
 
-// 1A. ПРЫЖКОВАЯ ПЛОЩАДКА (ПАД) — Мудборд 6:
-// Низкий восьмигранно-цилиндрический каменный постамент с рунными клеймами по бокам,
-// светящимся бирюзовым магическим кругом сверху и восходящими потоками кинетической энергии
+// 1A. ПРЫЖКОВАЯ ПЛОЩАДКА (ПАД) — Мудборд 6
 const jumpPadGroup = new THREE.Group();
 scene.add(jumpPadGroup);
 
@@ -20,13 +26,11 @@ const jumpPadGeo = (function buildJumpPadGeometry() {
   const rimStone = new THREE.Color(0x324654);
   const cyanRune = new THREE.Color(0x45fff0);
 
-  // Нижнее каменное основание
   parts.push({
     geo: new THREE.CylinderGeometry(1.44, 1.56, 0.22, 16),
     matrix: computeTransformMatrix(0, -0.05, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: darkStone
   });
-  // 8 массивных скошенных каменных сегментов бортика вокруг диска
   const segGeo = new THREE.BoxGeometry(0.82, 0.26, 0.24);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TWO_PI;
@@ -44,7 +48,6 @@ const jumpPadGeo = (function buildJumpPadGeometry() {
     );
     parts.push({ geo: segGeo, matrix: tempMat.clone(), color: rimStone });
   }
-  // 4 светящихся бирюзовых рунных клейма на боковых гранях цилиндра (как на мудборде 6)
   const runePlaqueGeo = new THREE.BoxGeometry(0.28, 0.16, 0.06);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + Math.PI / 4;
@@ -96,7 +99,16 @@ const jumpPadKineticPlumeMat = new THREE.MeshBasicMaterial({
   depthWrite: false
 });
 
-function createJumpPadVisualInstance(x, floorY, z) {
+const balconyJumpPadPlumeMat = new THREE.MeshBasicMaterial({
+  color: 0xffd24c,
+  transparent: true,
+  opacity: 0.28,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+function createJumpPadVisualInstance(x, floorY, z, isBalconyPad) {
   const g = new THREE.Group();
   g.position.set(x, floorY + 0.14, z);
 
@@ -107,26 +119,24 @@ function createJumpPadVisualInstance(x, floorY, z) {
   runeDisc.position.y = 0.16;
   g.add(runeDisc);
 
-  const plume = new THREE.Mesh(jumpPadKineticPlumeGeo, jumpPadKineticPlumeMat);
+  const plumeMat = isBalconyPad ? balconyJumpPadPlumeMat : jumpPadKineticPlumeMat;
+  const plume = new THREE.Mesh(jumpPadKineticPlumeGeo, plumeMat);
   plume.position.y = 0.15;
   g.add(plume);
 
-  // Восходящее кинетическое кольцо энергии над площадкой
   const ring = new THREE.Mesh(
     new THREE.TorusGeometry(0.96, 0.024, 6, 28),
-    jumpPadKineticPlumeMat
+    plumeMat
   );
   ring.rotation.x = Math.PI / 2;
   ring.position.y = 0.45;
   g.add(ring);
 
-  g.userData = { runeDisc, plume, ring };
+  g.userData = { runeDisc, plume, ring, isBalconyPad: !!isBalconyPad };
   return g;
 }
 
-// 1B. СУНДУК — Мудборд 8:
-// «Золотистый кубический ящик» из тёмного вулканического камня с раскалёнными трещинами лавы,
-// массивной золочёной оковкой граней и «Замком из магмы» спереди, окружённый золотым кольцом ауры
+// 1B. СУНДУК — Мудборд 8
 const chestGroup = new THREE.Group();
 scene.add(chestGroup);
 
@@ -151,7 +161,6 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
   const magmaBright = new THREE.Color(0xfff098);
   const keyholeDark = new THREE.Color(0x160708);
 
-  // 12 золотистых рёбер куба
   const edgeLen = 1.02;
   const edgeThick = 0.095;
   const edgeGeoY = new THREE.BoxGeometry(edgeThick, edgeLen, edgeThick);
@@ -175,7 +184,6 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
     }
   }
 
-  // 8 массивных кованых золотых наугольников на вершинах куба
   const cornerGeo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
   for (const sx of [-0.47, 0.47]) {
     for (const sy of [-0.47, 0.47]) {
@@ -186,7 +194,6 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
     }
   }
 
-  // Перекрестные золотые полосы-оковки по граням и крышке (с V-образным замковым профилем, как на мудборде 8)
   parts.push({
     geo: new THREE.BoxGeometry(1.01, 0.11, 1.01),
     matrix: computeTransformMatrix(0, 0.08, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
@@ -198,7 +205,6 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
     color: bronzeDark
   });
 
-  // «Замок из магмы» на передней грани (+Z) и задней грани (-Z)
   for (const zSign of [-1, 1]) {
     computeTransformMatrix(0, 0.02, zSign * 0.5, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
@@ -212,7 +218,6 @@ const chestGeo = (function buildMagmaCubeChestFrameGeometry() {
       matrix: tempMat.clone(),
       color: magmaBright
     });
-    // Тёмная замочная скважина по центру замка из магмы
     computeTransformMatrix(0, 0.03, zSign * 0.55, 0, 0, 0, 1, 1, 1, tempMat);
     parts.push({
       geo: new THREE.BoxGeometry(0.065, 0.14, 0.03),
@@ -257,9 +262,7 @@ const chestGlowMat = new THREE.SpriteMaterial({
   scene.add(dummyChest);
 })();
 
-// 1C. АЛТАРЬ ПАКТА — Мудборд 6:
-// «Шестигранный столб» фиолетового кристалла со светящимися вертикальными рунами на ступенчатом
-// каменном постаменте + парящий сверху «Лиловый ореол» и спиральные вихри энергии
+// 1C. АЛТАРЬ ПАКТА — Мудборд 6
 const altarGroup = new THREE.Group();
 scene.add(altarGroup);
 
@@ -270,7 +273,6 @@ const altarPedestalGeo = (function buildAltarPedestalGeometry() {
   const midStone = new THREE.Color(0x2d1d42);
   const runeTrim = new THREE.Color(0xa848ff);
 
-  // Двухступенчатый восьмигранный каменный пьедестал с рунным желобом
   parts.push({
     geo: new THREE.CylinderGeometry(1.12, 1.28, 0.22, 8),
     matrix: computeTransformMatrix(0, -0.64, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
@@ -281,7 +283,6 @@ const altarPedestalGeo = (function buildAltarPedestalGeometry() {
     matrix: computeTransformMatrix(0, -0.44, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
     color: midStone
   });
-  // Светящееся рунное кольцо в основании столба
   const ring = new THREE.TorusGeometry(0.68, 0.035, 6, 6);
   ring.rotateX(Math.PI / 2);
   parts.push({
@@ -289,7 +290,6 @@ const altarPedestalGeo = (function buildAltarPedestalGeometry() {
     matrix: computeTransformMatrix(0, -0.3, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: runeTrim
   });
-  // 4 каменных упора-контрфорса по углам пьедестала (как на мудборде 6)
   const buttressGeo = new THREE.BoxGeometry(0.24, 0.34, 0.36);
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * TWO_PI + Math.PI / 4;
@@ -316,13 +316,11 @@ const altarGeo = (function buildHexagonalCrystalPillarGeometry() {
   const crystalBody = new THREE.Color(0xc868ff);
   const crystalApex = new THREE.Color(0xf0b8ff);
 
-  // Высокий шестигранный кристаллический столб («Шестигранный столб»)
   parts.push({
     geo: new THREE.CylinderGeometry(0.38, 0.42, 1.72, 6),
     matrix: computeTransformMatrix(0, 0.52, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
     color: crystalBody
   });
-  // Шестигранная пирамидальная вершина столба
   parts.push({
     geo: new THREE.ConeGeometry(0.38, 0.56, 6),
     matrix: computeTransformMatrix(0, 1.66, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
@@ -379,8 +377,7 @@ const altarGlowMat = new THREE.SpriteMaterial({
   scene.add(dummyAltar);
 })();
 
-// 1D. ПЕЧАТЬ (ВРАТА БОССА) — Мудборд 6:
-// Перекрещивающаяся паутина розово-красных энергетических лучей-цепей (0xff2a60) поперёк лестницы босса
+// 1D. ПЕЧАТЬ (ВРАТА БОССА) — Мудборд 6
 const bossGateSealGroup = new THREE.Group();
 scene.add(bossGateSealGroup);
 let bossGateVisualsByFloor = {};
@@ -412,17 +409,14 @@ function createBossGateSealVisual(stairSteps, floorY) {
   const sealGroup = new THREE.Group();
   if (!stairSteps || !stairSteps.length) return sealGroup;
 
-  // Размещаем энергетическую паутину Печати на входе и середине лестницы босса
-  const anchorIndices = [0, 2, 4];
+  const anchorIndices = [0, 1, 2];
   for (const idx of anchorIndices) {
     if (idx >= stairSteps.length) continue;
     const [sx, sz, stepTopY] = stairSteps[idx];
     const gateFrame = new THREE.Group();
     gateFrame.position.set(sx, stepTopY + 2.2, sz);
-    // Поворачиваем плоскость печати поперёк марша лестницы (перпендикулярно радиусу башни)
     gateFrame.rotation.y = Math.atan2(sx, sz) + Math.PI / 2;
 
-    // 8 перекрещивающихся багрово-розовых энергетических лучей (0xff2a60, как на мудборде 6)
     const beamOffsets = [
       [-1.8, -1.9, 1.8, 1.9],
       [-1.8, 1.9, 1.8, -1.9],
@@ -458,7 +452,6 @@ function createBossGateSealVisual(stairSteps, floorY) {
       gateFrame.add(innerCore);
     }
 
-    // Центральный пылающий узел Печати
     const nexusGlow = new THREE.Sprite(bossGateGlowMat);
     nexusGlow.scale.setScalar(3.4);
     gateFrame.add(nexusGlow);
@@ -470,6 +463,7 @@ function createBossGateSealVisual(stairSteps, floorY) {
   return sealGroup;
 }
 
+// 1E. ГРУППЫ ОБЪЕКТОВ РАЗВИЛОК, БАЛКОНОВ И ЗАЛОВ КУЗНИЦЫ
 const forkSpriteGroup = new THREE.Group();
 scene.add(forkSpriteGroup);
 const FORK_ROUTE_MATERIALS = {
@@ -491,8 +485,92 @@ const FORK_ROUTE_MATERIALS = {
   })
 };
 
+const forgeHallGroup = new THREE.Group();
+scene.add(forgeHallGroup);
+
+const balconyVantageGroup = new THREE.Group();
+scene.add(balconyVantageGroup);
+
 const towerDecorGroup = new THREE.Group();
 scene.add(towerDecorGroup);
+
+// 3D-модель Наковальни Кузницы и Целебного Горна для безопасных «Залов Кузницы»
+const forgeAnvilGeo = (function buildForgeAnvilGeometry() {
+  const parts = [];
+  const tempMat = new THREE.Matrix4();
+  const darkIron = new THREE.Color(0x22252a);
+  const bronzeTrim = new THREE.Color(0xd88c28);
+  const emberCore = new THREE.Color(0xff6818);
+
+  // Каменный восьмигранный постамент
+  parts.push({
+    geo: new THREE.CylinderGeometry(1.35, 1.55, 0.36, 8),
+    matrix: computeTransformMatrix(0, 0.18, 0, 0, Math.PI / 8, 0, 1, 1, 1, tempMat).clone(),
+    color: darkIron
+  });
+  // Станина наковальни с раскалённым горном внутри
+  parts.push({
+    geo: new THREE.BoxGeometry(1.1, 0.62, 0.72),
+    matrix: computeTransformMatrix(0, 0.65, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: darkIron
+  });
+  parts.push({
+    geo: new THREE.BoxGeometry(1.16, 0.22, 0.78),
+    matrix: computeTransformMatrix(0, 0.65, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: emberCore
+  });
+  // Рабочая плита и рог наковальни
+  parts.push({
+    geo: new THREE.BoxGeometry(1.56, 0.34, 0.84),
+    matrix: computeTransformMatrix(0, 1.12, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: bronzeTrim
+  });
+  const hornGeo = new THREE.ConeGeometry(0.28, 0.85, 6);
+  hornGeo.rotateZ(-Math.PI / 2);
+  parts.push({
+    geo: hornGeo,
+    matrix: computeTransformMatrix(1.1, 1.12, 0, 0, 0, 0, 1, 1, 1, tempMat).clone(),
+    color: bronzeTrim
+  });
+  return mergeGeometryParts(parts);
+})();
+
+const forgeAnvilMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  vertexColors: true,
+  emissive: 0xff5208,
+  emissiveIntensity: 0.9,
+  roughness: 0.32,
+  metalness: 0.78
+});
+
+const readyPlateRingMat = new THREE.MeshBasicMaterial({
+  color: 0x38ffe8,
+  transparent: true,
+  opacity: 0.88,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+const readyPlateBeamMat = new THREE.MeshBasicMaterial({
+  color: 0x58fff0,
+  transparent: true,
+  opacity: 0.22,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+const balconyVantageRingMat = new THREE.MeshBasicMaterial({
+  map: TEXTURES.shockwaveRunes,
+  color: 0xffd858,
+  transparent: true,
+  opacity: 0.78,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
 
 // Скульптурная геометрия каменной/ледяной/пустотной плиты (вписана в 1×1×1)
 const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
@@ -502,25 +580,21 @@ const sculptedSlabGeometry = (function buildSculptedSlabGeometry() {
   const midColor = new THREE.Color(0xd0cad8);
   const bottomColor = new THREE.Color(0x8e8898);
 
-  // Верхняя основная плита (y ∈ [0.16, 0.50])
   parts.push({
     geo: new THREE.BoxGeometry(1.0, 0.34, 1.0),
     matrix: computeTransformMatrix(0, 0.33, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: topColor
   });
-  // Ступенчатый карниз под верхней плитой
   parts.push({
     geo: new THREE.BoxGeometry(0.96, 0.14, 0.96),
     matrix: computeTransformMatrix(0, 0.1, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: bevelColor
   });
-  // Утопленный фриз-поясок посередине блока
   parts.push({
     geo: new THREE.BoxGeometry(0.88, 0.24, 0.88),
     matrix: computeTransformMatrix(0, -0.08, 0, 0, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: midColor
   });
-  // Нижний сужающийся замковый свод/консоль под плитой
   parts.push({
     geo: new THREE.CylinderGeometry(0.64, 0.44, 0.3, 4),
     matrix: computeTransformMatrix(0, -0.35, 0, 0, Math.PI / 4, 0, 1, 1, 1, new THREE.Matrix4()),
@@ -583,25 +657,163 @@ let chests = [];
 let altars = [];
 let floorLayouts = [];
 let forkMarkers = [];
+let splitFloorConfigs = {};
+let balconiesByFloor = {};
+let balconyVantageZones = [];
+let forgeHallsByFloor = {};
 let bossGateBlockIndices = {};
 let towerInstancedMesh = null;
+let towerInstancedGroup = new THREE.Group();
+scene.add(towerInstancedGroup);
+let blockInstanceRef = [];
 
 let activeVoidFloatingMesh = null;
 let activeVoidFloatingData = [];
 let activeAshLavaStreamMat = null;
 let activeVoidRunePillarMat = null;
 
-/* ---------- Пространственная сетка блоков (ячейки 4×4×этаж) ---------- */
+/* ---------- 2. Динамическая пространственная сетка блоков и масштаб башни (1–4 игрока, 12–24 этажа) ---------- */
 
-const GRID_FLOORS = 12;
-const GRID_DIM = 15;
-const GRID_OFFSET = 7;
+let GRID_FLOORS = 24;
+let GRID_DIM = 19;
+let GRID_OFFSET = 9;
+let TOWER_FLOOR_RADIUS = 36;
+let TOWER_WALL_RADIUS = 38.18;
+let TOWER_PLAYER_CLAMP_RADIUS = 37.4;
+let activeCoopPlayerCount = 2;
+let activeCampaignModeId = 'acts3_24';
 
 let blockGrid = new Array(GRID_FLOORS * GRID_DIM * GRID_DIM).fill(null);
 const _candidateBlockIndices = [];
 
+/**
+ * Возвращает идентификатор биома ('ash' | 'ice' | 'void') для заданного этажа
+ * с поддержкой бесшовного 3-актного приключения и одиночных башен.
+ */
+function getFloorBiomeId(floorIndex) {
+  const modeCfg =
+    (typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[activeCampaignModeId]) ||
+    null;
+  if (modeCfg && modeCfg.isThreeAct) {
+    const fpa = modeCfg.floorsPerAct || 8;
+    const actIdx = Math.min(2, Math.floor(floorIndex / fpa));
+    return TOWER_IDS[actIdx] || 'ash';
+  }
+  if (typeof state !== 'undefined' && state && state.towerId && !state.isThreeActRun) {
+    return state.towerId;
+  }
+  if (typeof selectedTowerId !== 'undefined' && selectedTowerId) {
+    return selectedTowerId;
+  }
+  return currentTowerTheme ? currentTowerTheme.id : 'ash';
+}
+
+/**
+ * Возвращает номер акта (1, 2 или 3) для этажа.
+ */
+function getFloorActNumber(floorIndex) {
+  const modeCfg =
+    (typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[activeCampaignModeId]) ||
+    null;
+  if (modeCfg && modeCfg.isThreeAct) {
+    const fpa = modeCfg.floorsPerAct || 8;
+    return Math.min(3, Math.floor(floorIndex / fpa) + 1);
+  }
+  return 1;
+}
+
+/**
+ * Проверяет, является ли этаж этажом босса в текущем режиме забега.
+ */
+function isBossFloorIndex(floorIndex) {
+  const modeCfg =
+    (typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[activeCampaignModeId]) ||
+    null;
+  if (modeCfg && Array.isArray(modeCfg.bossFloors)) {
+    return modeCfg.bossFloors.includes(floorIndex);
+  }
+  return floorIndex % 4 === 3;
+}
+
+/**
+ * Проверяет, создаётся ли после данного этажа безопасный «Зал Кузницы».
+ */
+function hasForgeHallAfterFloor(floorIndex) {
+  if (floorIndex >= GRID_FLOORS - 1) return false;
+  const modeCfg =
+    (typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[activeCampaignModeId]) ||
+    null;
+  if (modeCfg && Array.isArray(modeCfg.forgeHallAfterFloors)) {
+    return modeCfg.forgeHallAfterFloors.includes(floorIndex);
+  }
+  return floorIndex % 4 === 3 && floorIndex < GRID_FLOORS - 1;
+}
+
+/**
+ * Настраивает глобальный размер сетки этажа (15×15 / 19×19 / 23×23) и число этажей (12 / 18 / 24),
+ * а также масштабирует внешние стены башни, купол и плоскость лавы.
+ */
+function configureTowerSpatialScale(playerCount = 2, campaignModeId = 'acts3_24') {
+  activeCoopPlayerCount = Math.max(1, Math.min(4, playerCount | 0));
+  activeCampaignModeId =
+    campaignModeId && typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[campaignModeId]
+      ? campaignModeId
+      : 'acts3_24';
+
+  const preset =
+    (typeof COOP_SCALE_PRESETS !== 'undefined' && COOP_SCALE_PRESETS[activeCoopPlayerCount]) || {
+      gridDim: activeCoopPlayerCount <= 1 ? 15 : activeCoopPlayerCount === 2 ? 19 : 23,
+      gridOffset: activeCoopPlayerCount <= 1 ? 7 : activeCoopPlayerCount === 2 ? 9 : 11,
+      radiusMeters: activeCoopPlayerCount <= 1 ? 28 : activeCoopPlayerCount === 2 ? 36 : 44
+    };
+
+  const modeCfg =
+    (typeof RUN_CAMPAIGN_MODES !== 'undefined' && RUN_CAMPAIGN_MODES[activeCampaignModeId]) || {
+      totalFloors: 24
+    };
+
+  GRID_DIM = preset.gridDim;
+  GRID_OFFSET = preset.gridOffset;
+  GRID_FLOORS = modeCfg.totalFloors || 24;
+  TOWER_FLOOR_RADIUS = preset.radiusMeters;
+  TOWER_WALL_RADIUS = TOWER_FLOOR_RADIUS + 2.18;
+  TOWER_PLAYER_CLAMP_RADIUS = TOWER_FLOOR_RADIUS + 1.4;
+
+  // Масштабируем внешний цилиндр стен башни, ледяную глазурь, купол Пустоты и море лавы
+  const wallScaleXZ = (TOWER_FLOOR_RADIUS + 2.8) / 30.8;
+  const totalTowerHeight = GRID_FLOORS * 14 + 75;
+  const wallScaleY = totalTowerHeight / 225;
+  const wallCenterY = (GRID_FLOORS * 14) * 0.5 - 10;
+
+  if (typeof towerWallMesh !== 'undefined' && towerWallMesh) {
+    towerWallMesh.position.set(0, wallCenterY, 0);
+    towerWallMesh.scale.set(wallScaleXZ, wallScaleY, wallScaleXZ);
+    towerWallMesh.updateMatrix();
+  }
+  if (typeof iceInnerGlazeMesh !== 'undefined' && iceInnerGlazeMesh) {
+    iceInnerGlazeMesh.position.set(0, wallCenterY, 0);
+    iceInnerGlazeMesh.scale.set(wallScaleXZ, wallScaleY, wallScaleXZ);
+    iceInnerGlazeMesh.updateMatrix();
+  }
+  if (typeof voidSkyDomeGroup !== 'undefined' && voidSkyDomeGroup) {
+    voidSkyDomeGroup.position.y = GRID_FLOORS * 14 + 18;
+    voidSkyDomeGroup.scale.setScalar(wallScaleXZ);
+  }
+  if (typeof lavaMesh !== 'undefined' && lavaMesh) {
+    const lavaScale = Math.max(1, wallScaleXZ * 1.15);
+    lavaMesh.scale.set(lavaScale, lavaScale, 1);
+  }
+  if (typeof hazardIceGroup !== 'undefined' && hazardIceGroup) {
+    hazardIceGroup.scale.set(wallScaleXZ, 1, wallScaleXZ);
+  }
+}
+
 function getBlockGridKey(floorIndex, ix, iz) {
-  return floorIndex * 225 + (ix + GRID_OFFSET) * GRID_DIM + (iz + GRID_OFFSET);
+  return (
+    floorIndex * (GRID_DIM * GRID_DIM) +
+    (ix + GRID_OFFSET) * GRID_DIM +
+    (iz + GRID_OFFSET)
+  );
 }
 
 function insertBlockIntoGrid(blockIndex) {
@@ -679,22 +891,51 @@ function getGroundHeightAt(x, y, z) {
   return groundY;
 }
 
+/**
+ * Проверяет, стоит ли игрок/союзник на вертикальном полуэтаже-балконе (floorY + 6).
+ * Возвращает объект балкона (с бонусами для снайперских билдов) или null.
+ */
+function getActiveBalconyUnderPlayer(px, py, pz) {
+  const floorIdx = Math.floor(py / 14);
+  const localY = py - floorIdx * 14;
+  if (Math.abs(localY - 6.0) > 1.1) return null;
+  const list = balconiesByFloor[floorIdx];
+  if (!list || !list.length) return null;
+  for (let i = 0; i < list.length; i++) {
+    const b = list[i];
+    if (hypot2D(px - b.centerX, pz - b.centerZ) <= b.extentRadius + 3.2) {
+      return b;
+    }
+  }
+  return null;
+}
+
+/**
+ * Определяет, в каком изолированном секторе (1 — зелёный «тихий путь», 2 — красный «опасный путь»)
+ * находится координата (x, z) на этаже после развилки.
+ */
+function getSectorRouteAtPosition(floorIndex, x, z) {
+  const cfg = splitFloorConfigs[floorIndex];
+  if (!cfg) return 0;
+  const proj = x * cfg.axisCos + z * cfg.axisSin;
+  return proj >= 0 ? cfg.positiveRoute : cfg.negativeRoute;
+}
+
 function openBossGate(floorIndex) {
   const gateIndices = bossGateBlockIndices[floorIndex] || [];
   for (const blockIdx of gateIndices) {
     const block = blocks[blockIdx];
     block[4] = -999;
     block[5] = -998;
-    if (towerInstancedMesh) {
+    const ref = blockInstanceRef[blockIdx];
+    if (ref && ref.mesh) {
       _pickupDummyObj.position.set(0, -999, 0);
       _pickupDummyObj.rotation.set(0, 0, 0);
       _pickupDummyObj.scale.set(0, 0, 0);
       _pickupDummyObj.updateMatrix();
-      towerInstancedMesh.setMatrixAt(blockIdx, _pickupDummyObj.matrix);
+      ref.mesh.setMatrixAt(ref.instanceId, _pickupDummyObj.matrix);
+      ref.mesh.instanceMatrix.needsUpdate = true;
     }
-  }
-  if (towerInstancedMesh) {
-    towerInstancedMesh.instanceMatrix.needsUpdate = true;
   }
   const sealVisual = bossGateVisualsByFloor[floorIndex];
   if (sealVisual) {
@@ -710,7 +951,7 @@ function openBossGate(floorIndex) {
   bossGateBlockIndices[floorIndex] = [];
 }
 
-/* ---------- Генерация архитектурного окружения и деталей по темам башен ---------- */
+/* ---------- 3. Генерация архитектурного окружения и деталей по темам башен ---------- */
 
 function buildFrozenSilhouetteBaseGeometry() {
   const parts = [];
@@ -718,25 +959,21 @@ function buildFrozenSilhouetteBaseGeometry() {
   const cloakColor = new THREE.Color(0x14365e);
   const frostCoreColor = new THREE.Color(0x88dcff);
 
-  // Остроконечный монашеский капюшон Ордена Инея
   parts.push({
     geo: new THREE.ConeGeometry(0.42, 0.85, 6),
     matrix: computeTransformMatrix(0, 1.72, 0, 0.12, 0, 0, 0.95, 1.0, 0.85, new THREE.Matrix4()),
     color: darkIceColor
   });
-  // Массивные наплечники
   parts.push({
     geo: new THREE.CylinderGeometry(0.68, 0.82, 0.55, 6),
     matrix: computeTransformMatrix(0, 1.12, 0, 0, 0, 0, 1.15, 1.0, 0.65, new THREE.Matrix4()),
     color: cloakColor
   });
-  // Торс и длинная мантия, вмёрзшая в лёд
   parts.push({
     geo: new THREE.CylinderGeometry(0.52, 0.85, 2.2, 7),
     matrix: computeTransformMatrix(0, 0.05, 0, 0, 0, 0, 1.0, 1.0, 0.62, new THREE.Matrix4()),
     color: darkIceColor
   });
-  // Сложенные перед грудью руки, сжимающие меч/посох
   parts.push({
     geo: new THREE.CylinderGeometry(0.15, 0.18, 1.05, 6),
     matrix: computeTransformMatrix(-0.42, 0.72, 0.18, 0.35, 0, -0.45, 1, 1, 1, new THREE.Matrix4()),
@@ -747,13 +984,11 @@ function buildFrozenSilhouetteBaseGeometry() {
     matrix: computeTransformMatrix(0.42, 0.72, 0.18, 0.35, 0, 0.45, 1, 1, 1, new THREE.Matrix4()),
     color: cloakColor
   });
-  // Посох/клинок в руках замёрзшего стража
   parts.push({
     geo: new THREE.CylinderGeometry(0.06, 0.06, 2.7, 5),
     matrix: computeTransformMatrix(0, 0.55, 0.28, 0.05, 0, 0, 1, 1, 1, new THREE.Matrix4()),
     color: darkIceColor
   });
-  // Застывшее ледяное ядро и кристаллы льда, пронзающие фигуру
   parts.push({
     geo: new THREE.OctahedronGeometry(0.32, 0),
     matrix: computeTransformMatrix(0, 0.88, 0.22, 0.2, 0.3, 0, 0.9, 1.4, 0.8, new THREE.Matrix4()),
@@ -770,7 +1005,6 @@ function buildFrozenSilhouetteBaseGeometry() {
 
 const frozenSilhouetteBaseGeo = buildFrozenSilhouetteBaseGeometry();
 
-// Динамические массивы для новых механик и 3D-эффектов трёх башен
 let ashFloorLavaPuddles = [];
 let ashWallStreamGlobs = [];
 let ashFallingDrops = [];
@@ -805,10 +1039,6 @@ function clearTowerDecorGroup() {
   TOWER_SHADER_UNIFORMS.iceCreepingFog.length = 0;
 }
 
-/**
- * Проверяет, стоит ли игрок в лавовой луже на полу или ступени Пепельной башни.
- * Возвращает объект лужи или null.
- */
 function getActiveLavaPuddleUnderPlayer(px, py, pz) {
   if (!ashFloorLavaPuddles.length) return null;
   for (let i = 0; i < ashFloorLavaPuddles.length; i++) {
@@ -825,71 +1055,68 @@ function getActiveLavaPuddleUnderPlayer(px, py, pz) {
 }
 
 /**
- * Строит детализированное 3D-окружение башни, перенесённое из 3D-макетов
- * (ash tower.html, ice tower.html, void tower.html) с сохранением архитектуры этажей игры:
- * - Пепельная: каменные контрфорсы с обугливанием, 3D-ручьи текущей по стенам лавы (с ветвлением и сгустками),
- *   наносящие урон лавовые лужи на полу, стекающая и капающая со ступеней лава с небольшими лужицами
- * - Ледяная: полупрозрачные ледяные колонны (IOR 1.31), вмёрзшие в толщу льда силуэты погибших странников,
- *   толстая морозная корка и свисающие со ступеней/краёв сосульки, стелющийся морозный пар над трещинами
- * - Пустота: готические пилястры с рунами, ленты абсолютной тьмы из трещин, визуально растворившиеся ступени
- *   (на которые можно встать!), парящие в невесомости осколки и клубы фиолетового эфира
+ * Строит детализированное 3D-окружение башни по всем этажам (12 / 18 / 24 этажа),
+ * включая кронштейны балконов (floorY + 6), барьеры разделённых секторов и декор 3 актов.
  */
 function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor, floorValidCellsByFloor) {
   clearTowerDecorGroup();
-  const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
 
-  const structureParts = [];
-  const accentParts = [];
+  const structurePartsByBiome = { ash: [], ice: [], void: [] };
+  const accentPartsByBiome = { ash: [], ice: [], void: [] };
   const tempMat = new THREE.Matrix4();
 
-  const pillarCount = 8;
-  const wallRadius = 30.18;
+  const pillarCount = GRID_OFFSET >= 11 ? 12 : GRID_OFFSET >= 9 ? 10 : 8;
+  const wallRadius = TOWER_WALL_RADIUS;
 
-  const pillarPrimaryColor =
-    towerId === 'ash'
-      ? new THREE.Color(0x6e7076)
-      : towerId === 'ice'
-        ? new THREE.Color(0x88c8ec)
-        : new THREE.Color(0x180b2c);
-  const pillarSecondaryColor =
-    towerId === 'ash'
-      ? new THREE.Color(0x28282c)
-      : towerId === 'ice'
-        ? new THREE.Color(0xb8e6ff)
-        : new THREE.Color(0x28124a);
-  const accentGlowColor =
-    towerId === 'ash'
-      ? new THREE.Color(0xff6a15)
-      : towerId === 'ice'
-        ? new THREE.Color(0x88e4ff)
-        : new THREE.Color(0xc458ff);
+  const biomePalette = {
+    ash: {
+      primary: new THREE.Color(0x6e7076),
+      secondary: new THREE.Color(0x28282c),
+      glow: new THREE.Color(0xff6a15)
+    },
+    ice: {
+      primary: new THREE.Color(0x88c8ec),
+      secondary: new THREE.Color(0xb8e6ff),
+      glow: new THREE.Color(0x88e4ff)
+    },
+    void: {
+      primary: new THREE.Color(0x180b2c),
+      secondary: new THREE.Color(0x28124a),
+      glow: new THREE.Color(0xc458ff)
+    }
+  };
 
   const pillarSectionGeo = new THREE.CylinderGeometry(0.95, 1.15, 14, 6);
   const capitalGeo = new THREE.CylinderGeometry(1.5, 1.08, 1.35, 6);
   const archSegmentGeo = new THREE.BoxGeometry(5.6, 0.95, 0.95);
+  const balconyStrutGeo = new THREE.BoxGeometry(0.65, 3.8, 0.65);
 
-  // 1. Периметральные контрфорсы, капители и стрельчатые арки по всем 12 этажам
-  for (let p = 0; p < pillarCount; p++) {
-    const angle = (p / pillarCount) * TWO_PI;
-    const px = Math.cos(angle) * wallRadius;
-    const pz = Math.sin(angle) * wallRadius;
-    const rotY = -angle + Math.PI / 2;
+  // 1. Периметральные контрфорсы, капители и стрельчатые арки по всем этажам
+  for (let floor = 0; floor < GRID_FLOORS; floor++) {
+    const floorY = floor * 14;
+    const biomeId = getFloorBiomeId(floor);
+    const pal = biomePalette[biomeId] || biomePalette.ash;
+    const structureParts = structurePartsByBiome[biomeId];
+    const accentParts = accentPartsByFloorBiome(accentPartsByBiome, biomeId);
 
-    for (let floor = 0; floor < 12; floor++) {
-      const floorY = floor * 14;
+    for (let p = 0; p < pillarCount; p++) {
+      const angle = (p / pillarCount) * TWO_PI;
+      const px = Math.cos(angle) * wallRadius;
+      const pz = Math.sin(angle) * wallRadius;
+      const rotY = -angle + Math.PI / 2;
 
       computeTransformMatrix(px, floorY + 7, pz, 0, rotY, 0, 1, 1, 0.78, tempMat);
       structureParts.push({
         geo: pillarSectionGeo,
         matrix: tempMat.clone(),
-        color: pillarPrimaryColor
+        color: pal.primary
       });
 
       computeTransformMatrix(px, floorY + 0.2, pz, 0, rotY, 0, 1.15, 1, 0.88, tempMat);
       structureParts.push({
         geo: capitalGeo,
         matrix: tempMat.clone(),
-        color: pillarSecondaryColor
+        color: pal.secondary
       });
 
       if (floor % 2 === 1) {
@@ -902,34 +1129,77 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           structureParts.push({
             geo: archSegmentGeo,
             matrix: tempMat.clone(),
-            color: pillarSecondaryColor
+            color: pal.secondary
           });
         }
       }
     }
+
+    // Опорные наклонные консоли под полуэтажами-балконами (floorY + 6)
+    const floorBalconies = balconiesByFloor[floor] || [];
+    for (let bIdx = 0; bIdx < floorBalconies.length; bIdx++) {
+      const bal = floorBalconies[bIdx];
+      for (let cIdx = 0; cIdx < bal.cells.length; cIdx += 2) {
+        const [bx, bz] = bal.cells[cIdx];
+        const bAngle = Math.atan2(bz, bx);
+        const wallX = Math.cos(bAngle) * (wallRadius - 1.2);
+        const wallZ = Math.sin(bAngle) * (wallRadius - 1.2);
+        computeTransformMatrix(
+          (bx + wallX) * 0.5,
+          floorY + 4.1,
+          (bz + wallZ) * 0.5,
+          0.45,
+          -bAngle + Math.PI / 2,
+          0,
+          1,
+          1,
+          1,
+          tempMat
+        );
+        structureParts.push({
+          geo: balconyStrutGeo,
+          matrix: tempMat.clone(),
+          color: pal.secondary
+        });
+        accentParts.push({
+          geo: new THREE.OctahedronGeometry(0.28, 0),
+          matrix: computeTransformMatrix(bx, floorY + 6.45, bz, 0, 0, 0, 1, 1.35, 1, new THREE.Matrix4()),
+          color: pal.glow
+        });
+      }
+    }
   }
 
-  // 2. Карнизы и опорные элементы лестниц (для нерастворённых ступеней)
+  function accentPartsByFloorBiome(map, bId) {
+    return map[bId] || map.ash;
+  }
+
+  // 2. Карнизы и опорные элементы лестниц
   const stairStepTrimGeo = new THREE.BoxGeometry(4.18, 0.34, 4.18);
   const stairPostGeo = new THREE.CylinderGeometry(0.25, 0.34, 1.4, 6);
 
-  for (let floor = 0; floor < 11; floor++) {
+  for (let floor = 0; floor < GRID_FLOORS - 1; floor++) {
+    const biomeId = getFloorBiomeId(floor);
+    const pal = biomePalette[biomeId] || biomePalette.ash;
+    const structureParts = structurePartsByBiome[biomeId];
+    const accentParts = accentPartsByBiome[biomeId];
+
     const stairs = stairPositionsByFloor[floor] || [];
     for (let s = 0; s < stairs.length; s++) {
       const [sx, sz, topY, stepBlockIdx] = stairs[s];
-      const isDissolvedVoidStep = towerId === 'void' && voidDissolvedStairStepSet.has(stepBlockIdx);
+      const isDissolvedVoidStep = biomeId === 'void' && voidDissolvedStairStepSet.has(stepBlockIdx);
 
       if (!isDissolvedVoidStep) {
         computeTransformMatrix(sx, topY - 0.14, sz, 0, 0, 0, 1, 1, 1, tempMat);
         structureParts.push({
           geo: stairStepTrimGeo,
           matrix: tempMat.clone(),
-          color: pillarSecondaryColor
+          color: pal.secondary
         });
       }
 
       const colH = Math.max(0.5, topY - floor * 14 - 1.1);
-      if (colH > 0.8 && !isDissolvedVoidStep && towerId !== 'void') {
+      if (colH > 0.8 && !isDissolvedVoidStep && biomeId !== 'void') {
         computeTransformMatrix(
           sx,
           floor * 14 + colH * 0.5,
@@ -945,7 +1215,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         structureParts.push({
           geo: pillarSectionGeo,
           matrix: tempMat.clone(),
-          color: pillarPrimaryColor
+          color: pal.primary
         });
       }
 
@@ -955,7 +1225,7 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           structureParts.push({
             geo: stairPostGeo,
             matrix: tempMat.clone(),
-            color: pillarPrimaryColor
+            color: pal.primary
           });
           accentParts.push({
             geo: new THREE.OctahedronGeometry(0.3, 0),
@@ -971,37 +1241,89 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
               1,
               new THREE.Matrix4()
             ),
-            color: accentGlowColor
+            color: pal.glow
           });
         }
       }
     }
   }
 
-  // =========================================================================
-  // 3A. ПЕПЕЛЬНАЯ БАШНЯ (ASH): 3D-ручьи лавы по стенам, лужи лавы на полу,
-  //     стекающая и капающая со ступеней лава (из ash tower.html)
-  // =========================================================================
-  if (towerId === 'ash') {
-    const sharedStreamMat = createFlowingLavaMaterial(11.3);
-    const sharedStairLavaMat = createFlowingLavaMaterial(105.5);
+  // 3. Детали окружения каждого этажа по его биому (Пепельная / Ледяная / Пустотная башни)
+  let sharedStreamMat = null;
+  let sharedStairLavaMat = null;
+  const charredRockParts = [];
+  const dodoGeo = new THREE.DodecahedronGeometry(0.42, 0);
 
-    const charredRockMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#18181b'),
-      map: TOWER_FLOOR_TEXTURES.ash.map,
-      normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
-      normalScale: new THREE.Vector2(2.8, 2.8),
-      roughness: 0.96,
-      metalness: 0.05
-    });
-    const charredRockParts = [];
-    const dodoGeo = new THREE.DodecahedronGeometry(0.42, 0);
+  const icicleGeo = new THREE.ConeGeometry(0.24, 2.2, 5);
+  const crystalSpikeGeo = new THREE.ConeGeometry(0.38, 2.8, 6);
+  const frostCrustParts = [];
+  const silhouetteParts = [];
+  const crustBoxGeo = jitterGeometry(new THREE.BoxGeometry(4.12, 0.18, 4.12, 3, 1, 3), 0.06);
 
-    // 1) Стекающая по стенам лава (извилистые 3D-ручьи с переменным сечением, боковыми ответвлениями и сгустками)
-    for (let floor = 0; floor < 12; floor++) {
-      const floorY = floor * 14;
+  let fogPatchGeo = null;
+  const CREEPING_FOG_VERTEX = `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `;
+  const CREEPING_FOG_FRAGMENT = `
+    uniform float uTime;
+    uniform float uSeed;
+    varying vec2 vUv;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+    float valueNoise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
+        mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
+        f.y
+      );
+    }
+    void main() {
+      vec2 centered = (vUv - 0.5) * 2.0;
+      float r = length(centered);
+      if (r > 1.0) discard;
+      vec2 flowUv = vUv * 3.2 + vec2(uTime * 0.14 + uSeed, -uTime * 0.09 + uSeed * 1.7);
+      float n1 = valueNoise(flowUv);
+      float n2 = valueNoise(flowUv * 2.1 - vec2(uTime * 0.18, uTime * 0.11));
+      float vapor = n1 * 0.6 + n2 * 0.4;
+      float mask = pow(1.0 - r, 1.6) * smoothstep(0.28, 0.78, vapor);
+      vec3 mistColor = mix(vec3(0.53, 0.87, 1.0), vec3(0.90, 0.97, 1.0), vapor);
+      gl_FragColor = vec4(mistColor, mask * 0.34);
+    }
+  `;
+
+  let voidMaterialsInitialized = false;
+  let ribbonMat = null;
+  let mistMat = null;
+  let dissolvedStairMat = null;
+  let partialDissolveStairMat = null;
+  let phantomStepOutlineMat = null;
+  const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.4, 0.34);
+  const stepBoxGeo = new THREE.BoxGeometry(3.92, 0.85, 3.92, 4, 2, 4);
+  const stepTopFrameGeo = new THREE.BoxGeometry(3.96, 0.08, 3.96, 2, 1, 2);
+  const shardGeo = new THREE.DodecahedronGeometry(0.36, 0);
+  const voidFloorsList = [];
+
+  for (let floor = 0; floor < GRID_FLOORS; floor++) {
+    const floorY = floor * 14;
+    const biomeId = getFloorBiomeId(floor);
+    const accentParts = accentPartsByBiome[biomeId];
+
+    // --- 3A. ПЕПЕЛЬНАЯ БАШНЯ (ASH) ---
+    if (biomeId === 'ash') {
+      if (!sharedStreamMat) {
+        sharedStreamMat = createFlowingLavaMaterial(11.3);
+        sharedStairLavaMat = createFlowingLavaMaterial(105.5);
+      }
+
       const streamCountOnFloor = 2;
-
       for (let sIdx = 0; sIdx < streamCountOnFloor; sIdx++) {
         const streamSeed = floor * 31.7 + sIdx * 17.3 + 11.3;
         const baseAngle =
@@ -1009,11 +1331,10 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           (seededRandom(seed, 'ashWA', floor * 10 + sIdx) - 0.5) * 0.28;
         const topY = floorY + 12.8;
         const botY = floorY + 0.04;
-        const startR = 30.15;
-        const endR = 28.1;
+        const startR = wallRadius - 0.03;
+        const endR = TOWER_FLOOR_RADIUS + 0.1;
         const baseRadius = 0.38 + seededRandom(seed, 'ashWR', floor * 10 + sIdx) * 0.16;
 
-        // Обугленное каменное жерло-разлом в стене, откуда вырывается лава
         for (let c = 0; c < 4; c++) {
           const ca = baseAngle + (c - 1.5) * 0.025;
           computeTransformMatrix(
@@ -1031,7 +1352,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
         }
 
-        // Главный извилистый 3D-ручей лавы по стене
         const ptsCount = 10;
         const mainPoints = [];
         for (let p = 0; p <= ptsCount; p++) {
@@ -1051,14 +1371,12 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         const streamMesh = new THREE.Mesh(streamGeo, sharedStreamMat);
         towerDecorGroup.add(streamMesh);
 
-        // Остывшие чёрные шлаковые берега вдоль ручья на стене
         for (let cl = 1; cl < ptsCount; cl += 2) {
           const pt = mainPoints[cl];
           computeTransformMatrix(pt.x * 1.008, pt.y, pt.z * 1.008, cl * 0.3, cl * 0.5, 0, 1.1, 1.5, 1.1, tempMat);
           charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
         }
 
-        // Боковое ответвление ручья лавы
         const branchPts = [];
         const splitT = 0.32;
         const sideSign = sIdx % 2 === 0 ? 1 : -1;
@@ -1075,7 +1393,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         const branchMesh = new THREE.Mesh(branchGeo, sharedStreamMat);
         towerDecorGroup.add(branchMesh);
 
-        // Анимированные сгустки лавы, стекающие вдоль настенного ручья
         for (let g = 0; g < 2; g++) {
           const globGeo = new THREE.SphereGeometry(baseRadius * 0.72, 8, 8);
           globGeo.scale(0.85, 1.65, 0.85);
@@ -1090,21 +1407,19 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // 2) Лавовые лужи на полу этажа (если встать на лужу — игрок получает небольшой постоянный урон!)
       const validFloorCells = floorValidCellsByFloor[floor] || [];
       if (validFloorCells.length > 0) {
-        const puddleTargetCount = floor % 4 === 3 ? 2 : 3;
+        const puddleTargetCount = isBossFloorIndex(floor) ? 2 : 3;
         let placedPuddles = 0;
         for (let attempt = 0; attempt < 18 && placedPuddles < puddleTargetCount; attempt++) {
           const pickIdx = Math.floor(
             seededRandom(seed, 'ashPud' + floor, attempt * 7) * validFloorCells.length
           );
           const [cellX, cellZ] = validFloorCells[pickIdx];
-          // На 0-м этаже оставляем центр (0,0) безопасным для старта игрока
-          if (floor === 0 && cellX * cellX + cellZ * cellZ < 32) continue;
-          if (jumpPads.some((jp) => jp.y === floorY && hypot2D(jp.x - cellX, jp.z - cellZ) < 3.5)) continue;
-          if (chests.some((ch) => ch.y === floorY && hypot2D(ch.x - cellX, ch.z - cellZ) < 3.5)) continue;
-          if (altars.some((al) => al.y === floorY && hypot2D(al.x - cellX, al.z - cellZ) < 3.5)) continue;
+          if (floor === 0 && cellX * cellX + cellZ * cellZ < 48) continue;
+          if (jumpPads.some((jp) => Math.abs(jp.y - floorY) < 1 && hypot2D(jp.x - cellX, jp.z - cellZ) < 3.8)) continue;
+          if (chests.some((ch) => Math.abs(ch.y - floorY) < 1 && hypot2D(ch.x - cellX, ch.z - cellZ) < 3.8)) continue;
+          if (altars.some((al) => Math.abs(al.y - floorY) < 1 && hypot2D(al.x - cellX, al.z - cellZ) < 3.8)) continue;
           if (
             ashFloorLavaPuddles.some(
               (p) => Math.abs(p.y - floorY) < 1 && hypot2D(p.x - cellX, p.z - cellZ) < 5.2
@@ -1128,7 +1443,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           puddleMeshGroup.position.set(px, floorY + 0.015, pz);
           towerDecorGroup.add(puddleMeshGroup);
 
-          // Обугленные чёрные камни шлака по краям лужи
           const slagCount = 5;
           for (let k = 0; k < slagCount; k++) {
             const sa = (k / slagCount) * TWO_PI + texSeededRandom(puddleSeed + k) * 0.4;
@@ -1159,10 +1473,8 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // 3) Стекающая и капающая со ступеней лава + небольшие лужицы под ними (из addStepLavaFlowAndDrip в ash tower.html)
       const stairs = stairPositionsByFloor[floor] || [];
       for (let s = 0; s < stairs.length; s++) {
-        // На каждой лестнице выбираем несколько ступеней, с которых стекает и капает лава
         if (s % 3 !== 1) continue;
         const [sx, sz, topY] = stairs[s];
         const dripSeed = 200 + floor * 41.3 + s * 7.3;
@@ -1181,12 +1493,10 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             sz - lx * sinA + lz * cosA
           );
 
-        // Небольшая лужица лавы на верхней грани самой ступени, откуда лава переливается через край
         const topMiniPuddle = createOrganicPuddleMesh(0.55, dripSeed + 1.1, false);
         topMiniPuddle.position.set(sx + localOffsetX * 0.35, topY + 0.015, sz + localOffsetZ * 0.25);
         towerDecorGroup.add(topMiniPuddle);
 
-        // 3D-язык лавы, перетекающий через край ступени и свисающий вниз вязкой сосулькой
         const overhangLen = 0.95 + texSeededRandom(dripSeed * 5.3) * 0.85;
         const tongueCurve = new THREE.CatmullRomCurve3([
           toWorld(localOffsetX * 0.35, 0.02, localOffsetZ * 0.35),
@@ -1200,16 +1510,13 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         const tongueMesh = new THREE.Mesh(tongueGeo, sharedStairLavaMat);
         towerDecorGroup.add(tongueMesh);
 
-        // Обугленная каменная корка вокруг места перелива на ступени
         const lipPos = toWorld(localOffsetX * 0.82, -0.05, localOffsetZ * 0.92);
         computeTransformMatrix(lipPos.x, lipPos.y, lipPos.z, 0, stepAngle, 0, 0.85, 0.32, 0.85, tempMat);
         charredRockParts.push({ geo: dodoGeo, matrix: tempMat.clone() });
 
-        // Точка отрыва капли и поверхность внизу (нижняя ступень или пол этажа)
         const dripTipPos = tongueCurve.getPointAt(1.0);
         const impactY = s > 0 ? stairs[s - 1][2] : floorY;
 
-        // Небольшая лавовая лужица под ступенью (с концентрическими кругами от падающих капель!)
         const smallPuddleRadius = 0.68 + texSeededRandom(dripSeed * 19.3) * 0.35;
         const smallPuddle = createOrganicPuddleMesh(smallPuddleRadius, dripSeed + 4.7, true);
         smallPuddle.position.set(dripTipPos.x, impactY + 0.015, dripTipPos.z);
@@ -1223,7 +1530,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           hitRadiusSq: (smallPuddleRadius * 0.85) * (smallPuddleRadius * 0.85)
         });
 
-        // Анимированная 3D-капля лавы (набухает, срывается вниз и расплющивается в лужице)
         const dropGeo = new THREE.SphereGeometry(0.14, 8, 8);
         dropGeo.scale(0.8, 1.7, 0.8);
         const dropMesh = new THREE.Mesh(dropGeo, sharedStairLavaMat);
@@ -1242,90 +1548,16 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       }
     }
 
-    if (charredRockParts.length) {
-      const mergedCharredGeo = mergeGeometryParts(charredRockParts);
-      const charredMesh = new THREE.Mesh(mergedCharredGeo, charredRockMaterial);
-      charredMesh.userData.disposeMaterial = true;
-      towerDecorGroup.add(charredMesh);
-    }
-  }
-
-  // =========================================================================
-  // 3B. ЛЕДЯНАЯ БАШНЯ (ICE): вмёрзшие в толщу льда силуэты, морозная корка
-  //     и свисающие со ступеней сосульки, стелющийся морозный пар (из ice tower.html)
-  // =========================================================================
-  else if (towerId === 'ice') {
-    const icicleGeo = new THREE.ConeGeometry(0.24, 2.2, 5);
-    const crystalSpikeGeo = new THREE.ConeGeometry(0.38, 2.8, 6);
-    const frostCrustParts = [];
-    const silhouetteParts = [];
-
-    // Материал толстой белой морозной корки (frost-глазурь) на ступенях
-    const frostCrustMat = new THREE.MeshPhysicalMaterial({
-      color: 0xe6f7ff,
-      emissive: 0x3b8ab8,
-      emissiveIntensity: 0.25,
-      roughness: 0.22,
-      metalness: 0.05,
-      clearcoat: 0.9,
-      clearcoatRoughness: 0.12,
-      envMap: ICE_ENV_CUBEMAP
-    });
-
-    // Шейдер стелющегося морозного пара над трещинами зеркального пола (из ice tower.html)
-    const CREEPING_FOG_VERTEX = `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `;
-    const CREEPING_FOG_FRAGMENT = `
-      uniform float uTime;
-      uniform float uSeed;
-      varying vec2 vUv;
-
-      float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    // --- 3B. ЛЕДЯНАЯ БАШНЯ (ICE) ---
+    else if (biomeId === 'ice') {
+      if (!fogPatchGeo) {
+        fogPatchGeo = new THREE.PlaneGeometry(8.5, 8.5);
+        fogPatchGeo.rotateX(-Math.PI / 2);
       }
 
-      float valueNoise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        return mix(
-          mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-          mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-          f.y
-        );
-      }
-
-      void main() {
-        vec2 centered = (vUv - 0.5) * 2.0;
-        float r = length(centered);
-        if (r > 1.0) discard;
-
-        vec2 flowUv = vUv * 3.2 + vec2(uTime * 0.14 + uSeed, -uTime * 0.09 + uSeed * 1.7);
-        float n1 = valueNoise(flowUv);
-        float n2 = valueNoise(flowUv * 2.1 - vec2(uTime * 0.18, uTime * 0.11));
-        float vapor = n1 * 0.6 + n2 * 0.4;
-
-        float mask = pow(1.0 - r, 1.6) * smoothstep(0.28, 0.78, vapor);
-        vec3 mistColor = mix(vec3(0.53, 0.87, 1.0), vec3(0.90, 0.97, 1.0), vapor);
-        gl_FragColor = vec4(mistColor, mask * 0.34);
-      }
-    `;
-
-    const fogPatchGeo = new THREE.PlaneGeometry(8.5, 8.5);
-    fogPatchGeo.rotateX(-Math.PI / 2);
-
-    for (let floor = 0; floor < 12; floor++) {
-      const floorY = floor * 14;
-
-      // 1) Вмёрзшие в толщу льда силуэты погибших странников и воинов (как 3D-фигуры, так и теневые силуэты за линзами льда из ice tower.html)
       for (let s = 0; s < 4; s++) {
         const angle = ((s + 0.5) / 4) * TWO_PI + (floor % 2) * 0.38;
-        const silRadius = 31.15;
+        const silRadius = wallRadius + 0.95;
         const sx = Math.cos(angle) * silRadius;
         const sz = Math.sin(angle) * silRadius;
         const rotY = -angle - Math.PI / 2;
@@ -1349,7 +1581,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           matrix: tempMat.clone()
         });
 
-        // Силуэтная декаль странника из ice tower.html в толще стены
         if ((floor + s) % 2 === 0 && ICE_SILHOUETTE_TEXTURES.length) {
           const silPlaneAngle = angle + 0.32;
           const silPlaneGeo = new THREE.PlaneGeometry(4.2, 8.4);
@@ -1363,9 +1594,9 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           const silPlaneMesh = new THREE.Mesh(silPlaneGeo, silPlaneMat);
           const py = floorY + 6.5;
           silPlaneMesh.position.set(
-            Math.cos(silPlaneAngle) * 31.3,
+            Math.cos(silPlaneAngle) * (wallRadius + 1.1),
             py,
-            Math.sin(silPlaneAngle) * 31.3
+            Math.sin(silPlaneAngle) * (wallRadius + 1.1)
           );
           silPlaneMesh.lookAt(0, py, 0);
           silPlaneMesh.rotation.z += (s % 2 ? 1 : -1) * 0.1;
@@ -1373,13 +1604,12 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           towerDecorGroup.add(silPlaneMesh);
         }
 
-        // Кристаллические ледяные рёбра и глыбы вокруг вмёрзшего силуэта
         for (const ribOffset of [-0.12, 0.12]) {
           const rAng = angle + ribOffset;
           computeTransformMatrix(
-            Math.cos(rAng) * 30.1,
+            Math.cos(rAng) * (wallRadius - 0.1),
             floorY + 6.8,
-            Math.sin(rAng) * 30.1,
+            Math.sin(rAng) * (wallRadius - 0.1),
             0,
             -rAng + Math.PI / 2,
             ribOffset > 0 ? -0.14 : 0.14,
@@ -1396,12 +1626,11 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // 2) Кристаллические наросты льда по периметру стен
       for (let p = 0; p < pillarCount; p++) {
         if ((floor + p) % 2 !== 0) continue;
         const angle = (p / pillarCount) * TWO_PI + 0.18;
-        const cx = Math.cos(angle) * 29.65;
-        const cz = Math.sin(angle) * 29.65;
+        const cx = Math.cos(angle) * (wallRadius - 0.55);
+        const cz = Math.sin(angle) * (wallRadius - 0.55);
         computeTransformMatrix(cx, floorY + 1.4, cz, -0.25, -angle, 0.15, 1.15, 1.25, 1.15, tempMat);
         accentParts.push({
           geo: crystalSpikeGeo,
@@ -1410,7 +1639,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
-      // 3) Каскады сосулек, свисающие с обрывов и краёв плит пола
       const edgeCells = floorEdgeCellsByFloor[floor] || [];
       for (let e = 0; e < edgeCells.length; e += 2) {
         const [ex, ez] = edgeCells[e];
@@ -1434,13 +1662,9 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         });
       }
 
-      // 4) Толстая морозная корка сверху ступеней + густые кластеры свисающих со ступеней сосулек (из createBrokenStairs в ice tower.html)
       const stairs = stairPositionsByFloor[floor] || [];
-      const crustBoxGeo = jitterGeometry(new THREE.BoxGeometry(4.12, 0.18, 4.12, 3, 1, 3), 0.06);
       for (let s = 0; s < stairs.length; s++) {
         const [sx, sz, topY] = stairs[s];
-
-        // Морозная frost-корка на верхней грани ступени
         computeTransformMatrix(sx, topY + 0.04, sz, 0, s * 0.3, 0, 1, 1, 1, tempMat);
         frostCrustParts.push({
           geo: crustBoxGeo,
@@ -1448,7 +1672,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           color: new THREE.Color(0xe6f7ff)
         });
 
-        // Группы заострённых сосулек, свисающих вниз с краёв каждой ступени
         const iciclesPerStep = 5;
         for (let k = 0; k < iciclesPerStep; k++) {
           const icicleLen = 1.35 + ((s + k) % 4) * 0.65;
@@ -1474,7 +1697,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // 5) Стелющийся морозный пар над трещинами ледяного пола
       if (edgeCells.length > 0) {
         for (let m = 0; m < 2; m++) {
           const [mx, mz] = edgeCells[(m * 7 + floor * 3) % edgeCells.length];
@@ -1501,202 +1723,151 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
       }
     }
 
-    if (frostCrustParts.length) {
-      const mergedCrustGeo = mergeGeometryParts(frostCrustParts);
-      const crustMesh = new THREE.Mesh(mergedCrustGeo, frostCrustMat);
-      crustMesh.userData.disposeMaterial = true;
-      towerDecorGroup.add(crustMesh);
-    }
+    // --- 3C. БАШНЯ ПУСТОТЫ (VOID) ---
+    else if (biomeId === 'void') {
+      voidFloorsList.push(floor);
+      if (!voidMaterialsInitialized) {
+        voidMaterialsInitialized = true;
+        const VOID_MIST_VERTEX = `
+          uniform float uTime;
+          attribute float aPhase;
+          varying vec2 vUv;
+          varying float vPhase;
+          void main() {
+            vUv = uv;
+            vPhase = aPhase;
+            vec3 pos = position;
+            pos.x += sin(uTime * 1.2 + pos.y * 0.5 + aPhase) * 0.22;
+            pos.z += cos(uTime * 1.0 + pos.y * 0.5 + aPhase) * 0.22;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+          }
+        `;
+        const VOID_MIST_FRAGMENT = `
+          uniform float uTime;
+          uniform float uIsDarkRibbon;
+          varying vec2 vUv;
+          varying float vPhase;
+          ${GLSL_SIMPLEX_NOISE}
+          void main() {
+            vec2 centered = vUv - 0.5;
+            float dist = length(centered);
+            float n = snoise(vec3(vUv * 3.5, uTime * 0.45 + vPhase)) * 0.5 + 0.5;
+            float mask = smoothstep(0.5, 0.08, dist) * n;
+            vec3 darkRibbonCol = mix(vec3(0.01, 0.0, 0.02), vec3(0.45, 0.12, 0.78), pow(n, 2.2) * 0.75);
+            vec3 mistCol = mix(vec3(0.04, 0.01, 0.08), vec3(0.66, 0.33, 0.97), n * 1.35);
+            vec3 finalCol = mix(mistCol, darkRibbonCol, uIsDarkRibbon);
+            float alpha = mask * mix(0.68, 0.85, uIsDarkRibbon);
+            if (alpha < 0.02) discard;
+            gl_FragColor = vec4(finalCol, alpha);
+          }
+        `;
 
-    if (silhouetteParts.length) {
-      const mergedSilGeo = mergeGeometryParts(silhouetteParts);
-      const silMat = new THREE.MeshStandardMaterial({
-        color: 0x0b1e36,
-        emissive: 0x1d588f,
-        emissiveIntensity: 0.82,
-        roughness: 0.35,
-        metalness: 0.25
-      });
-      const silMesh = new THREE.Mesh(mergedSilGeo, silMat);
-      silMesh.userData.disposeMaterial = true;
-      towerDecorGroup.add(silMesh);
-    }
-  }
+        const ribbonUniforms = { uTime: { value: 0 }, uIsDarkRibbon: { value: 1.0 } };
+        const mistUniforms = { uTime: { value: 0 }, uIsDarkRibbon: { value: 0.0 } };
+        const stairDissolveUniforms = {
+          uTime: { value: 0 },
+          uDissolveLevel: { value: 0.39 },
+          uEdgeIntensity: { value: 1.45 },
+          uBrokenEnd: { value: 1.0 }
+        };
+        const stairPartialDissolveUniforms = {
+          uTime: { value: 0 },
+          uDissolveLevel: { value: 0.39 },
+          uEdgeIntensity: { value: 1.2 },
+          uBrokenEnd: { value: 0.55 }
+        };
+        TOWER_SHADER_UNIFORMS.voidList.push(
+          ribbonUniforms,
+          mistUniforms,
+          stairDissolveUniforms,
+          stairPartialDissolveUniforms
+        );
 
-  // =========================================================================
-  // 3C. БАШНЯ ПУСТОТЫ (VOID): ленты абсолютной тьмы из трещин, визуально
-  //     растворившиеся ступени (с сохранением коллизии!), парящие осколки и эфир
-  // =========================================================================
-  else if (towerId === 'void') {
-    const runeTabletGeo = new THREE.BoxGeometry(0.95, 5.4, 0.34);
+        ribbonMat = new THREE.ShaderMaterial({
+          uniforms: ribbonUniforms,
+          vertexShader: VOID_MIST_VERTEX,
+          fragmentShader: VOID_MIST_FRAGMENT,
+          transparent: true,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+        mistMat = new THREE.ShaderMaterial({
+          uniforms: mistUniforms,
+          vertexShader: VOID_MIST_VERTEX,
+          fragmentShader: VOID_MIST_FRAGMENT,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide
+        });
 
-    // 1) Шейдер полупрозрачных лент абсолютной тьмы и клубов эфира (из void tower.html)
-    const VOID_MIST_VERTEX = `
-      uniform float uTime;
-      attribute float aPhase;
-      varying vec2 vUv;
-      varying float vPhase;
-      void main() {
-        vUv = uv;
-        vPhase = aPhase;
-        vec3 pos = position;
-        pos.x += sin(uTime * 1.2 + pos.y * 0.5 + aPhase) * 0.22;
-        pos.z += cos(uTime * 1.0 + pos.y * 0.5 + aPhase) * 0.22;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        const STAIR_DISSOLVE_VERTEX = `
+          varying vec2 vUv;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+          void main() {
+            vUv = uv;
+            vNormal = normalize(normalMatrix * normal);
+            vec4 wp = modelMatrix * vec4(position, 1.0);
+            vWorldPos = wp.xyz;
+            gl_Position = projectionMatrix * viewMatrix * wp;
+          }
+        `;
+        const STAIR_DISSOLVE_FRAGMENT = `
+          uniform float uTime;
+          uniform float uDissolveLevel;
+          uniform float uEdgeIntensity;
+          uniform float uBrokenEnd;
+          varying vec2 vUv;
+          varying vec3 vWorldPos;
+          varying vec3 vNormal;
+          ${GLSL_SIMPLEX_NOISE}
+          void main() {
+            float grain = snoise(vWorldPos * 2.4) * 0.5 + 0.5;
+            vec3 stoneBase = mix(vec3(0.035, 0.018, 0.062), vec3(0.095, 0.045, 0.15), grain);
+            vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4));
+            float diff = max(dot(vNormal, lightDir), 0.15);
+            vec3 color = stoneBase * (0.45 + 0.75 * diff);
+            float noiseVal = snoise(vWorldPos * 0.85 + vec3(0.0, uTime * 0.35, 0.0)) * 0.5 + 0.5;
+            float fineNoise = snoise(vWorldPos * 2.8 - vec3(uTime * 0.5)) * 0.22;
+            float combinedNoise = noiseVal + fineNoise;
+            float edgeFactor = max(abs(vUv.x - 0.5), abs(vUv.y - 0.5)) * 2.0;
+            float threshold = uBrokenEnd * (uDissolveLevel + edgeFactor * 0.34);
+            if (combinedNoise < threshold) discard;
+            float burnWidth = 0.15 * uBrokenEnd;
+            float edgeGlow = 1.0 - smoothstep(threshold, threshold + burnWidth, combinedNoise);
+            vec3 voidEdgeColor = vec3(0.659, 0.333, 0.969) * 2.6;
+            color = mix(color, voidEdgeColor, edgeGlow * uBrokenEnd * uEdgeIntensity);
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `;
+
+        dissolvedStairMat = new THREE.ShaderMaterial({
+          uniforms: stairDissolveUniforms,
+          vertexShader: STAIR_DISSOLVE_VERTEX,
+          fragmentShader: STAIR_DISSOLVE_FRAGMENT,
+          side: THREE.DoubleSide
+        });
+        partialDissolveStairMat = new THREE.ShaderMaterial({
+          uniforms: stairPartialDissolveUniforms,
+          vertexShader: STAIR_DISSOLVE_VERTEX,
+          fragmentShader: STAIR_DISSOLVE_FRAGMENT,
+          side: THREE.DoubleSide
+        });
+        phantomStepOutlineMat = new THREE.MeshBasicMaterial({
+          color: 0xa855f7,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.42,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
       }
-    `;
-    const VOID_MIST_FRAGMENT = `
-      uniform float uTime;
-      uniform float uIsDarkRibbon;
-      varying vec2 vUv;
-      varying float vPhase;
-      ${GLSL_SIMPLEX_NOISE}
 
-      void main() {
-        vec2 centered = vUv - 0.5;
-        float dist = length(centered);
-        float n = snoise(vec3(vUv * 3.5, uTime * 0.45 + vPhase)) * 0.5 + 0.5;
-        float mask = smoothstep(0.5, 0.08, dist) * n;
-
-        vec3 darkRibbonCol = mix(vec3(0.01, 0.0, 0.02), vec3(0.45, 0.12, 0.78), pow(n, 2.2) * 0.75);
-        vec3 mistCol = mix(vec3(0.04, 0.01, 0.08), vec3(0.66, 0.33, 0.97), n * 1.35);
-
-        vec3 finalCol = mix(mistCol, darkRibbonCol, uIsDarkRibbon);
-        float alpha = mask * mix(0.68, 0.85, uIsDarkRibbon);
-        if (alpha < 0.02) discard;
-        gl_FragColor = vec4(finalCol, alpha);
-      }
-    `;
-
-    const ribbonUniforms = {
-      uTime: { value: 0 },
-      uIsDarkRibbon: { value: 1.0 }
-    };
-    const mistUniforms = {
-      uTime: { value: 0 },
-      uIsDarkRibbon: { value: 0.0 }
-    };
-    TOWER_SHADER_UNIFORMS.voidList.push(ribbonUniforms, mistUniforms);
-
-    const ribbonMat = new THREE.ShaderMaterial({
-      uniforms: ribbonUniforms,
-      vertexShader: VOID_MIST_VERTEX,
-      fragmentShader: VOID_MIST_FRAGMENT,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-
-    const mistMat = new THREE.ShaderMaterial({
-      uniforms: mistUniforms,
-      vertexShader: VOID_MIST_VERTEX,
-      fragmentShader: VOID_MIST_FRAGMENT,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide
-    });
-
-    // 2) Шейдер 3D Simplex Noise растворения ступеней (из STAIR_DISSOLVE_FRAGMENT_SHADER в void tower.html)
-    const stairDissolveUniforms = {
-      uTime: { value: 0 },
-      uDissolveLevel: { value: 0.39 },
-      uEdgeIntensity: { value: 1.45 },
-      uBrokenEnd: { value: 1.0 }
-    };
-    const stairPartialDissolveUniforms = {
-      uTime: { value: 0 },
-      uDissolveLevel: { value: 0.39 },
-      uEdgeIntensity: { value: 1.2 },
-      uBrokenEnd: { value: 0.55 }
-    };
-    TOWER_SHADER_UNIFORMS.voidList.push(stairDissolveUniforms, stairPartialDissolveUniforms);
-
-    const STAIR_DISSOLVE_VERTEX = `
-      varying vec2 vUv;
-      varying vec3 vWorldPos;
-      varying vec3 vNormal;
-      void main() {
-        vUv = uv;
-        vNormal = normalize(normalMatrix * normal);
-        vec4 wp = modelMatrix * vec4(position, 1.0);
-        vWorldPos = wp.xyz;
-        gl_Position = projectionMatrix * viewMatrix * wp;
-      }
-    `;
-    const STAIR_DISSOLVE_FRAGMENT = `
-      uniform float uTime;
-      uniform float uDissolveLevel;
-      uniform float uEdgeIntensity;
-      uniform float uBrokenEnd;
-      varying vec2 vUv;
-      varying vec3 vWorldPos;
-      varying vec3 vNormal;
-      ${GLSL_SIMPLEX_NOISE}
-
-      void main() {
-        float grain = snoise(vWorldPos * 2.4) * 0.5 + 0.5;
-        vec3 stoneBase = mix(vec3(0.035, 0.018, 0.062), vec3(0.095, 0.045, 0.15), grain);
-
-        vec3 lightDir = normalize(vec3(0.3, 1.0, 0.4));
-        float diff = max(dot(vNormal, lightDir), 0.15);
-        vec3 color = stoneBase * (0.45 + 0.75 * diff);
-
-        float noiseVal = snoise(vWorldPos * 0.85 + vec3(0.0, uTime * 0.35, 0.0)) * 0.5 + 0.5;
-        float fineNoise = snoise(vWorldPos * 2.8 - vec3(uTime * 0.5)) * 0.22;
-        float combinedNoise = noiseVal + fineNoise;
-
-        float edgeFactor = max(abs(vUv.x - 0.5), abs(vUv.y - 0.5)) * 2.0;
-        float threshold = uBrokenEnd * (uDissolveLevel + edgeFactor * 0.34);
-
-        if (combinedNoise < threshold) {
-          discard;
-        }
-
-        float burnWidth = 0.15 * uBrokenEnd;
-        float edgeGlow = 1.0 - smoothstep(threshold, threshold + burnWidth, combinedNoise);
-        vec3 voidEdgeColor = vec3(0.659, 0.333, 0.969) * 2.6;
-
-        color = mix(color, voidEdgeColor, edgeGlow * uBrokenEnd * uEdgeIntensity);
-        gl_FragColor = vec4(color, 1.0);
-      }
-    `;
-
-    const dissolvedStairMat = new THREE.ShaderMaterial({
-      uniforms: stairDissolveUniforms,
-      vertexShader: STAIR_DISSOLVE_VERTEX,
-      fragmentShader: STAIR_DISSOLVE_FRAGMENT,
-      side: THREE.DoubleSide
-    });
-
-    const partialDissolveStairMat = new THREE.ShaderMaterial({
-      uniforms: stairPartialDissolveUniforms,
-      vertexShader: STAIR_DISSOLVE_VERTEX,
-      fragmentShader: STAIR_DISSOLVE_FRAGMENT,
-      side: THREE.DoubleSide
-    });
-
-    const phantomStepOutlineMat = new THREE.MeshBasicMaterial({
-      color: 0xa855f7,
-      wireframe: true,
-      transparent: true,
-      opacity: 0.42,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    const stepBoxGeo = new THREE.BoxGeometry(3.92, 0.85, 3.92, 4, 2, 4);
-    const stepTopFrameGeo = new THREE.BoxGeometry(3.96, 0.08, 3.96, 2, 1, 2);
-    const shardGeo = new THREE.DodecahedronGeometry(0.36, 0);
-
-    for (let floor = 0; floor < 12; floor++) {
-      const floorY = floor * 14;
-
-      // Рунические панели на пилястрах
       for (let p = 0; p < pillarCount; p++) {
         const angle = (p / pillarCount) * TWO_PI;
-        const rx = Math.cos(angle) * 29.45;
-        const rz = Math.sin(angle) * 29.45;
+        const rx = Math.cos(angle) * (wallRadius - 0.73);
+        const rz = Math.sin(angle) * (wallRadius - 0.73);
         const rotY = -angle + Math.PI / 2;
 
         if ((floor + p) % 2 === 0) {
@@ -1709,14 +1880,13 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         }
       }
 
-      // Извилистые полупрозрачные ленты абсолютной тьмы, выходящие из трещин в стенах (из createDarkVoidRibbons в void tower.html)
       for (let rIdx = 0; rIdx < 2; rIdx++) {
         const baseAngle = ((floor * 3 + rIdx * 4) / 8) * TWO_PI + 0.25;
         const startY = floorY + 2.0 + rIdx * 5.0;
         const points = [];
         for (let pt = 0; pt <= 7; pt++) {
           const t = pt / 7;
-          const r = 30.2 - t * 8.5;
+          const r = wallRadius - t * 8.5;
           const ang = baseAngle + Math.sin(t * Math.PI * 1.5 + floor + rIdx) * 0.18;
           const y = startY + t * 8.5 + Math.cos(t * Math.PI * 2.0) * 1.2;
           points.push(new THREE.Vector3(Math.cos(ang) * r, y, Math.sin(ang) * r));
@@ -1731,25 +1901,20 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
         towerDecorGroup.add(ribbonMesh);
       }
 
-      // Ступени лестниц Башни Пустоты: часть ступеней визуально «растворившиеся» (но на них можно встать!),
-      // а остальные имеют неоново-фиолетовую растворяющуюся кромку (#a855f7)
       const stairs = stairPositionsByFloor[floor] || [];
       for (let s = 0; s < stairs.length; s++) {
         const [sx, sz, topY, stepBlockIdx] = stairs[s];
         const isFullyDissolvedStep = voidDissolvedStairStepSet.has(stepBlockIdx);
 
         if (isFullyDissolvedStep) {
-          // 1. Растворяющееся ядро ступени с 3D Simplex Noise и неоновой кромкой #a855f7
           const dissolvedMesh = new THREE.Mesh(stepBoxGeo, dissolvedStairMat);
           dissolvedMesh.position.set(sx, topY - 0.45, sz);
           towerDecorGroup.add(dissolvedMesh);
 
-          // 2. Тонкий призрачный рунный каркас верхней плоскости, чтобы игрок видел опору, на которую можно встать
           const phantomFrame = new THREE.Mesh(stepTopFrameGeo, phantomStepOutlineMat);
           phantomFrame.position.set(sx, topY - 0.04, sz);
           towerDecorGroup.add(phantomFrame);
 
-          // 3. Парящие вокруг растворившейся ступени каменные осколки в аномальной гравитации
           for (let sh = 0; sh < 4; sh++) {
             const shard = new THREE.Mesh(shardGeo, dissolvedStairMat);
             const ang = (sh / 4) * TWO_PI + s;
@@ -1770,7 +1935,6 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
             towerDecorGroup.add(shard);
           }
 
-          // 4. Клубы фиолетово-чёрного эфира Пустоты на месте растворения
           const mistPlaneGeo = new THREE.PlaneGeometry(3.4, 3.4, 3, 3);
           const mCount = mistPlaneGeo.attributes.position.count;
           const mPhases = new Float32Array(mCount);
@@ -1782,15 +1946,64 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
           towerDecorGroup.add(mistBill);
           voidMistBillboards.push(mistBill);
         } else {
-          // Обычная ступень Пустоты с частично растворяющимися неоновыми кромками
           const edgeStepMesh = new THREE.Mesh(stepBoxGeo, partialDissolveStairMat);
           edgeStepMesh.position.set(sx, topY - 0.48, sz);
           towerDecorGroup.add(edgeStepMesh);
         }
       }
     }
+  }
 
-    // Парящие в невесомости обломки ступеней и рунные монолиты по всей высоте башни
+  // Сборка мешей обугленной породы (Ash)
+  if (charredRockParts.length) {
+    const charredRockMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#18181b'),
+      map: TOWER_FLOOR_TEXTURES.ash.map,
+      normalMap: TOWER_FLOOR_TEXTURES.ash.normalMap,
+      normalScale: new THREE.Vector2(2.8, 2.8),
+      roughness: 0.96,
+      metalness: 0.05
+    });
+    const mergedCharredGeo = mergeGeometryParts(charredRockParts);
+    const charredMesh = new THREE.Mesh(mergedCharredGeo, charredRockMaterial);
+    charredMesh.userData.disposeMaterial = true;
+    towerDecorGroup.add(charredMesh);
+  }
+
+  // Сборка мешей морозной корки и вмёрзших силуэтов (Ice)
+  if (frostCrustParts.length) {
+    const frostCrustMat = new THREE.MeshPhysicalMaterial({
+      color: 0xe6f7ff,
+      emissive: 0x3b8ab8,
+      emissiveIntensity: 0.25,
+      roughness: 0.22,
+      metalness: 0.05,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.12,
+      envMap: ICE_ENV_CUBEMAP
+    });
+    const mergedCrustGeo = mergeGeometryParts(frostCrustParts);
+    const crustMesh = new THREE.Mesh(mergedCrustGeo, frostCrustMat);
+    crustMesh.userData.disposeMaterial = true;
+    towerDecorGroup.add(crustMesh);
+  }
+
+  if (silhouetteParts.length) {
+    const mergedSilGeo = mergeGeometryParts(silhouetteParts);
+    const silMat = new THREE.MeshStandardMaterial({
+      color: 0x0b1e36,
+      emissive: 0x1d588f,
+      emissiveIntensity: 0.82,
+      roughness: 0.35,
+      metalness: 0.25
+    });
+    const silMesh = new THREE.Mesh(mergedSilGeo, silMat);
+    silMesh.userData.disposeMaterial = true;
+    towerDecorGroup.add(silMesh);
+  }
+
+  // Парящие в невесомости обломки ступеней и рунные монолиты (Void)
+  if (voidFloorsList.length && dissolvedStairMat) {
     const floatingCount = 96;
     const floatingGeo = jitterGeometry(new THREE.BoxGeometry(1.25, 0.85, 1.25), 0.14);
     activeVoidFloatingMesh = new THREE.InstancedMesh(floatingGeo, dissolvedStairMat, floatingCount);
@@ -1798,12 +2011,12 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
 
     const dummy = new THREE.Object3D();
     for (let i = 0; i < floatingCount; i++) {
-      const floor = i % 12;
+      const floor = voidFloorsList[i % voidFloorsList.length];
       const angle = seededRandom(seed, 'vfltA', i) * TWO_PI;
       const radius =
         i % 3 === 0
-          ? 6 + seededRandom(seed, 'vfltR', i) * 14
-          : 25.8 + seededRandom(seed, 'vfltR', i) * 3.0;
+          ? 6 + seededRandom(seed, 'vfltR', i) * (TOWER_FLOOR_RADIUS - 12)
+          : TOWER_FLOOR_RADIUS - 2.2 + seededRandom(seed, 'vfltR', i) * 3.0;
       const baseY =
         i % 3 === 0
           ? floor * 14 - 4.2 - seededRandom(seed, 'vfltY', i) * 4.5
@@ -1831,71 +2044,76 @@ function buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFlo
     towerDecorGroup.add(activeVoidFloatingMesh);
   }
 
-  if (structureParts.length) {
-    const mergedStructGeo = mergeGeometryParts(structureParts);
-    const structMat = new THREE.MeshStandardMaterial({
-      map: TOWER_WALL_TEXTURES[towerId].map,
-      bumpMap: TOWER_WALL_TEXTURES[towerId].bump,
-      bumpScale: 0.3,
-      color: 0xffffff,
-      vertexColors: true,
-      roughness: towerId === 'ice' ? 0.16 : 0.86,
-      metalness: towerId === 'ice' ? 0.25 : 0.14
-    });
-    if (towerId === 'ash') {
-      structMat.normalMap = TOWER_WALL_TEXTURES.ash.normalMap;
-      structMat.normalScale = new THREE.Vector2(2.4, 2.4);
-      applyWorldStoneShader(structMat, { crackRarity: 0.5, charStrength: 0.88 });
+  // Сборка архитектурных колонн и акцентов по каждому биому
+  for (const bId of TOWER_IDS) {
+    const sParts = structurePartsByBiome[bId];
+    if (sParts && sParts.length) {
+      const mergedStructGeo = mergeGeometryParts(sParts);
+      const structMat = new THREE.MeshStandardMaterial({
+        map: TOWER_WALL_TEXTURES[bId].map,
+        bumpMap: TOWER_WALL_TEXTURES[bId].bump,
+        bumpScale: 0.3,
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: bId === 'ice' ? 0.16 : 0.86,
+        metalness: bId === 'ice' ? 0.25 : 0.14
+      });
+      if (bId === 'ash') {
+        structMat.normalMap = TOWER_WALL_TEXTURES.ash.normalMap;
+        structMat.normalScale = new THREE.Vector2(2.4, 2.4);
+        applyWorldStoneShader(structMat, { crackRarity: 0.5, charStrength: 0.88 });
+      }
+      const structMesh = new THREE.Mesh(mergedStructGeo, structMat);
+      structMesh.userData.disposeMaterial = true;
+      towerDecorGroup.add(structMesh);
     }
-    const structMesh = new THREE.Mesh(mergedStructGeo, structMat);
-    structMesh.userData.disposeMaterial = true;
-    towerDecorGroup.add(structMesh);
-  }
 
-  if (accentParts.length) {
-    const mergedAccentGeo = mergeGeometryParts(accentParts);
-    let accentMat;
-    if (towerId === 'ash') {
-      accentMat = new THREE.MeshStandardMaterial({
-        map: lavaTexture,
-        color: 0xffffff,
-        vertexColors: true,
-        emissive: 0xff6210,
-        emissiveMap: lavaTexture,
-        emissiveIntensity: 1.9,
-        roughness: 0.4
-      });
-      activeAshLavaStreamMat = accentMat;
-    } else if (towerId === 'ice') {
-      accentMat = new THREE.MeshPhysicalMaterial({
-        color: 0xb5ecff,
-        vertexColors: true,
-        emissive: 0x2d7aa8,
-        emissiveIntensity: 0.38,
-        roughness: 0.08,
-        metalness: 0.05,
-        transmission: 0.65,
-        ior: 1.31,
-        clearcoat: 1.0,
-        envMap: ICE_ENV_CUBEMAP,
-        transparent: true,
-        opacity: 0.9
-      });
-    } else {
-      accentMat = new THREE.MeshStandardMaterial({
-        map: TOWER_WALL_TEXTURES.void.emissive,
-        color: 0xffffff,
-        vertexColors: true,
-        emissive: 0xb848ff,
-        emissiveIntensity: 1.65,
-        roughness: 0.35,
-        metalness: 0.3
-      });
-      activeVoidRunePillarMat = accentMat;
+    const aParts = accentPartsByBiome[bId];
+    if (aParts && aParts.length) {
+      const mergedAccentGeo = mergeGeometryParts(aParts);
+      let accentMat;
+      if (bId === 'ash') {
+        accentMat = new THREE.MeshStandardMaterial({
+          map: lavaTexture,
+          color: 0xffffff,
+          vertexColors: true,
+          emissive: 0xff6210,
+          emissiveMap: lavaTexture,
+          emissiveIntensity: 1.9,
+          roughness: 0.4
+        });
+        activeAshLavaStreamMat = accentMat;
+      } else if (bId === 'ice') {
+        accentMat = new THREE.MeshPhysicalMaterial({
+          color: 0xb5ecff,
+          vertexColors: true,
+          emissive: 0x2d7aa8,
+          emissiveIntensity: 0.38,
+          roughness: 0.08,
+          metalness: 0.05,
+          transmission: 0.65,
+          ior: 1.31,
+          clearcoat: 1.0,
+          envMap: ICE_ENV_CUBEMAP,
+          transparent: true,
+          opacity: 0.9
+        });
+      } else {
+        accentMat = new THREE.MeshStandardMaterial({
+          map: TOWER_WALL_TEXTURES.void.emissive,
+          color: 0xffffff,
+          vertexColors: true,
+          emissive: 0xb848ff,
+          emissiveIntensity: 1.65,
+          roughness: 0.35,
+          metalness: 0.3
+        });
+        activeVoidRunePillarMat = accentMat;
+      }
+      const accentMesh = new THREE.Mesh(mergedAccentGeo, accentMat);
+      accentMesh.userData.disposeMaterial = true;
+      towerDecorGroup.add(accentMesh);
     }
-    const accentMesh = new THREE.Mesh(mergedAccentGeo, accentMat);
-    accentMesh.userData.disposeMaterial = true;
-    towerDecorGroup.add(accentMesh);
   }
 }
 
@@ -1905,11 +2123,45 @@ function updateTowerDecorAnimations(time, dt, towerId) {
     const padObj = jumpPadGroup.children[i];
     const ud = padObj.userData;
     if (ud && ud.runeDisc) {
-      ud.runeDisc.rotation.z = time * 0.85;
+      ud.runeDisc.rotation.z = time * (ud.isBalconyPad ? 1.25 : 0.85);
       const lift = (time * 1.6 + i * 0.35) % 1.0;
       ud.ring.position.y = 0.2 + lift * 1.15;
       ud.ring.scale.setScalar(1.0 - lift * 0.25);
       ud.plume.scale.y = 0.85 + Math.sin(time * 5 + i) * 0.18;
+    }
+  }
+
+  // Анимация рунных маяков на балконах (floorY + 6)
+  for (let i = 0; i < balconyVantageGroup.children.length; i++) {
+    const vObj = balconyVantageGroup.children[i];
+    if (vObj.userData && vObj.userData.ring) {
+      vObj.userData.ring.rotation.z = time * 0.7 + i;
+      if (vObj.userData.crystal) {
+        vObj.userData.crystal.position.y = 1.45 + Math.sin(time * 2.8 + i) * 0.16;
+        vObj.userData.crystal.rotation.y = time * 1.5;
+      }
+    }
+  }
+
+  // Анимация Залов Кузницы и Стартовых плит готовности (Ready Plates)
+  for (const floorKey in forgeHallsByFloor) {
+    const fh = forgeHallsByFloor[floorKey];
+    if (!fh) continue;
+    if (fh.brazierFlame) {
+      fh.brazierFlame.scale.y = 0.9 + Math.sin(time * 9 + Number(floorKey)) * 0.22;
+      fh.brazierFlame.rotation.y = time * 2.4;
+    }
+    if (fh.readyPlateGroup && fh.readyPlateGroup.userData) {
+      const rud = fh.readyPlateGroup.userData;
+      if (rud.outerRing) rud.outerRing.rotation.z = time * (fh.isActivated ? 0.4 : 1.6);
+      if (rud.innerRing) {
+        const pulse = fh.isActivated ? 1.0 : 0.85 + Math.sin(time * 5) * 0.15;
+        rud.innerRing.scale.setScalar(pulse);
+      }
+      if (rud.beam) {
+        rud.beam.visible = !fh.isActivated;
+        rud.beam.scale.y = 0.9 + Math.sin(time * 4) * 0.15;
+      }
     }
   }
 
@@ -1933,13 +2185,11 @@ function updateTowerDecorAnimations(time, dt, towerId) {
     }
   }
 
-  // Пульсация Печати (Врат босса)
   bossGateBeamMat.opacity = 0.78 + Math.sin(time * 6.5) * 0.18;
 
-  if (towerId === 'ash') {
+  // Анимация потоков и капель лавы (Пепельный акт)
+  if (ashWallStreamGlobs.length || ashFallingDrops.length) {
     const speedScale = (activeVFXState.lavaSpeed || 2.25) / 2.1;
-
-    // 1. Анимация вязких сгустков лавы, стекающих вдоль настенных 3D-потоков (из ash tower.html)
     for (let i = 0; i < ashWallStreamGlobs.length; i++) {
       const g = ashWallStreamGlobs[i];
       const t = (time * g.speed * speedScale + g.phase) % 1.0;
@@ -1949,11 +2199,9 @@ function updateTowerDecorAnimations(time, dt, towerId) {
       g.mesh.scale.set(0.85 * s, 1.65 * s, 0.85 * s);
     }
 
-    // 2. Анимация капель лавы, срывающихся со ступеней в небольшие лужицы (3 фазы из ash tower.html)
     for (let i = 0; i < ashFallingDrops.length; i++) {
       const d = ashFallingDrops[i];
       const cycle = (time * d.speed * speedScale + d.phase) % 1.0;
-
       if (cycle < 0.32) {
         const grow = cycle / 0.32;
         d.mesh.position.set(d.startX, d.startY - grow * 0.08, d.startZ);
@@ -1979,11 +2227,13 @@ function updateTowerDecorAnimations(time, dt, towerId) {
     if (activeAshLavaStreamMat) {
       activeAshLavaStreamMat.emissiveIntensity = 1.75 + Math.sin(time * 3.4) * 0.3;
     }
-  } else if (towerId === 'void') {
+  }
+
+  // Анимация левитирующих обломков (Акт Пустоты)
+  if (activeVoidFloatingMesh || voidFloatingDebrisMeshes.length) {
     const gravAnom = activeVFXState.gravityAnomaly || 1.4;
     const gravTime = time * gravAnom;
 
-    // Левитация инстансированных обломков в невесомости
     if (activeVoidFloatingMesh && activeVoidFloatingData.length) {
       const dummy = _pickupDummyObj;
       for (let i = 0; i < activeVoidFloatingData.length; i++) {
@@ -2005,7 +2255,6 @@ function updateTowerDecorAnimations(time, dt, towerId) {
       activeVoidFloatingMesh.instanceMatrix.needsUpdate = true;
     }
 
-    // Левитация осколков у растворившихся ступеней
     for (let i = 0; i < voidFloatingDebrisMeshes.length; i++) {
       const obj = voidFloatingDebrisMeshes[i];
       const ud = obj.userData;
@@ -2027,22 +2276,93 @@ function updateTowerDecorAnimations(time, dt, towerId) {
   }
 }
 
-function buildTower(seed) {
-  if (towerInstancedMesh) {
-    scene.remove(towerInstancedMesh);
-    towerInstancedMesh = null;
+/* ---------- 4. Вспомогательная морфология: гарантия ширины перешейков ≥ 2 клеток (8 м) ---------- */
+
+/**
+ * Гарантирует, что на планировках ring и spokes нет узких перешейков в 1 клетку (4 м):
+ * каждая активная клетка входит хотя бы в один квадрат 2×2 клетки (8×8 м) в пределах круга этажа.
+ */
+function enforceMinTwoCellWidthOnLayout(activeCells, maxRadiusSq) {
+  const snapshot = new Set(activeCells);
+  const toKey = (i, j) => (i + GRID_OFFSET) * GRID_DIM + (j + GRID_OFFSET);
+  const inBounds = (i, j) =>
+    i >= -GRID_OFFSET &&
+    i <= GRID_OFFSET &&
+    j >= -GRID_OFFSET &&
+    j <= GRID_OFFSET &&
+    i * i + j * j <= maxRadiusSq;
+
+  for (const key of snapshot) {
+    const ci = ((key / GRID_DIM) | 0) - GRID_OFFSET;
+    const cj = (key % GRID_DIM) - GRID_OFFSET;
+
+    const has2x2Block =
+      (activeCells.has(toKey(ci + 1, cj)) &&
+        activeCells.has(toKey(ci, cj + 1)) &&
+        activeCells.has(toKey(ci + 1, cj + 1))) ||
+      (activeCells.has(toKey(ci - 1, cj)) &&
+        activeCells.has(toKey(ci, cj + 1)) &&
+        activeCells.has(toKey(ci - 1, cj + 1))) ||
+      (activeCells.has(toKey(ci + 1, cj)) &&
+        activeCells.has(toKey(ci, cj - 1)) &&
+        activeCells.has(toKey(ci + 1, cj - 1))) ||
+      (activeCells.has(toKey(ci - 1, cj)) &&
+        activeCells.has(toKey(ci, cj - 1)) &&
+        activeCells.has(toKey(ci - 1, cj - 1)));
+
+    if (!has2x2Block) {
+      // Расширяем перешеек в сторону центра башни или по касательной до 2 клеток (8 м)
+      const di = ci > 0 ? -1 : 1;
+      const dj = cj > 0 ? -1 : 1;
+      if (inBounds(ci + di, cj)) activeCells.add(toKey(ci + di, cj));
+      if (inBounds(ci, cj + dj)) activeCells.add(toKey(ci, cj + dj));
+      if (inBounds(ci + di, cj + dj)) activeCells.add(toKey(ci + di, cj + dj));
+    }
   }
+}
+
+/* ---------- 5. Главная функция процедурной генерации башни buildTower ---------- */
+
+function buildTower(seed, customPlayerCount, customCampaignModeId) {
+  const targetPlayers =
+    customPlayerCount ||
+    (typeof state !== 'undefined' && state && state.playerCount) ||
+    (typeof selectedPlayerCount !== 'undefined' && selectedPlayerCount) ||
+    activeCoopPlayerCount ||
+    2;
+  const targetCampaign =
+    customCampaignModeId ||
+    (typeof state !== 'undefined' && state && state.campaignModeId) ||
+    (typeof selectedCampaignModeId !== 'undefined' && selectedCampaignModeId) ||
+    activeCampaignModeId ||
+    'acts3_24';
+
+  configureTowerSpatialScale(targetPlayers, targetCampaign);
+
+  for (let i = towerInstancedGroup.children.length - 1; i >= 0; i--) {
+    const child = towerInstancedGroup.children[i];
+    towerInstancedGroup.remove(child);
+    if (child.dispose) child.dispose();
+  }
+  towerInstancedMesh = null;
+  blockInstanceRef = [];
 
   jumpPadGroup.clear();
   chestGroup.clear();
   altarGroup.clear();
   forkSpriteGroup.clear();
   bossGateSealGroup.clear();
+  forgeHallGroup.clear();
+  balconyVantageGroup.clear();
 
   chests = [];
   altars = [];
   floorLayouts = [];
   forkMarkers = [];
+  splitFloorConfigs = {};
+  balconiesByFloor = {};
+  balconyVantageZones = [];
+  forgeHallsByFloor = {};
   bossGateBlockIndices = {};
   bossGateVisualsByFloor = {};
   jumpPads = [];
@@ -2050,46 +2370,71 @@ function buildTower(seed) {
   blockGrid = new Array(GRID_FLOORS * GRID_DIM * GRID_DIM).fill(null);
   voidDissolvedStairStepSet.clear();
 
-  const towerId = currentTowerTheme ? currentTowerTheme.id : 'ash';
-
   let prevStairPositions = [];
+  let prevFloorWasFork = false;
+  let prevForkAngle = 0;
+  let prevForkSwapRoutes = false;
+
   const stairPositionsByFloor = [];
   const floorEdgeCellsByFloor = [];
   const floorValidCellsByFloor = [];
 
-  for (let floor = 0; floor < 12; floor++) {
+  const maxRadiusSq = GRID_OFFSET * GRID_OFFSET;
+  // Радиус размещения маршей лестниц масштабируется под размер этажа (15×15 / 19×19 / 23×23),
+  // а угловой шаг ступеней нормируется, чтобы длина прыжка между ступенями всегда была ~6.2 м
+  const stairGridRadius = GRID_OFFSET - 1.5;
+  const stepAngleDelta = 1.62 / stairGridRadius;
+
+  const cellKeyOf = (i, j) => (i + GRID_OFFSET) * GRID_DIM + (j + GRID_OFFSET);
+  const cellCoordsOf = (cellKey) => [
+    ((cellKey / GRID_DIM) | 0) - GRID_OFFSET,
+    (cellKey % GRID_DIM) - GRID_OFFSET
+  ];
+
+  for (let floor = 0; floor < GRID_FLOORS; floor++) {
     const floorY = floor * 14;
-    const stairStartAngle =
-      seededRandom(seed, 'tower', 0) * TWO_PI +
-      floor * Math.PI +
-      (seededRandom(seed, 'tower', floor + 1) - 0.5) * 0.9;
+    const floorBiomeId = getFloorBiomeId(floor);
+    const floorTheme = TOWERS[floorBiomeId] || TOWERS.ash;
+    const isBossFloor = isBossFloorIndex(floor);
+    const hasForgeHall = hasForgeHallAfterFloor(floor);
+    const isForkFloor = FORK_FLOORS.includes(floor) && !isBossFloor && floor < GRID_FLOORS - 1;
+    const isSplitSectorFloor = prevFloorWasFork && !isBossFloor;
+
+    const stairStartAngle = isSplitSectorFloor
+      ? prevForkAngle + 6 * stepAngleDelta + 0.38
+      : seededRandom(seed, 'tower', 0) * TWO_PI +
+        floor * Math.PI +
+        (seededRandom(seed, 'tower', floor + 1) - 0.5) * 0.9;
 
     const currentStairCells = [];
-    if (floor < 11) {
-      const stairBranchCount = FORK_FLOORS.includes(floor) ? 2 : 1;
+    if (floor < GRID_FLOORS - 1) {
+      const stairBranchCount = isForkFloor || isSplitSectorFloor ? 2 : 1;
       for (let branch = 0; branch < stairBranchCount; branch++) {
         for (let stepIdx = 1; stepIdx <= 6; stepIdx++) {
-          const angle = stairStartAngle + branch * Math.PI + stepIdx * 0.3;
+          const angle = stairStartAngle + branch * Math.PI + stepIdx * stepAngleDelta;
           currentStairCells.push([
-            Math.round(Math.cos(angle) * 5.5) * 4,
-            Math.round(Math.sin(angle) * 5.5) * 4
+            Math.round(Math.cos(angle) * stairGridRadius) * 4,
+            Math.round(Math.sin(angle) * stairGridRadius) * 4,
+            branch
           ]);
         }
       }
     }
 
     const layoutRoll = seededRandom(seed, 'lay', floor);
-    const weights = currentTowerTheme.layoutWeights;
+    const weights = floorTheme.layoutWeights;
     const initialLayout =
-      floor === 0 || floor % 4 === 3
+      floor === 0 || isBossFloor
         ? 'disc'
-        : layoutRoll < weights[0]
-          ? 'disc'
-          : layoutRoll < weights[1]
-            ? 'ring'
-            : layoutRoll < weights[2]
-              ? 'spokes'
-              : 'islands';
+        : isSplitSectorFloor
+          ? 'split_ring'
+          : layoutRoll < weights[0]
+            ? 'disc'
+            : layoutRoll < weights[1]
+              ? 'ring'
+              : layoutRoll < weights[2]
+                ? 'spokes'
+                : 'islands';
 
     const activeCells = new Set();
     const isNearAnyPoint = (pointList, gridI, gridJ, radiusCells) =>
@@ -2097,46 +2442,118 @@ function buildTower(seed) {
         (pt) => Math.abs(pt[0] / 4 - gridI) <= radiusCells && Math.abs(pt[1] / 4 - gridJ) <= radiusCells
       );
 
-    for (let i = -7; i <= 7; i++) {
-      for (let j = -7; j <= 7; j++) {
-        if (i * i + j * j > 49) continue;
+    for (let i = -GRID_OFFSET; i <= GRID_OFFSET; i++) {
+      for (let j = -GRID_OFFSET; j <= GRID_OFFSET; j++) {
+        if (i * i + j * j > maxRadiusSq) continue;
         const x = i * 4;
         const z = j * 4;
         if (prevStairPositions.some((st) => Math.pow(st[0] - x, 2) + Math.pow(st[1] - z, 2) < 25)) {
           continue;
         }
-        activeCells.add((i + 7) * 15 + j + 7);
+        activeCells.add(cellKeyOf(i, j));
       }
     }
 
     let finalLayout = initialLayout;
-    if (initialLayout !== 'disc') {
-      const fullCellsBackup = new Set(activeCells);
-      for (const cellKey of fullCellsBackup) {
-        const i = ((cellKey / 15) | 0) - 7;
-        const j = (cellKey % 15) - 7;
-        if (isNearAnyPoint(currentStairCells, i, j, 1) || isNearAnyPoint(prevStairPositions, i, j, 2)) {
+
+    // --- СПЕЦИАЛЬНАЯ ПЛАНИРОВКА РАЗДЕЛЁННЫХ СЕКТОРОВ (ПОСЛЕ РАЗВИЛКИ FORK_FLOORS) ---
+    if (initialLayout === 'split_ring') {
+      // Ось разделения проходит между точками выхода двух лестниц предыдущего этажа
+      const axisAngle = prevForkAngle + 6 * stepAngleDelta;
+      const axisCos = Math.cos(axisAngle);
+      const axisSin = Math.sin(axisAngle);
+      const positiveRoute = !prevForkSwapRoutes ? 1 : 2;
+      const negativeRoute = !prevForkSwapRoutes ? 2 : 1;
+
+      splitFloorConfigs[floor] = {
+        axisAngle,
+        axisCos,
+        axisSin,
+        positiveRoute,
+        negativeRoute
+      };
+
+      const innerHoleR = Math.max(2.2, GRID_OFFSET - 4.2);
+      for (const cellKey of [...activeCells]) {
+        const [i, j] = cellCoordsOf(cellKey);
+        const x = i * 4;
+        const z = j * 4;
+        const sideProj = x * axisCos + z * axisSin;
+
+        // 1) Широкий (8 м = 2 клетки) диаметральный разлом посередине, изолирующий 2 полукольца
+        if (Math.abs(sideProj) < 4.2) {
+          activeCells.delete(cellKey);
           continue;
         }
-        if (initialLayout === 'ring' && i * i + j * j <= 10) {
+        // 2) Центральное отверстие полуколец (при сохранении ширины каждого полукольца ≥ 3 клеток = 12 м)
+        if (
+          i * i + j * j < innerHoleR * innerHoleR &&
+          !isNearAnyPoint(currentStairCells, i, j, 2) &&
+          !isNearAnyPoint(prevStairPositions, i, j, 2)
+        ) {
+          activeCells.delete(cellKey);
+        }
+      }
+
+      // Визуальные энергетические маяки вдоль линии разделения двух полуколец
+      for (let rStep = -GRID_OFFSET + 2; rStep <= GRID_OFFSET - 2; rStep += 3) {
+        const perpX = -axisSin * (rStep * 4);
+        const perpZ = axisCos * (rStep * 4);
+        for (const side of [-1, 1]) {
+          const routeId = side > 0 ? positiveRoute : negativeRoute;
+          const spr = new THREE.Sprite(FORK_ROUTE_MATERIALS[routeId]);
+          spr.scale.setScalar(3.2);
+          spr.position.set(
+            perpX + axisCos * side * 5.2,
+            floorY + 1.8,
+            perpZ + axisSin * side * 5.2
+          );
+          forkSpriteGroup.add(spr);
+        }
+      }
+    }
+    // --- СТАНДАРТНЫЕ ПЛАНИРОВКИ С РАСШИРЕННЫМИ ДО 2 КЛЕТОК (8 М) ПЕРЕШЕЙКАМИ ---
+    else if (initialLayout !== 'disc') {
+      const fullCellsBackup = new Set(activeCells);
+      // Внутренний радиус кольца масштабируется так, чтобы обод кольца всегда был ≥ 3 клеток (12 м)
+      const ringInnerRadiusSq = Math.pow(Math.max(3.0, GRID_OFFSET - 3.5), 2);
+      // В планировке «Мосты» (spokes) мосты имеют ширину ≥ 2–3 клеток (8–12 м), а обод — ≥ 2.5 клеток (10 м)
+      const spokeOuterRingRadiusSq = Math.pow(Math.max(4.5, GRID_OFFSET - 2.5), 2);
+      const spokeHubRadiusSq = Math.pow(Math.max(2.2, GRID_OFFSET * 0.3), 2);
+
+      for (const cellKey of fullCellsBackup) {
+        const [i, j] = cellCoordsOf(cellKey);
+        // Расширенная зона безопасности (2 клетки = 8 м) вокруг входов и выходов лестниц
+        if (
+          isNearAnyPoint(currentStairCells, i, j, 2) ||
+          isNearAnyPoint(prevStairPositions, i, j, 2)
+        ) {
+          continue;
+        }
+        if (initialLayout === 'ring' && i * i + j * j <= ringInnerRadiusSq) {
           activeCells.delete(cellKey);
         } else if (
           initialLayout === 'spokes' &&
           Math.abs(i) > 1 &&
           Math.abs(j) > 1 &&
-          i * i + j * j < 25
+          i * i + j * j > spokeHubRadiusSq &&
+          i * i + j * j < spokeOuterRingRadiusSq
         ) {
           activeCells.delete(cellKey);
         } else if (
           initialLayout === 'islands' &&
-          seededRandom(seed, 'isl' + floor, cellKey) < currentTowerTheme.islandRemoveProb
+          seededRandom(seed, 'isl' + floor, cellKey) < floorTheme.islandRemoveProb
         ) {
           activeCells.delete(cellKey);
         }
       }
 
+      if (initialLayout === 'ring' || initialLayout === 'spokes') {
+        enforceMinTwoCellWidthOnLayout(activeCells, maxRadiusSq);
+      }
+
       const startCellKey = currentStairCells.length
-        ? (currentStairCells[0][0] / 4 + 7) * 15 + currentStairCells[0][1] / 4 + 7
+        ? cellKeyOf(currentStairCells[0][0] / 4, currentStairCells[0][1] / 4)
         : -1;
       const visitedCells = new Set();
       const queue = [startCellKey];
@@ -2145,14 +2562,14 @@ function buildTower(seed) {
         visitedCells.add(startCellKey);
         while (queue.length) {
           const cur = queue.pop();
-          const ci = (cur / 15) | 0;
-          const cj = cur % 15;
+          const ci = (cur / GRID_DIM) | 0;
+          const cj = cur % GRID_DIM;
           for (let di = -2; di <= 2; di++) {
             for (let dj = -2; dj <= 2; dj++) {
               const ni = ci + di;
               const nj = cj + dj;
-              if (ni < 0 || nj < 0 || ni > 14 || nj > 14) continue;
-              const neighborKey = ni * 15 + nj;
+              if (ni < 0 || nj < 0 || ni >= GRID_DIM || nj >= GRID_DIM) continue;
+              const neighborKey = ni * GRID_DIM + nj;
               if (activeCells.has(neighborKey) && !visitedCells.has(neighborKey)) {
                 visitedCells.add(neighborKey);
                 queue.push(neighborKey);
@@ -2164,16 +2581,14 @@ function buildTower(seed) {
 
       let isDisconnected = !activeCells.has(startCellKey);
       for (const stairPt of currentStairCells) {
-        const stairKey = (stairPt[0] / 4 + 7) * 15 + stairPt[1] / 4 + 7;
+        const stairKey = cellKeyOf(stairPt[0] / 4, stairPt[1] / 4);
         if (activeCells.has(stairKey) && !visitedCells.has(stairKey)) {
           isDisconnected = true;
         }
       }
       for (const cellKey of activeCells) {
-        if (
-          !visitedCells.has(cellKey) &&
-          isNearAnyPoint(prevStairPositions, ((cellKey / 15) | 0) - 7, (cellKey % 15) - 7, 2)
-        ) {
+        const [ci, cj] = cellCoordsOf(cellKey);
+        if (!visitedCells.has(cellKey) && isNearAnyPoint(prevStairPositions, ci, cj, 2)) {
           isDisconnected = true;
         }
       }
@@ -2193,52 +2608,73 @@ function buildTower(seed) {
     const edgeCells = [];
     const validFloorCells = [];
     for (const cellKey of activeCells) {
-      const ci = (cellKey / 15) | 0;
-      const cj = cellKey % 15;
-      const x = (ci - 7) * 4;
-      const z = (cj - 7) * 4;
-      blocks.push([x - 2, x + 2, z - 2, z + 2, floorY - 1, floorY, floor]);
+      const ci = (cellKey / GRID_DIM) | 0;
+      const cj = cellKey % GRID_DIM;
+      const x = (ci - GRID_OFFSET) * 4;
+      const z = (cj - GRID_OFFSET) * 4;
+
+      // На этажах с разделёнными секторами окрашиваем плиты в тон своего маршрута (1 — зелёный, 2 — красный)
+      let floorTileTag = 0;
+      if (finalLayout === 'split_ring') {
+        const secRoute = getSectorRouteAtPosition(floor, x, z);
+        floorTileTag = secRoute === 1 ? 5 : secRoute === 2 ? 6 : 0;
+      }
+
+      blocks.push([x - 2, x + 2, z - 2, z + 2, floorY - 1, floorY, floor, floorTileTag]);
 
       const isEdge =
-        !activeCells.has((ci - 1) * 15 + cj) ||
-        !activeCells.has((ci + 1) * 15 + cj) ||
-        !activeCells.has(ci * 15 + (cj - 1)) ||
-        !activeCells.has(ci * 15 + (cj + 1));
+        !activeCells.has((ci - 1) * GRID_DIM + cj) ||
+        !activeCells.has((ci + 1) * GRID_DIM + cj) ||
+        !activeCells.has(ci * GRID_DIM + (cj - 1)) ||
+        !activeCells.has(ci * GRID_DIM + (cj + 1));
 
       if (isEdge) {
         edgeCells.push([x, z]);
-      } else if (!isNearAnyPoint(currentStairCells, ci - 7, cj - 7, 1)) {
+      } else if (!isNearAnyPoint(currentStairCells, ci - GRID_OFFSET, cj - GRID_OFFSET, 1)) {
         validFloorCells.push([x, z]);
       }
     }
     floorEdgeCellsByFloor[floor] = edgeCells;
     floorValidCellsByFloor[floor] = validFloorCells;
 
+    // --- ПОСТРОЕНИЕ ЛЕСТНИЦ, РАЗВИЛОК И БЕЗОПАСНЫХ «ЗАЛОВ КУЗНИЦЫ» ПОСЛЕ БОССОВ ---
     prevStairPositions = [];
     const floorStairs = [];
-    const isForkFloor = FORK_FLOORS.includes(floor);
     const swapRoutes = seededRandom(seed, 'forkr', floor) < 0.5;
 
-    if (floor < 11) {
-      for (let branch = 0; branch < (isForkFloor ? 2 : 1); branch++) {
+    if (floor < GRID_FLOORS - 1) {
+      const branchCount = isForkFloor || isSplitSectorFloor ? 2 : 1;
+      for (let branch = 0; branch < branchCount; branch++) {
         for (let stepIdx = 1; stepIdx <= 6; stepIdx++) {
-          const angle = stairStartAngle + branch * Math.PI + stepIdx * 0.3;
-          const x = Math.round(Math.cos(angle) * 5.5) * 4;
-          const z = Math.round(Math.sin(angle) * 5.5) * 4;
-          const routeTag = isForkFloor ? ((branch === 0) !== swapRoutes ? 1 : 2) : 0;
+          const angle = stairStartAngle + branch * Math.PI + stepIdx * stepAngleDelta;
+          const x = Math.round(Math.cos(angle) * stairGridRadius) * 4;
+          const z = Math.round(Math.sin(angle) * stairGridRadius) * 4;
 
-          // Физический блок ступени всегда остаётся в массиве blocks (на растворённые ступени можно встать!)
+          let routeTag = 0;
+          if (isForkFloor) {
+            routeTag = (branch === 0) !== swapRoutes ? 1 : 2;
+          } else if (isSplitSectorFloor) {
+            routeTag = getSectorRouteAtPosition(floor, x, z);
+          }
+
+          // На этажах с Залом Кузницы ступени 1..3 ведут в Зал Кузницы (floorY + 6.5),
+          // а ступени 4..6 ведут из Зала Кузницы к Стартовой плите следующего яруса
+          const stepTopY = hasForgeHall
+            ? stepIdx <= 3
+              ? floorY + stepIdx * 1.85
+              : floorY + 6.5 + (stepIdx - 3) * 1.9
+            : floorY + 2 * stepIdx;
+
           const stepBlockIndex = blocks.length;
-          blocks.push([x - 2, x + 2, z - 2, z + 2, floorY, floorY + 2 * stepIdx, floor, routeTag]);
-          prevStairPositions.push([x, z]);
-          floorStairs.push([x, z, floorY + 2 * stepIdx, stepBlockIndex]);
+          blocks.push([x - 2, x + 2, z - 2, z + 2, floorY, stepTopY, floor, routeTag]);
+          prevStairPositions.push([x, z, routeTag]);
+          floorStairs.push([x, z, stepTopY, stepBlockIndex]);
 
-          // В Башне Пустоты ступени 3 и 5 каждого марша отмечаются как «растворившиеся»
-          if (towerId === 'void' && (stepIdx === 3 || stepIdx === 5)) {
+          if (floorBiomeId === 'void' && (stepIdx === 3 || stepIdx === 5) && !hasForgeHall) {
             voidDissolvedStairStepSet.add(stepBlockIndex);
           }
 
-          if (floor % 4 === 3 && floor < 11) {
+          if (isBossFloor) {
             blocks.push([x - 2.05, x + 2.05, z - 2.05, z + 2.05, floorY, floorY + 16, floor, 3]);
             (bossGateBlockIndices[floor] = bossGateBlockIndices[floor] || []).push(blocks.length - 1);
           }
@@ -2246,7 +2682,7 @@ function buildTower(seed) {
           if (isForkFloor && (stepIdx === 1 || stepIdx === 6)) {
             const markerSprite = new THREE.Sprite(FORK_ROUTE_MATERIALS[routeTag]);
             markerSprite.scale.setScalar(stepIdx === 1 ? 5 : 6);
-            markerSprite.position.set(x, floorY + 2 * stepIdx + 3, z);
+            markerSprite.position.set(x, stepTopY + 3, z);
             forkSpriteGroup.add(markerSprite);
             if (stepIdx === 6) {
               forkMarkers.push({ floor, x, z, route: routeTag });
@@ -2254,23 +2690,253 @@ function buildTower(seed) {
           }
         }
       }
+
+      // --- СОЗДАНИЕ БЕЗОПАСНОГО «ЗАЛА КУЗНИЦЫ» (БУФЕРНОЙ ПЛОЩАДКИ ПОСЛЕ БОССА) ---
+      if (hasForgeHall && floorStairs.length >= 6) {
+        const hallY = floorY + 6.5;
+        const midStep = floorStairs[2]; // Ступень 3
+        const nextStep = floorStairs[3]; // Ступень 4
+        const hallCenterX = Math.round(((midStep[0] + nextStep[0]) * 0.5) / 4) * 4;
+        const hallCenterZ = Math.round(((midStep[1] + nextStep[1]) * 0.5) / 4) * 4;
+
+        // Буферная площадка 3×3 клетки (12×12 м) между этажом босса и следующим ярусом
+        const hallCells = [];
+        for (let hi = -1; hi <= 1; hi++) {
+          for (let hj = -1; hj <= 1; hj++) {
+            const hx = hallCenterX + hi * 4;
+            const hz = hallCenterZ + hj * 4;
+            if (hx * hx + hz * hz > maxRadiusSq * 16) continue;
+            blocks.push([hx - 2, hx + 2, hz - 2, hz + 2, hallY - 0.85, hallY, floor, 7]);
+            hallCells.push([hx, hz]);
+          }
+        }
+
+        // Наковальня Кузницы и Целебный Горн в центре буферной площадки
+        const anvilMesh = new THREE.Mesh(forgeAnvilGeo, forgeAnvilMat);
+        anvilMesh.position.set(hallCenterX, hallY, hallCenterZ);
+        forgeHallGroup.add(anvilMesh);
+
+        const brazierGlow = new THREE.Sprite(chestGlowMat);
+        brazierGlow.scale.setScalar(4.8);
+        brazierGlow.position.set(hallCenterX, hallY + 1.8, hallCenterZ);
+        forgeHallGroup.add(brazierGlow);
+
+        const brazierFlame = new THREE.Mesh(
+          new THREE.ConeGeometry(0.42, 1.3, 7),
+          new THREE.MeshBasicMaterial({
+            color: 0xff9828,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        brazierFlame.position.set(hallCenterX, hallY + 1.55, hallCenterZ);
+        forgeHallGroup.add(brazierFlame);
+
+        // Стартовая плита следующего яруса (Ready Plate) на выходе из Зала Кузницы (на высоте (floor + 1) * 14)
+        const topStep = floorStairs[5];
+        const readyAngle = stairStartAngle + 6.8 * stepAngleDelta;
+        const readyX = Math.round((Math.cos(readyAngle) * (stairGridRadius - 1.2)) / 4) * 4 || topStep[0];
+        const readyZ = Math.round((Math.sin(readyAngle) * (stairGridRadius - 1.2)) / 4) * 4 || topStep[1];
+        const nextFloorY = (floor + 1) * 14;
+
+        // Гарантируем твёрдую стартовую плиту (Ready Plate) на входе следующего яруса (floor + 1)
+        blocks.push([readyX - 2, readyX + 2, readyZ - 2, readyZ + 2, nextFloorY - 1, nextFloorY, floor + 1, 7]);
+
+        const readyPlateGroup = new THREE.Group();
+        readyPlateGroup.position.set(readyX, nextFloorY + 0.06, readyZ);
+
+        const outerRing = new THREE.Mesh(
+          new THREE.RingGeometry(2.8, 3.35, 36),
+          readyPlateRingMat
+        );
+        outerRing.rotation.x = -Math.PI / 2;
+        readyPlateGroup.add(outerRing);
+
+        const innerRing = new THREE.Mesh(
+          new THREE.CircleGeometry(2.65, 32),
+          new THREE.MeshBasicMaterial({
+            map: TEXTURES.runicJumpPad,
+            color: 0x48ffe8,
+            transparent: true,
+            opacity: 0.72,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+          })
+        );
+        innerRing.rotation.x = -Math.PI / 2;
+        innerRing.position.y = 0.02;
+        readyPlateGroup.add(innerRing);
+
+        const beamGeo = new THREE.CylinderGeometry(2.6, 2.9, 5.5, 24, 1, true);
+        beamGeo.translate(0, 2.75, 0);
+        const beam = new THREE.Mesh(beamGeo, readyPlateBeamMat);
+        readyPlateGroup.add(beam);
+
+        readyPlateGroup.userData = { outerRing, innerRing, beam };
+        forgeHallGroup.add(readyPlateGroup);
+
+        forgeHallsByFloor[floor] = {
+          bossFloor: floor,
+          nextFloor: floor + 1,
+          hallX: hallCenterX,
+          hallY,
+          hallZ: hallCenterZ,
+          readyX,
+          readyY: nextFloorY,
+          readyZ,
+          readyRadius: 3.6,
+          healedPlayers: {},
+          forgedUsed: 0,
+          isActivated: 0,
+          readyHoldTimer: 0,
+          brazierFlame,
+          readyPlateGroup
+        };
+      }
     }
+
     stairPositionsByFloor[floor] = floorStairs;
-    if (floor % 4 === 3 && floor < 11) {
+    if (isBossFloor && floor < GRID_FLOORS - 1) {
       bossGateVisualsByFloor[floor] = createBossGateSealVisual(floorStairs, floorY);
     }
 
+    prevFloorWasFork = isForkFloor;
+    prevForkAngle = stairStartAngle;
+    prevForkSwapRoutes = swapRoutes;
+
+    // --- ПОСТРОЕНИЕ ВЕРТИКАЛЬНЫХ ПОЛУЭТАЖЕЙ (БАЛКОНОВ НА ВЫСОТЕ floorY + 6) И ПРЫЖКОВЫХ ПЛОЩАДОК ---
+    const balconyY = floorY + 6;
+    const balconyCount = GRID_OFFSET >= 11 ? 3 : 2;
+    const floorBalconyList = [];
+    const balconyRadiusCells = GRID_OFFSET - 1.2;
+
+    for (let bIdx = 0; bIdx < balconyCount; bIdx++) {
+      // Выбираем угол балкона по периметру вдали от лестничных маршей
+      let balAngle =
+        stairStartAngle +
+        Math.PI * 0.55 +
+        (bIdx * TWO_PI) / balconyCount +
+        (seededRandom(seed, 'balA' + floor, bIdx) - 0.5) * 0.35;
+
+      const balCells = [];
+      const arcSteps = GRID_OFFSET >= 9 ? 5 : 4;
+      for (let s = -Math.floor(arcSteps / 2); s <= Math.floor(arcSteps / 2); s++) {
+        const a = balAngle + s * (0.95 / balconyRadiusCells);
+        const bx = Math.round(Math.cos(a) * balconyRadiusCells) * 4;
+        const bz = Math.round(Math.sin(a) * balconyRadiusCells) * 4;
+        const bi = bx / 4;
+        const bj = bz / 4;
+        if (bi * bi + bj * bj > maxRadiusSq) continue;
+        if (isNearAnyPoint(currentStairCells, bi, bj, 2)) continue;
+        if (balCells.some((c) => c[0] === bx && c[1] === bz)) continue;
+        balCells.push([bx, bz]);
+      }
+
+      if (balCells.length < 2) continue;
+
+      for (const [bx, bz] of balCells) {
+        // routeTag = 4 обозначает плиту вертикального полуэтажа-балкона (на высоте floorY + 6)
+        blocks.push([bx - 2, bx + 2, bz - 2, bz + 2, balconyY - 0.85, balconyY, floor, 4]);
+      }
+      const midBalCell = balCells[Math.floor(balCells.length / 2)];
+      const centerX = midBalCell[0];
+      const centerZ = midBalCell[1];
+
+      // Снайперский рунный маяк в центре балкона (точка интереса для дальнобойных билдов)
+      const vantageObj = new THREE.Group();
+      vantageObj.position.set(centerX, balconyY + 0.04, centerZ);
+      const vRing = new THREE.Mesh(new THREE.CircleGeometry(1.85, 28), balconyVantageRingMat);
+      vRing.rotation.x = -Math.PI / 2;
+      vantageObj.add(vRing);
+      const vCrystal = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.32, 0),
+        new THREE.MeshBasicMaterial({ color: 0xffe066 })
+      );
+      vCrystal.position.y = 1.45;
+      vantageObj.add(vCrystal);
+      vantageObj.userData = { ring: vRing, crystal: vCrystal };
+      balconyVantageGroup.add(vantageObj);
+
+      const balRecord = {
+        floor,
+        y: balconyY,
+        centerX,
+        centerZ,
+        extentRadius: balCells.length * 2.2,
+        cells: balCells
+      };
+      floorBalconyList.push(balRecord);
+      balconyVantageZones.push(balRecord);
+
+      // Размещаем на основном полу (floorY) прыжковую площадку (jumpPad), ведущую ровно на этот балкон!
+      const padAngle = Math.atan2(centerZ, centerX);
+      let padPlaced = false;
+      for (const rOffset of [1.8, 2.6, 1.0, 3.4]) {
+        const padGridR = Math.max(2, balconyRadiusCells - rOffset);
+        const px = Math.round(Math.cos(padAngle) * padGridR) * 4;
+        const pz = Math.round(Math.sin(padAngle) * padGridR) * 4;
+        if (
+          blocks.some(
+            (b) => b[5] === floorY && b[0] <= px && px < b[1] && b[2] <= pz && pz < b[3]
+          ) &&
+          !jumpPads.some((jp) => jp.y === floorY && hypot2D(jp.x - px, jp.z - pz) < 4.5)
+        ) {
+          jumpPads.push({
+            x: px,
+            z: pz,
+            y: floorY,
+            isBalconyPad: 1,
+            targetHeight: 7.5,
+            targetX: centerX,
+            targetZ: centerZ
+          });
+          jumpPadGroup.add(createJumpPadVisualInstance(px, floorY, pz, true));
+          padPlaced = true;
+          break;
+        }
+      }
+      if (!padPlaced && validFloorCells.length > 0) {
+        // Резервная привязка к ближайшей валидной клетке пола
+        let bestCell = null;
+        let bestDist = 1e9;
+        for (const [vx, vz] of validFloorCells) {
+          const d = hypot2D(vx - centerX, vz - centerZ);
+          if (d < bestDist && d > 3.5) {
+            bestDist = d;
+            bestCell = [vx, vz];
+          }
+        }
+        if (bestCell) {
+          jumpPads.push({
+            x: bestCell[0],
+            z: bestCell[1],
+            y: floorY,
+            isBalconyPad: 1,
+            targetHeight: 7.5,
+            targetX: centerX,
+            targetZ: centerZ
+          });
+          jumpPadGroup.add(createJumpPadVisualInstance(bestCell[0], floorY, bestCell[1], true));
+        }
+      }
+    }
+    balconiesByFloor[floor] = floorBalconyList;
+
+    // Дополнительные прыжковые площадки на этаже
     for (let i = 0; i < 2; i++) {
       const angle = seededRandom(seed, 'pad' + floor, i) * TWO_PI;
-      const radius = 6 + seededRandom(seed, 'pad' + floor, i + 9) * 14;
+      const radius = 6 + seededRandom(seed, 'pad' + floor, i + 9) * (TOWER_FLOOR_RADIUS - 12);
       const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
       const z = Math.round((Math.sin(angle) * radius) / 4) * 4;
       if (
         floor > 0 &&
-        blocks.some((b) => b[5] === floorY && b[0] <= x && x < b[1] && b[2] <= z && z < b[3])
+        blocks.some((b) => b[5] === floorY && b[0] <= x && x < b[1] && b[2] <= z && z < b[3]) &&
+        !jumpPads.some((jp) => jp.y === floorY && hypot2D(jp.x - x, jp.z - z) < 5)
       ) {
-        jumpPads.push({ x, z, y: floorY });
-        jumpPadGroup.add(createJumpPadVisualInstance(x, floorY, z));
+        jumpPads.push({ x, z, y: floorY, targetHeight: 9.8 });
+        jumpPadGroup.add(createJumpPadVisualInstance(x, floorY, z, false));
       }
     }
   }
@@ -2279,12 +2945,48 @@ function buildTower(seed) {
     insertBlockIntoGrid(i);
   }
 
-  for (let floor = 0; floor < 12; floor++) {
+  // --- РАЗМЕЩЕНИЕ СУНДУКОВ (НА ОСНОВНОМ ПОЛУ, НА БАЛКОНАХ floorY + 6 И В ОПАСНОМ СЕКТОРЕ) ---
+  function spawnChestAt(x, y, z, floor, costMultiplier = 1) {
+    const group = new THREE.Group();
+    const coreCube = new THREE.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
+    const frameMesh = new THREE.Mesh(chestGeo, chestMat);
+    const auraRing = new THREE.Mesh(chestAuraRingGeo, chestAuraRingMat);
+    auraRing.position.y = -0.18;
+    const glow = new THREE.Sprite(chestGlowMat);
+    glow.scale.setScalar(3.4);
+    glow.position.y = 0.2;
+    group.add(coreCube, frameMesh, auraRing, glow);
+    group.position.set(x, y + 0.68, z);
+    chestGroup.add(group);
+    chests.push({
+      x,
+      y,
+      z,
+      floor,
+      group,
+      isOpen: 0,
+      cost: Math.round((4 + 2.5 * floor) * costMultiplier)
+    });
+  }
+
+  for (let floor = 0; floor < GRID_FLOORS; floor++) {
     const floorY = floor * 14;
-    for (let i = 0; i < 2; i++) {
-      for (let attempt = 0; attempt < 14; attempt++) {
+    const chestsPerFloor = activeCoopPlayerCount >= 3 ? 3 : 2;
+    for (let i = 0; i < chestsPerFloor; i++) {
+      // Первый сундук на каждом втором этаже ставим на балкон (floorY + 6) как точку интереса!
+      const floorBals = balconiesByFloor[floor] || [];
+      if (i === 0 && floorBals.length > 0 && floor % 2 === 1) {
+        const chosenBal = floorBals[floor % floorBals.length];
+        const bCell = chosenBal.cells[0];
+        if (bCell) {
+          spawnChestAt(bCell[0], chosenBal.y, bCell[1], floor, 0.85);
+          continue;
+        }
+      }
+
+      for (let attempt = 0; attempt < 16; attempt++) {
         const angle = seededRandom(seed, 'chest' + floor, i * 20 + attempt) * TWO_PI;
-        const radius = 5 + seededRandom(seed, 'chestr' + floor, i * 20 + attempt) * 17;
+        const radius = 5 + seededRandom(seed, 'chestr' + floor, i * 20 + attempt) * (TOWER_FLOOR_RADIUS - 10);
         const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
         const z = Math.round((Math.sin(angle) * radius) / 4) * 4;
 
@@ -2301,33 +3003,23 @@ function buildTower(seed) {
         if (jumpPads.some((p) => p.y === floorY && Math.abs(p.x - x) < 3 && Math.abs(p.z - z) < 3)) {
           continue;
         }
-        if (chests.some((c) => c.y === floorY && Math.abs(c.x - x) < 5 && Math.abs(c.z - z) < 5)) {
+        if (chests.some((c) => Math.abs(c.y - floorY) < 1 && Math.abs(c.x - x) < 5 && Math.abs(c.z - z) < 5)) {
           continue;
         }
 
-        const group = new THREE.Group();
-        const coreCube = new THREE.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
-        const frameMesh = new THREE.Mesh(chestGeo, chestMat);
-        const auraRing = new THREE.Mesh(chestAuraRingGeo, chestAuraRingMat);
-        auraRing.position.y = -0.18;
-        const glow = new THREE.Sprite(chestGlowMat);
-        glow.scale.setScalar(3.4);
-        glow.position.y = 0.2;
-        group.add(coreCube, frameMesh, auraRing, glow);
-        group.position.set(x, floorY + 0.68, z);
-        chestGroup.add(group);
-        chests.push({ x, y: floorY, z, group, isOpen: 0, cost: Math.round(4 + 2.5 * floor) });
+        spawnChestAt(x, floorY, z, floor, 1.0);
         break;
       }
     }
   }
 
-  for (let floor = 1; floor < 11; floor++) {
-    if (floor % 4 === 3 || seededRandom(seed, 'altp', floor) >= 0.5) continue;
+  // --- РАЗМЕЩЕНИЕ АЛТАРЕЙ ПАКТА ---
+  for (let floor = 1; floor < GRID_FLOORS - 1; floor++) {
+    if (isBossFloorIndex(floor) || seededRandom(seed, 'altp', floor) >= 0.55) continue;
     const floorY = floor * 14;
-    for (let attempt = 0; attempt < 14; attempt++) {
+    for (let attempt = 0; attempt < 16; attempt++) {
       const angle = seededRandom(seed, 'alt' + floor, attempt + 100) * TWO_PI;
-      const radius = 5 + seededRandom(seed, 'altr' + floor, attempt) * 17;
+      const radius = 5 + seededRandom(seed, 'altr' + floor, attempt) * (TOWER_FLOOR_RADIUS - 10);
       const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
       const z = Math.round((Math.sin(angle) * radius) / 4) * 4;
 
@@ -2344,7 +3036,7 @@ function buildTower(seed) {
       if (jumpPads.some((p) => p.y === floorY && Math.abs(p.x - x) < 3 && Math.abs(p.z - z) < 3)) {
         continue;
       }
-      if (chests.some((c) => c.y === floorY && Math.abs(c.x - x) < 5 && Math.abs(c.z - z) < 5)) {
+      if (chests.some((c) => Math.abs(c.y - floorY) < 1 && Math.abs(c.x - x) < 5 && Math.abs(c.z - z) < 5)) {
         continue;
       }
 
@@ -2371,58 +3063,87 @@ function buildTower(seed) {
     }
   }
 
+  // --- СБОРКА INSTANCED MESH ПЛИТ БАШНИ С ПОДДЕРЖКОЙ 3 АКТОВ (ASH / ICE / VOID) ---
   const dummyObj = new THREE.Object3D();
   const blockColor = new THREE.Color();
-  towerInstancedMesh = new THREE.InstancedMesh(
-    sculptedSlabGeometry,
-    TOWER_SLAB_MATERIALS[towerId] || TOWER_SLAB_MATERIALS.ash,
-    blocks.length
-  );
 
-  const gateColorHex =
-    towerId === 'ash' ? 0xff4518 : towerId === 'ice' ? 0x45d8ff : 0xc845ff;
-
+  const blockIndicesByBiome = { ash: [], ice: [], void: [] };
   blocks.forEach((b, idx) => {
-    const rawH = b[5] - b[4];
-    const isStairBlock = rawH > 1.5 && b[7] !== 3;
-
-    // В Башне Пустоты все ступени рендерятся специальными шейдерами растворения (STAIR_DISSOLVE_FRAGMENT_SHADER),
-    // а физическая коллизия ступени в массиве blocks сохраняется полностью!
-    if (b[7] === 3 || (towerId === 'void' && isStairBlock)) {
-      dummyObj.position.set(0, -999, 0);
-      dummyObj.scale.set(0, 0, 0);
-      dummyObj.updateMatrix();
-      towerInstancedMesh.setMatrixAt(idx, dummyObj.matrix);
-      return;
-    }
-
-    const visualH = isStairBlock ? 1.15 : rawH;
-    const visualCenterY = isStairBlock ? b[5] - visualH * 0.5 : (b[4] + b[5]) / 2;
-    dummyObj.position.set((b[0] + b[1]) / 2, visualCenterY, (b[2] + b[3]) / 2);
-    dummyObj.scale.set(b[1] - b[0] - 0.08, visualH, b[3] - b[2] - 0.08);
-    dummyObj.updateMatrix();
-    towerInstancedMesh.setMatrixAt(idx, dummyObj.matrix);
-
-    const baseColorHex =
-      b[7] === 1
-        ? 0x48cc82
-        : b[7] === 2
-          ? 0xd84432
-          : b[7] === 3
-            ? gateColorHex
-            : currentTowerTheme.blockColors[Math.floor(b[6] / 4)];
-
-    towerInstancedMesh.setColorAt(
-      idx,
-      blockColor.setHex(baseColorHex).offsetHSL(0, 0, ((b[0] / 4 + b[2] / 4) & 1) * 0.04)
-    );
+    const bId = getFloorBiomeId(b[6]);
+    (blockIndicesByBiome[bId] || blockIndicesByBiome.ash).push(idx);
   });
 
-  towerInstancedMesh.instanceMatrix.needsUpdate = true;
-  if (towerInstancedMesh.instanceColor) {
-    towerInstancedMesh.instanceColor.needsUpdate = true;
+  for (const bId of TOWER_IDS) {
+    const indices = blockIndicesByBiome[bId];
+    if (!indices || !indices.length) continue;
+
+    const instMesh = new THREE.InstancedMesh(
+      sculptedSlabGeometry,
+      TOWER_SLAB_MATERIALS[bId] || TOWER_SLAB_MATERIALS.ash,
+      indices.length
+    );
+    instMesh.frustumCulled = false;
+
+    const themeColors = (TOWERS[bId] && TOWERS[bId].blockColors) || TOWERS.ash.blockColors;
+    const gateColorHex = bId === 'ash' ? 0xff4518 : bId === 'ice' ? 0x45d8ff : 0xc845ff;
+
+    for (let localIdx = 0; localIdx < indices.length; localIdx++) {
+      const idx = indices[localIdx];
+      const b = blocks[idx];
+      blockInstanceRef[idx] = { mesh: instMesh, instanceId: localIdx };
+
+      const rawH = b[5] - b[4];
+      const tag = b[7] || 0;
+      const isStairBlock = rawH > 1.5 && tag !== 3 && tag !== 4 && tag !== 7;
+
+      if (tag === 3 || (bId === 'void' && isStairBlock)) {
+        dummyObj.position.set(0, -999, 0);
+        dummyObj.scale.set(0, 0, 0);
+        dummyObj.updateMatrix();
+        instMesh.setMatrixAt(localIdx, dummyObj.matrix);
+        continue;
+      }
+
+      const visualH = isStairBlock ? 1.15 : rawH;
+      const visualCenterY = isStairBlock ? b[5] - visualH * 0.5 : (b[4] + b[5]) / 2;
+      dummyObj.position.set((b[0] + b[1]) / 2, visualCenterY, (b[2] + b[3]) / 2);
+      dummyObj.scale.set(b[1] - b[0] - 0.08, visualH, b[3] - b[2] - 0.08);
+      dummyObj.updateMatrix();
+      instMesh.setMatrixAt(localIdx, dummyObj.matrix);
+
+      const localTier = Math.floor((b[6] % 12) / 4);
+      const baseColorHex =
+        tag === 1
+          ? 0x48cc82 // Зелёная лестница («Тихий путь»)
+          : tag === 2
+            ? 0xd84432 // Красная лестница («Опасный путь»)
+            : tag === 3
+              ? gateColorHex // Печать босса
+              : tag === 4
+                ? 0xc8a858 // Полуэтаж-балкон (floorY + 6)
+                : tag === 5
+                  ? 0x529e78 // Плита зелёного сектора («Тихий путь»)
+                  : tag === 6
+                    ? 0x9e5248 // Плита красного сектора («Опасный путь»)
+                    : tag === 7
+                      ? 0xd49b38 // Плита безопасного «Зала Кузницы»
+                      : themeColors[localTier] || themeColors[0];
+
+      instMesh.setColorAt(
+        localIdx,
+        blockColor.setHex(baseColorHex).offsetHSL(0, 0, ((b[0] / 4 + b[2] / 4) & 1) * 0.04)
+      );
+    }
+
+    instMesh.instanceMatrix.needsUpdate = true;
+    if (instMesh.instanceColor) {
+      instMesh.instanceColor.needsUpdate = true;
+    }
+    towerInstancedGroup.add(instMesh);
+    if (!towerInstancedMesh) {
+      towerInstancedMesh = instMesh;
+    }
   }
-  scene.add(towerInstancedMesh);
 
   buildTowerArchitecture(seed, stairPositionsByFloor, floorEdgeCellsByFloor, floorValidCellsByFloor);
 }

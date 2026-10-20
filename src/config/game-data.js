@@ -1,7 +1,7 @@
 /* ==========================================================================
    Конфигурация и баланс игры:
    оружие, предметы, тома, мутаторы, мобы, боссы, герои, башни (с VFX и Бурями),
-   пакты, кузница
+   3-актная прогрессия забега, масштабирование сетки под 2–4 игроков, пакты, кузница
    ========================================================================== */
 
 /**
@@ -195,7 +195,7 @@ const UPGRADE_POOL = [
 ];
 
 /**
- * Конфигурация трёх рангов боссов (этажи 4, 8 и 12).
+ * Конфигурация трёх рангов боссов (этажи 4, 8 и 12 / 16, 20 и 24 в 3 актах).
  */
 const BOSS_CONFIGS = {
   golem: {
@@ -286,13 +286,14 @@ const HEROES = {
 };
 
 /**
- * Названия планировок этажей.
+ * Названия планировок этажей (включая разделённые сектора после развилки).
  */
 const FLOOR_LAYOUT_NAMES = {
   disc: 'Арена',
-  ring: 'Кольцо',
-  spokes: 'Мосты',
-  islands: 'Острова'
+  ring: 'Кольцо (широкое 8 м)',
+  spokes: 'Мосты (широкие 8 м)',
+  islands: 'Острова',
+  split_ring: 'Разделённые сектора (Тихий / Опасный)'
 };
 
 /**
@@ -367,13 +368,14 @@ const TOWERS = {
   ash: {
     id: 'ash',
     name: 'Пепельная башня',
+    actTitle: 'АКТ I · ПЕПЕЛЬНАЯ БАШНЯ',
     hazardGenitive: 'лавы',
     loseTitle: 'ЛАВА ПОБЕДИЛА',
     description:
       'Детализированный базальт с обугленными участками и редкими лавовыми трещинами, 3D-ручьи текущей по стенам и ступеням магмы, кипящие лужи на полу и атмосфера «Великого Горна».',
     unlockCondition: '',
     fogColor: 0x220707,
-    fogDensity: 0.0165, // базовый рендер-туман (соответствует параметру 0.065 в шкале башни)
+    fogDensity: 0.0165,
     hemiSkyColor: 0x525664,
     hemiGroundColor: 0xd93800,
     dirLightColor: 0x8a92a6,
@@ -388,7 +390,6 @@ const TOWERS = {
     dustSize: 0.52,
     dustOpacity: 0.85,
     backgroundGradient: ['#140505', '#220707', '#3a0a06'],
-    // Зафиксированные параметры из ТЗ:
     vfxBase: {
       bloomStrength: 0.3,
       bloomThreshold: 0.14,
@@ -398,7 +399,6 @@ const TOWERS = {
       fogDensity: 0.065,
       renderFogDensity: 0.0165
     },
-    // Параметры во время Пепельной бури:
     vfxStorm: {
       stormName: 'ПЕПЕЛЬНАЯ БУРЯ',
       bloomStrength: 2.2,
@@ -413,6 +413,7 @@ const TOWERS = {
   ice: {
     id: 'ice',
     name: 'Ледяная башня',
+    actTitle: 'АКТ II · ЛЕДЯНАЯ БАШНЯ',
     hazardGenitive: 'метели',
     loseTitle: 'МЕТЕЛЬ ПОБЕДИЛА',
     description:
@@ -438,7 +439,6 @@ const TOWERS = {
     dustSize: 0.44,
     dustOpacity: 0.88,
     backgroundGradient: ['#0a1526', '#264e73', '#d0e8f7'],
-    // Зафиксированные параметры из ТЗ:
     vfxBase: {
       bloomStrength: 0.0,
       bloomThreshold: 0.72,
@@ -448,7 +448,6 @@ const TOWERS = {
       renderFogDensity: 0.004,
       blizzardSpeed: 0.5
     },
-    // Параметры во время Ледяного бурана:
     vfxStorm: {
       stormName: 'ЛЕДЯНОЙ БУРАН',
       bloomStrength: 0.08,
@@ -463,6 +462,7 @@ const TOWERS = {
   void: {
     id: 'void',
     name: 'Башня Пустоты',
+    actTitle: 'АКТ III · БАШНЯ ПУСТОТЫ',
     hazardGenitive: 'бездны',
     loseTitle: 'БЕЗДНА ПОБЕДИЛА',
     description:
@@ -486,7 +486,6 @@ const TOWERS = {
     dustSize: 0.42,
     dustOpacity: 0.85,
     backgroundGradient: ['#030106', '#090412', '#1a0933'],
-    // Зафиксированные параметры из ТЗ:
     vfxBase: {
       bloomStrength: 0.30,
       bloomThreshold: 0.18,
@@ -497,7 +496,6 @@ const TOWERS = {
       renderFogDensity: 0.0092,
       gravityMul: 0.62
     },
-    // Параметры во время Шторма Пустоты:
     vfxStorm: {
       stormName: 'ШТОРМ ПУСТОТЫ',
       bloomStrength: 2.15,
@@ -513,7 +511,63 @@ const TOWERS = {
 };
 
 const TOWER_IDS = ['ash', 'ice', 'void'];
-const FORK_FLOORS = [1, 5, 9];
+
+/**
+ * Этажи-развилки (FORK_FLOORS):
+ * В 0-индексации [1, 5, 9, 13, 17, 21] соответствуют 2, 6, 10 этажам (и 14, 18, 22 в 3-актном забеге).
+ * На этих этажах зелёная («тихий путь») и красная («опасный путь») лестницы ведут в два
+ * параллельных изолированных полукольца (сектора) следующего этажа (3, 7, 11 / 15, 19, 23).
+ */
+const FORK_FLOORS = [1, 5, 9, 13, 17, 21];
+
+/**
+ * Конфигурации дистанции забега (3 акта на 24 этажа, 3 акта на 18 этажей или классические 12 этажей).
+ */
+const RUN_CAMPAIGN_MODES = {
+  acts3_24: {
+    id: 'acts3_24',
+    name: '3 Акта · 24 этажа (Большое приключение)',
+    shortLabel: '3 Акта (24 эт.)',
+    totalFloors: 24,
+    isThreeAct: 1,
+    floorsPerAct: 8,
+    bossFloors: [3, 7, 11, 15, 19, 23],
+    forgeHallAfterFloors: [3, 7, 11, 15, 19],
+    description: 'Бесшовное восхождение: Пепельная (1–8) → Ледяная (9–16) → Пустотная (17–24) башни, 6 боссов и Залы Кузницы.'
+  },
+  acts3_18: {
+    id: 'acts3_18',
+    name: '3 Акта · 18 этажей (Ускоренная трилогия)',
+    shortLabel: '3 Акта (18 эт.)',
+    totalFloors: 18,
+    isThreeAct: 1,
+    floorsPerAct: 6,
+    bossFloors: [3, 5, 9, 11, 15, 17],
+    forgeHallAfterFloors: [3, 5, 9, 11, 15],
+    description: 'Три акта по 6 этажей (Пепел 1–6 → Лёд 7–12 → Пустота 13–18) с Залами Кузницы после боссов.'
+  },
+  single_12: {
+    id: 'single_12',
+    name: '1 Акт · 12 этажей (Выбранная башня)',
+    shortLabel: '1 Акт (12 эт.)',
+    totalFloors: 12,
+    isThreeAct: 0,
+    floorsPerAct: 12,
+    bossFloors: [3, 7, 11],
+    forgeHallAfterFloors: [3, 7],
+    description: 'Классический забег на 12 этажей в одной выбранной башне с Залами Кузницы между 4–5 и 8–9 этажами.'
+  }
+};
+
+/**
+ * Параметры масштабирования сетки этажа под 1, 2 и 3–4 игроков.
+ */
+const COOP_SCALE_PRESETS = {
+  1: { playerCount: 1, gridDim: 15, gridOffset: 7, radiusMeters: 28, label: '1 игрок · 15×15 (R=28 м)' },
+  2: { playerCount: 2, gridDim: 19, gridOffset: 9, radiusMeters: 36, label: '2 игрока · 19×19 (R=36 м)' },
+  3: { playerCount: 3, gridDim: 23, gridOffset: 11, radiusMeters: 44, label: '3 игрока · 23×23 (R=44 м)' },
+  4: { playerCount: 4, gridDim: 23, gridOffset: 11, radiusMeters: 44, label: '4 игрока · 23×23 (R=44 м)' }
+};
 
 /**
  * Улучшения Кузницы (мета-прогрессия за пепел).

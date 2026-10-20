@@ -72,9 +72,10 @@ function renderGameFrame(dt) {
   let camX = player.x + Math.sin(state.cameraYaw) * cosPitch * 6;
   let camZ = player.z + Math.cos(state.cameraYaw) * cosPitch * 6;
   const camRadial = hypot2D(camX, camZ);
-  if (camRadial > 29.6) {
-    camX *= 29.6 / camRadial;
-    camZ *= 29.6 / camRadial;
+  const maxCamR = (typeof TOWER_PLAYER_CLAMP_RADIUS !== 'undefined' ? TOWER_PLAYER_CLAMP_RADIUS : 29.4) + 0.2;
+  if (camRadial > maxCamR) {
+    camX *= maxCamR / camRadial;
+    camZ *= maxCamR / camRadial;
   }
   camera.position.set(camX, player.y + 1 + Math.sin(state.cameraPitch) * 6, camZ);
 
@@ -890,12 +891,17 @@ function renderGameFrame(dt) {
         .map(([k, v]) => TOMES[k].name + ' ×' + v)
     ].join(', ');
 
+    const actLabel = state.isThreeActRun && typeof getFloorActNumber === 'function'
+      ? 'Акт ' + getFloorActNumber(state.maxFloorReached) + ' · '
+      : '';
     DOM_CACHE.statsText.innerHTML =
-      `${HEROES[state.heroId].name}<br>` +
-      `Этаж ${state.maxFloorReached + 1}/12 · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
-      `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м · золото: ${state.gold | 0}<br>` +
+      `${HEROES[state.heroId].name} (${state.playerCount || 1} игр. · ${GRID_DIM}×${GRID_DIM})<br>` +
+      `${actLabel}Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
+      `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м${state.isLavaPausedByForgeHall ? ' <b style="color:#48ffe8">(ПАУЗА)</b>' : ''} · золото: ${state.gold | 0}<br>` +
       `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
-      `${state.chosenRoute ? '<br>Путь: ' + (state.chosenRoute === 1 ? 'тихий' : 'опасный') : ''}` +
+      `${state.isOnBalcony ? '<br><b style="color:#ffd858">🎯 Балкон (+6 м): дальность +50%, урон +20%</b>' : ''}` +
+      `${state.isLavaPausedByForgeHall ? '<br><b style="color:#48ffe8">⚒ Зал Кузницы · На плите: ' + (state.forgeHallReadyCount || 0) + '/' + (state.playerCount || 1) + '</b>' : ''}` +
+      `${state.chosenRoute ? '<br>Сектор: ' + (state.chosenRoute === 1 ? '🌿 тихий (хил ×2.4)' : '🔥 опасный (золото ×2)') : ''}` +
       `${state.activeEvent ? '<br>Событие: ' + FLOOR_EVENTS[state.activeEvent.key].name + ' · ' + (state.activeEvent.timeLeft | 0) + ' с' : ''}` +
       `${state.mutatorName ? '<br>' + state.mutatorName : ''}` +
       `<br>${inventorySummary}`;
