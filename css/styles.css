@@ -1,5 +1,6 @@
 /* ==========================================================================
-   Lava Tower — Стили интерфейса (HUD, оверлеи, меню, панель VFX и Бурь)
+   Lava Tower — Стили интерфейса (HUD, оверлеи, меню, панель VFX, Бури и Блок 4:
+   безпаузный хотбар наград, голосование пактов, виджеты союзников и 3D-пинги)
    ========================================================================== */
 
 :root {
@@ -65,7 +66,7 @@ h4 {
   -webkit-backdrop-filter: blur(10px);
   color: var(--fg);
   padding: 28px 36px;
-  max-width: 500px;
+  max-width: 520px;
   max-height: 90%;
   overflow: auto;
   box-shadow: 0 30px 80px #000c;
@@ -189,6 +190,8 @@ input {
   display: flex;
   gap: 6px;
   pointer-events: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .vfx-btn {
@@ -220,9 +223,10 @@ input {
 #hud {
   position: fixed;
   left: 16px;
-  top: calc(env(safe-area-inset-top, 0px) + 16px);
-  width: 300px;
-  font-size: 13px;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  font-size: 12.5px;
   text-shadow: 0 1px 2px #000;
   pointer-events: none;
   display: none;
@@ -230,7 +234,7 @@ input {
 }
 
 .bar {
-  height: 14px;
+  height: 13px;
   background: #1b0d14;
   margin: 4px 0;
   border: 1px solid var(--border-warm);
@@ -250,6 +254,460 @@ input {
 
 #xb {
   background: linear-gradient(90deg, #7fe8d8, #e8fbff);
+}
+
+/* Кооперативные виджеты союзников (Блок 4) */
+.coop-party-hud {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ally-card {
+  background: rgba(16, 8, 18, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-left: 3px solid #38f2dc;
+  border-top: 1px solid rgba(255, 140, 70, 0.25);
+  border-right: 1px solid rgba(255, 140, 70, 0.25);
+  border-bottom: 1px solid rgba(255, 140, 70, 0.25);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+}
+
+.ally-card.in-ember {
+  border-color: #ff5828;
+  background: rgba(48, 12, 10, 0.88);
+  animation: pulseEmberAlert 1s infinite alternate;
+}
+
+@keyframes pulseEmberAlert {
+  from { box-shadow: 0 0 6px rgba(255, 88, 40, 0.4); }
+  to { box-shadow: 0 0 16px rgba(255, 88, 40, 0.9); }
+}
+
+.ally-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #f8efe6;
+}
+
+.ally-name-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.ally-meta-right {
+  font-family: monospace;
+  font-size: 11px;
+  color: #ffd868;
+  white-space: nowrap;
+}
+
+.ally-hp-track {
+  height: 6px;
+  background: #14080e;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+  margin: 3px 0;
+  overflow: hidden;
+}
+
+.ally-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #28e8a8, #68fff0);
+  transition: width 0.15s ease;
+}
+
+.ally-loadout-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 10.5px;
+  color: #dcd0c8;
+}
+
+.ally-weapons {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ally-wep-pill {
+  background: rgba(255, 120, 40, 0.18);
+  border: 1px solid rgba(255, 150, 70, 0.35);
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #ffdeb8;
+}
+
+.ally-tomes {
+  display: inline-flex;
+  gap: 3px;
+  color: #a8f0ff;
+  font-family: monospace;
+}
+
+/* Безпаузный хотбар выбора наград из 3 карточек (Блок 4) */
+.upgrade-hotbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(760px, 95vw);
+  pointer-events: auto;
+}
+
+.hotbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 12px;
+  background: rgba(18, 8, 16, 0.9);
+  border: 1px solid rgba(255, 160, 60, 0.55);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  font-size: 12px;
+}
+
+.hotbar-title {
+  font-family: 'Russo One', system-ui, sans-serif;
+  color: #ffd24c;
+  letter-spacing: 0.04em;
+}
+
+.hotbar-queue-badge {
+  background: #ff5a18;
+  color: #fff;
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: 6px;
+}
+
+.hotbar-reroll-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  margin: 0;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  clip-path: none;
+  background: rgba(65, 25, 14, 0.92);
+  border: 1px solid #ffaa40;
+  color: #ffe8b8;
+  cursor: pointer;
+}
+
+.hotbar-cards-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.hotbar-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(22, 10, 18, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1.5px solid #9a5226;
+  border-radius: 9px;
+  clip-path: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.75);
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.hotbar-card:hover {
+  transform: translateY(-2px);
+  border-color: #ffd048;
+  box-shadow: 0 0 18px rgba(255, 168, 40, 0.45);
+}
+
+.hotbar-card.cat-w {
+  border-color: #ff7a28;
+}
+.hotbar-card.cat-t {
+  border-color: #38e8ff;
+}
+.hotbar-card.cat-i {
+  border-color: #c878ff;
+}
+.hotbar-card.tradeoff {
+  border-color: #ff3858;
+}
+
+.hotbar-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.hotbar-key-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  background: linear-gradient(135deg, #ff7a20, #b83208);
+  border: 1px solid #ffd878;
+  border-radius: 5px;
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 12px;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.hotbar-card-name {
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 12.5px;
+  color: #fff3e2;
+  flex: 1;
+  line-height: 1.15;
+}
+
+.hotbar-card-lv {
+  font-size: 10.5px;
+  font-family: monospace;
+  color: #ffd24c;
+  background: rgba(255, 190, 50, 0.14);
+  border: 1px solid rgba(255, 190, 50, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.hotbar-card-desc {
+  font-family: 'Rubik', system-ui, sans-serif;
+  font-size: 11px;
+  color: #dfd2c8;
+  line-height: 1.25;
+  opacity: 0.92;
+}
+
+/* Быстрое голосование за Глобальный пакт (F1 — За / F2 — Против) без паузы */
+.pact-vote-widget {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 74px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  width: min(460px, 92vw);
+  background: rgba(24, 10, 34, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1.5px solid #c060ff;
+  border-radius: 10px;
+  padding: 9px 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(180, 60, 255, 0.35);
+  pointer-events: auto;
+}
+
+.pact-vote-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pact-vote-title {
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 13px;
+  color: #f0b8ff;
+}
+
+.pact-vote-scope {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(190, 80, 255, 0.22);
+  border: 1px solid rgba(210, 120, 255, 0.5);
+  color: #f5d8ff;
+}
+
+.pact-vote-desc {
+  font-size: 11.5px;
+  color: #efe2f8;
+  margin: 4px 0 7px;
+}
+
+.pact-vote-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pact-vote-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.pact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  border-radius: 6px;
+  clip-path: none;
+  cursor: pointer;
+}
+
+.pact-btn.yes {
+  background: rgba(22, 82, 48, 0.9);
+  border: 1px solid #48ff98;
+  color: #dcffe8;
+}
+
+.pact-btn.no {
+  background: rgba(92, 20, 28, 0.9);
+  border: 1px solid #ff5868;
+  color: #ffdce0;
+}
+
+.pact-vote-pips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
+.pact-pip {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-family: monospace;
+}
+.pact-pip.yes {
+  background: rgba(40, 200, 110, 0.25);
+  border-color: #48ff98;
+  color: #78ffb8;
+}
+.pact-pip.no {
+  background: rgba(220, 50, 65, 0.25);
+  border-color: #ff5868;
+  color: #ff98a4;
+}
+
+.pact-timer-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.pact-timer-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #b848ff, #45fff0);
+  transition: width 0.1s linear;
+}
+
+/* Экранные стрелки-указатели к союзникам за пределами камеры и 3D-пинги */
+.offscreen-indicators,
+.ping-overlay-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+
+.ally-arrow-indicator {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: rgba(16, 8, 20, 0.88);
+  border: 1.5px solid #38f2dc;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f6efe8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+  white-space: nowrap;
+}
+
+.ally-arrow-chevron {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  transform-origin: center;
+}
+
+.ping-screen-marker {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 9px;
+  background: rgba(18, 10, 22, 0.9);
+  border: 1.5px solid #ffd048;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.75);
+  white-space: nowrap;
+  animation: pingFloat 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes pingFloat {
+  from { margin-top: 0px; }
+  to { margin-top: -5px; }
+}
+
+.ping-screen-title {
+  font-family: 'Russo One', system-ui, sans-serif;
+  font-size: 11.5px;
+}
+
+.ping-screen-sub {
+  font-size: 10px;
+  opacity: 0.88;
+  font-family: monospace;
 }
 
 /* Экранные эффекты и уведомления */
@@ -273,32 +731,36 @@ input {
 #toast {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 90px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
   transform: translateX(-50%);
   padding: 7px 18px;
-  background: rgba(22, 10, 18, 0.88);
+  background: rgba(22, 10, 18, 0.92);
   border: 1px solid var(--border-button);
   color: #ffd040;
   font-family: 'Russo One', system-ui, sans-serif;
-  font-size: 14px;
+  font-size: 13.5px;
   opacity: 0;
   transition: opacity 0.25s;
   pointer-events: none;
-  z-index: 6;
+  z-index: 9;
   white-space: normal;
   max-width: 88vw;
   text-align: center;
+  border-radius: 6px;
 }
 
 #pauseHint {
   position: fixed;
   right: 16px;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   font-size: 11px;
-  opacity: 0.65;
+  opacity: 0.72;
   pointer-events: none;
   z-index: 5;
   display: none;
+  background: rgba(12, 6, 14, 0.65);
+  padding: 3px 8px;
+  border-radius: 5px;
 }
 
 /* Полоса здоровья босса */
@@ -369,4 +831,14 @@ input {
   color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   z-index: 1;
+}
+
+@media (max-width: 680px) {
+  .hotbar-cards-row {
+    grid-template-columns: 1fr;
+  }
+  #hud {
+    width: 250px;
+    font-size: 11.5px;
+  }
 }

@@ -3047,19 +3047,52 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
     insertBlockIntoGrid(i);
   }
 
-  // --- РАЗМЕЩЕНИЕ СУНДУКОВ (НА ОСНОВНОМ ПОЛУ, НА БАЛКОНАХ floorY + 6 И В ОПАСНОМ СЕКТОРЕ) ---
-  function spawnChestAt(x, y, z, floor, costMultiplier = 1) {
+  // --- РАЗМЕЩЕНИЕ ОБЫЧНЫХ СУНДУКОВ (1 + N ИГРОКОВ) И БОЛЬШИХ «СУНДУКОВ ГИЛЬДИИ» (БЛОК 4) ---
+  function spawnChestAt(x, y, z, floor, costMultiplier = 1, isGuildChest = 0) {
     const group = new THREE.Group();
     const coreCube = new THREE.Mesh(chestCubeCoreGeo, chestCubeCoreMat);
     const frameMesh = new THREE.Mesh(chestGeo, chestMat);
     const auraRing = new THREE.Mesh(chestAuraRingGeo, chestAuraRingMat);
     auraRing.position.y = -0.18;
     const glow = new THREE.Sprite(chestGlowMat);
-    glow.scale.setScalar(3.4);
-    glow.position.y = 0.2;
+    glow.scale.setScalar(isGuildChest ? 5.2 : 3.4);
+    glow.position.y = 0.25;
     group.add(coreCube, frameMesh, auraRing, glow);
-    group.position.set(x, y + 0.68, z);
+
+    if (isGuildChest) {
+      // Редкий большой «Сундук гильдии»: увеличенный масштаб ×1.52, корона-октаэдр и рунное кольцо складчины
+      group.scale.setScalar(1.52);
+      const guildRing = new THREE.Mesh(
+        new THREE.RingGeometry(1.05, 1.32, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0x38ffe8,
+          transparent: true,
+          opacity: 0.88,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      guildRing.rotation.x = -Math.PI / 2;
+      guildRing.position.y = -0.42;
+      group.add(guildRing);
+
+      const guildCrest = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.34, 0),
+        new THREE.MeshBasicMaterial({ color: 0x45fff0 })
+      );
+      guildCrest.position.y = 1.05;
+      group.add(guildCrest);
+      group.userData = { isGuildChest: 1, guildRing, guildCrest };
+    }
+
+    group.position.set(x, y + (isGuildChest ? 0.96 : 0.68), z);
     chestGroup.add(group);
+
+    const pCount = Math.max(1, activeCoopPlayerCount || 2);
+    const baseCost = Math.round((4 + 2.5 * floor) * costMultiplier);
+    const guildTotalCost = Math.round((7 + 3.5 * floor) * (1 + 0.55 * (pCount - 1)));
+
     chests.push({
       x,
       y,
@@ -3067,13 +3100,17 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
       floor,
       group,
       isOpen: 0,
-      cost: Math.round((4 + 2.5 * floor) * costMultiplier)
+      isGuildChest: isGuildChest ? 1 : 0,
+      cost: isGuildChest ? guildTotalCost : baseCost,
+      contributedGold: 0,
+      allyContribTimer: 0
     });
   }
 
   for (let floor = 0; floor < GRID_FLOORS; floor++) {
     const floorY = floor * 14;
-    const chestsPerFloor = activeCoopPlayerCount >= 3 ? 3 : 2;
+    // Формула Блока 4: число обычных сундуков на этаже = 1 + N игроков (от 2 до 5 сундуков)
+    const chestsPerFloor = 1 + Math.max(1, activeCoopPlayerCount || 2);
     for (let i = 0; i < chestsPerFloor; i++) {
       // Первый сундук на каждом втором этаже ставим на балкон (floorY + 6) как точку интереса!
       const floorBals = balconiesByFloor[floor] || [];
@@ -3081,12 +3118,12 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
         const chosenBal = floorBals[floor % floorBals.length];
         const bCell = chosenBal.cells[0];
         if (bCell) {
-          spawnChestAt(bCell[0], chosenBal.y, bCell[1], floor, 0.85);
+          spawnChestAt(bCell[0], chosenBal.y, bCell[1], floor, 0.85, 0);
           continue;
         }
       }
 
-      for (let attempt = 0; attempt < 16; attempt++) {
+      for (let attempt = 0; attempt < 18; attempt++) {
         const angle = seededRandom(seed, 'chest' + floor, i * 20 + attempt) * TWO_PI;
         const radius = 5 + seededRandom(seed, 'chestr' + floor, i * 20 + attempt) * (TOWER_FLOOR_RADIUS - 10);
         const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
@@ -3105,21 +3142,51 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
         if (jumpPads.some((p) => p.y === floorY && Math.abs(p.x - x) < 3 && Math.abs(p.z - z) < 3)) {
           continue;
         }
+        if (chests.some((c) => Math.abs(c.y - floorY) < 1 && Math.abs(c.x - x) < 4.5 && Math.abs(c.z - z) < 4.5)) {
+          continue;
+        }
+
+        spawnChestAt(x, floorY, z, floor, 1.0, 0);
+        break;
+      }
+    }
+
+    // Редкий большой «Сундук гильдии» (складчина золотом для выдачи карточки каждому игроку)
+    if (floor === 0 || (!isBossFloorIndex(floor) && seededRandom(seed, 'gchest_p', floor) < 0.68)) {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const angle = seededRandom(seed, 'gchest' + floor, attempt + 50) * TWO_PI;
+        const radius = 6 + seededRandom(seed, 'gchestr' + floor, attempt + 50) * (TOWER_FLOOR_RADIUS - 11);
+        const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
+        const z = Math.round((Math.sin(angle) * radius) / 4) * 4;
+
+        if (!blocks.some((b) => b[5] === floorY && b[0] <= x && x < b[1] && b[2] <= z && z < b[3])) {
+          continue;
+        }
+        if (
+          blocks.some(
+            (b) => b[4] < floorY + 0.5 && b[5] > floorY + 0.5 && b[0] <= x && x < b[1] && b[2] <= z && z < b[3]
+          )
+        ) {
+          continue;
+        }
+        if (jumpPads.some((p) => p.y === floorY && Math.abs(p.x - x) < 3.5 && Math.abs(p.z - z) < 3.5)) {
+          continue;
+        }
         if (chests.some((c) => Math.abs(c.y - floorY) < 1 && Math.abs(c.x - x) < 5 && Math.abs(c.z - z) < 5)) {
           continue;
         }
 
-        spawnChestAt(x, floorY, z, floor, 1.0);
+        spawnChestAt(x, floorY, z, floor, 1.0, 1);
         break;
       }
     }
   }
 
-  // --- РАЗМЕЩЕНИЕ АЛТАРЕЙ ПАКТА ---
-  for (let floor = 1; floor < GRID_FLOORS - 1; floor++) {
-    if (isBossFloorIndex(floor) || seededRandom(seed, 'altp', floor) >= 0.55) continue;
+  // --- РАЗМЕЩЕНИЕ АЛТАРЕЙ ПАКТА (ЛИЧНЫЕ СДЕЛКИ VS ГЛОБАЛЬНЫЕ МИРОВЫЕ ПАКТЫ С ГОЛОСОВАНИЕМ F1/F2) ---
+  for (let floor = 0; floor < GRID_FLOORS - 1; floor++) {
+    if (isBossFloorIndex(floor) || (floor > 0 && seededRandom(seed, 'altp', floor) >= 0.65)) continue;
     const floorY = floor * 14;
-    for (let attempt = 0; attempt < 16; attempt++) {
+    for (let attempt = 0; attempt < 18; attempt++) {
       const angle = seededRandom(seed, 'alt' + floor, attempt + 100) * TWO_PI;
       const radius = 5 + seededRandom(seed, 'altr' + floor, attempt) * (TOWER_FLOOR_RADIUS - 10);
       const x = Math.round((Math.cos(angle) * radius) / 4) * 4;
@@ -3142,25 +3209,51 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
         continue;
       }
 
+      // Детерминированно чередуем личные (blood, frail) и глобальные (rage, greed, swift) алтари пакта
+      const isPersonalAltar = floor % 2 === 1;
+      const personalPool = typeof PERSONAL_PACT_KEYS !== 'undefined' ? PERSONAL_PACT_KEYS : ['blood', 'frail'];
+      const globalPool = typeof GLOBAL_PACT_KEYS !== 'undefined' ? GLOBAL_PACT_KEYS : ['rage', 'greed', 'swift'];
+      const pool = isPersonalAltar ? personalPool : globalPool;
+      const pactKey = pool[Math.floor(seededRandom(seed, 'alt_key' + floor, attempt) * pool.length)] || pool[0];
+      const pactScope = isPersonalAltar ? 'personal' : 'global';
+
+      const haloMatInstance = new THREE.MeshBasicMaterial({
+        color: isPersonalAltar ? 0xff4868 : 0x58f0ff,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+
       const group = new THREE.Group();
       const pedestal = new THREE.Mesh(altarPedestalGeo, altarPedestalMat);
       const pillar = new THREE.Mesh(altarGeo, altarMat);
-      const halo = new THREE.Mesh(altarHaloGeo, altarHaloMat);
+      const halo = new THREE.Mesh(altarHaloGeo, haloMatInstance);
       halo.position.y = 2.18;
-      const swirl1 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      const swirl1 = new THREE.Mesh(altarSwirlGeo, haloMatInstance);
       swirl1.position.y = 0.65;
       swirl1.rotation.set(1.15, 0, 0.35);
-      const swirl2 = new THREE.Mesh(altarSwirlGeo, altarHaloMat);
+      const swirl2 = new THREE.Mesh(altarSwirlGeo, haloMatInstance);
       swirl2.position.y = 1.05;
       swirl2.rotation.set(-1.15, 0, -0.35);
       const glow = new THREE.Sprite(altarGlowMat);
       glow.scale.setScalar(3.8);
       glow.position.y = 0.85;
       group.add(pedestal, pillar, halo, swirl1, swirl2, glow);
-      group.userData = { pillar, halo, swirl1, swirl2 };
+      group.userData = { pillar, halo, swirl1, swirl2, pactKey, pactScope };
       group.position.set(x, floorY + 0.75, z);
       altarGroup.add(group);
-      altars.push({ x, y: floorY, z, group, isOpen: 0, floor, cooldownUntil: 0 });
+      altars.push({
+        x,
+        y: floorY,
+        z,
+        group,
+        isOpen: 0,
+        floor,
+        cooldownUntil: 0,
+        pactKey,
+        pactScope
+      });
       break;
     }
   }

@@ -1421,14 +1421,62 @@ function dropBossLoot(boss) {
   }
 }
 
+/**
+ * Повышает характеристики и экипировку симулируемого кооп-союзника при командном апе уровня или открытии Сундука гильдии.
+ */
+function upgradeCoopPeerLoadout(peer) {
+  if (!peer) return;
+  if (!peer.weaponLevels) peer.weaponLevels = {};
+  if (!peer.tomeLevels) peer.tomeLevels = { hp: 0, spd: 0, dmg: 0, mag: 0 };
+
+  const wepList = peer.weapons && peer.weapons.length ? peer.weapons : ['spear', 'chain'];
+  for (const wk of wepList) {
+    if (!peer.weaponLevels[wk]) peer.weaponLevels[wk] = 1;
+  }
+
+  // Чередуем прокачку профильного оружия (до 8 ур.) и активных томов союзника
+  const upgradeableWeps = wepList.filter((wk) => (peer.weaponLevels[wk] || 1) < 8);
+  if (upgradeableWeps.length > 0 && ((peer.level || 1) % 2 === 0 || Math.random() < 0.55)) {
+    const chosenWep = upgradeableWeps[(peer.level || 1) % upgradeableWeps.length];
+    peer.weaponLevels[chosenWep] = (peer.weaponLevels[chosenWep] || 1) + 1;
+  } else {
+    const tomeKeys = ['dmg', 'spd', 'hp', 'mag'];
+    const chosenTome = tomeKeys[((peer.level || 1) + (peer.id || 0)) % tomeKeys.length];
+    peer.tomeLevels[chosenTome] = (peer.tomeLevels[chosenTome] || 0) + 1;
+    if (chosenTome === 'hp') {
+      peer.maxHp = (peer.maxHp || 110) + 18;
+      peer.hp = Math.min(peer.maxHp, (peer.hp || peer.maxHp) + 18);
+    }
+  }
+}
+
 function checkLevelUp() {
-  if (state.pauseState || state.isGameOver) return;
-  const xpRequired = 6 + 5 * state.level;
-  if (state.xp >= xpRequired) {
+  if (!state || state.isGameOver) return;
+  let safety = 0;
+  while (safety++ < 8) {
+    const xpRequired =
+      typeof getTeamXpRequired === 'function'
+        ? getTeamXpRequired(state.level, state.playerCount)
+        : Math.round((6 + 5 * state.level) * (1 + 0.35 * Math.max(0, (state.playerCount || 1) - 1)));
+    if (state.xp < xpRequired) break;
+
     state.xp -= xpRequired;
     state.level++;
     state.player.hp = Math.min(state.maxHp, state.player.hp + state.maxHp * 0.15);
-    showUpgradeOfferModal(0);
+
+    // Синхронное повышение уровня всех союзников по общей командной шкале опыта
+    if (state.coopPeers && state.coopPeers.length) {
+      for (let i = 0; i < state.coopPeers.length; i++) {
+        const peer = state.coopPeers[i];
+        peer.level = state.level;
+        if (!peer.ember || (!peer.ember.active && !peer.ember.lostInLava)) {
+          peer.hp = Math.min(peer.maxHp, peer.hp + peer.maxHp * 0.15);
+        }
+        upgradeCoopPeerLoadout(peer);
+      }
+    }
+
+    showUpgradeOfferModal(0, 'lvl-' + state.level);
   }
 }
 

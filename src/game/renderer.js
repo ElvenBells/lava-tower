@@ -8,6 +8,9 @@ const DOM_CACHE = {
   healthBar: getById('hb'),
   xpBar: getById('xb'),
   statsText: getById('st'),
+  coopPartyHud: getById('coopPartyHud'),
+  offscreenIndicators: getById('offscreenIndicators'),
+  pingOverlayContainer: getById('pingOverlayContainer'),
   bossBarFill: getById('bossBarFill'),
   bossHpText: getById('bossHpText'),
   bossHpContainer: getById('bossHp')
@@ -588,8 +591,17 @@ function renderGameFrame(dt) {
   for (let i = 0; i < chests.length; i++) {
     const chest = chests[i];
     if (!chest.isOpen) {
-      chest.group.rotation.y = time * 0.65;
-      chest.group.position.y = chest.y + 0.68 + Math.sin(time * 2.2 + i) * 0.07;
+      chest.group.rotation.y = time * (chest.isGuildChest ? 0.85 : 0.65);
+      chest.group.position.y =
+        chest.y + (chest.isGuildChest ? 0.96 : 0.68) + Math.sin(time * 2.2 + i) * 0.08;
+      if (chest.isGuildChest && chest.group.userData) {
+        const cud = chest.group.userData;
+        if (cud.guildRing) cud.guildRing.rotation.z = -time * 1.8;
+        if (cud.guildCrest) {
+          cud.guildCrest.rotation.y = time * 2.8;
+          cud.guildCrest.position.y = 1.05 + Math.sin(time * 4.5 + i) * 0.1;
+        }
+      }
     }
   }
 
@@ -891,9 +903,14 @@ function renderGameFrame(dt) {
     DOM_CACHE.bossHpContainer.classList.remove('visible');
   }
 
+  const teamXpReq =
+    typeof getTeamXpRequired === 'function'
+      ? getTeamXpRequired(state.level, state.playerCount)
+      : Math.round((6 + 5 * state.level) * (1 + 0.35 * Math.max(0, (state.playerCount || 1) - 1)));
+
   if (state.frameCount++ % 6 === 0) {
     DOM_CACHE.healthBar.style.width = Math.max(0, (player.hp / state.maxHp) * 100) + '%';
-    DOM_CACHE.xpBar.style.width = (state.xp / (6 + 5 * state.level)) * 100 + '%';
+    DOM_CACHE.xpBar.style.width = Math.min(100, (state.xp / Math.max(1, teamXpReq)) * 100) + '%';
 
     const equippedWeaponList = Object.entries(state.weaponLevels)
       .filter(([, v]) => v > 0)
@@ -977,8 +994,8 @@ function renderGameFrame(dt) {
 
     DOM_CACHE.statsText.innerHTML =
       `${HEROES[state.heroId].name} (${state.playerCount || 1} игр. · ${GRID_DIM}×${GRID_DIM})<br>` +
-      `${actLabel}Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
-      `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м${state.isLavaPausedByForgeHall ? ' <b style="color:#48ffe8">(ПАУЗА)</b>' : ''} · золото: ${state.gold | 0}<br>` +
+      `${actLabel}Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · ур. отряда ${state.level} (${Math.floor(state.xp)}/${teamXpReq} XP) · ${formatTime(state.elapsedTime | 0)}<br>` +
+      `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м${state.isLavaPausedByForgeHall ? ' <b style="color:#48ffe8">(ПАУЗА)</b>' : ''} · 🪙 личное золото: <b>${state.gold | 0}</b> <small style="opacity:.8">[G — скинуть]</small><br>` +
       `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
       `${questHtml}` +
       `${state.isOnBalcony ? '<br><b style="color:#ffd858">🎯 Верхний стрелок · Балкон (+6 м): дальность +50%, урон +20%' + (state.itemsOwned.comp ? ' + крит Компаса ×' + (1 + 0.35 * state.itemsOwned.comp).toFixed(2) : '') + '</b>' : ''}` +
@@ -991,12 +1008,207 @@ function renderGameFrame(dt) {
       `${emberHtml}` +
       `${state.mutatorName ? '<br>' + state.mutatorName : ''}` +
       `<br>${inventorySummary}`;
+
+    if (typeof updateCoopPartyWidgets === 'function') {
+      updateCoopPartyWidgets();
+    }
   }
 
+  if (typeof updateOffscreenArrowsAndPingMarkers === 'function') {
+    updateOffscreenArrowsAndPingMarkers();
+  }
   if (typeof updateVfxStatusBanner === 'function') {
     updateVfxStatusBanner();
   }
   renderSceneWithPostProcessing();
+}
+
+/**
+ * Обновляет компактные виджеты союзников в левом HUD:
+ * HP, общий уровень, личное золото, иконки оружия с уровнями и активные тома.
+ */
+function updateCoopPartyWidgets() {
+  const container = DOM_CACHE.coopPartyHud || getById('coopPartyHud');
+  if (!container) return;
+  if (!state || !state.coopPeers || state.coopPeers.length === 0) {
+    if (container._lastHtml !== '') {
+      container._lastHtml = '';
+      container.innerHTML = '';
+    }
+    return;
+  }
+
+  const cardsHtml = state.coopPeers
+    .map((peer) => {
+      const isEmber = !!(peer.ember && peer.ember.active);
+      const isLost = !!(peer.ember && peer.ember.lostInLava);
+      const hpPct = isEmber || isLost ? 0 : Math.max(0, Math.min(100, Math.round((peer.hp / Math.max(1, peer.maxHp)) * 100)));
+      const colorCss = peer.colorCss || '#38f2dc';
+      const peerLv = peer.level || state.level || 1;
+      const peerGold = peer.gold | 0;
+
+      const wepList = (peer.weapons && peer.weapons.length ? peer.weapons : ['spear', 'chain'])
+        .map((wk) => {
+          const wCfg = WEAPONS[wk];
+          if (!wCfg) return '';
+          const wLv = (peer.weaponLevels && peer.weaponLevels[wk]) || 1;
+          return `<span class="ally-wep-pill">${wCfg.icon || '⚔️'} ${wCfg.shortName || wCfg.name} ${wLv}</span>`;
+        })
+        .join('');
+
+      const tomeBadges = Object.entries(peer.tomeLevels || {})
+        .filter(([, cnt]) => cnt > 0)
+        .map(([tk, cnt]) => `${(TOMES[tk] && TOMES[tk].icon) || '📘'}×${cnt}`)
+        .join(' ');
+
+      const statusBadge = isEmber
+        ? `<span style="color:#ff6a18;font-weight:700">🕯 УГОЛЬ ${(peer.ember.progress || 0).toFixed(1)}/3с</span>`
+        : isLost
+          ? `<span style="color:#ff4848">🌋 ЖДЁТ БОССА</span>`
+          : `${Math.ceil(peer.hp)}/${peer.maxHp} HP`;
+
+      return (
+        `<div class="ally-card${isEmber ? ' in-ember' : ''}" style="border-left-color:${colorCss}">` +
+        `<div class="ally-header">` +
+        `<span><i class="ally-name-dot" style="background:${colorCss}"></i>${peer.shortName || peer.name} <small style="opacity:.78">· Ур.${peerLv}</small></span>` +
+        `<span class="ally-meta-right">🪙${peerGold} · ${statusBadge}</span>` +
+        `</div>` +
+        `<div class="ally-hp-track"><div class="ally-hp-fill" style="width:${hpPct}%;background:${colorCss}"></div></div>` +
+        `<div class="ally-loadout-row">` +
+        `<div class="ally-weapons">${wepList}</div>` +
+        `<div class="ally-tomes">${tomeBadges || ''}</div>` +
+        `</div>` +
+        `</div>`
+      );
+    })
+    .join('');
+
+  if (container._lastHtml !== cardsHtml) {
+    container._lastHtml = cardsHtml;
+    container.innerHTML = cardsHtml;
+  }
+}
+
+/**
+ * Проецирует 3D-позиции союзников и 3D-пингов на экран:
+ * - рисует стрелки-указатели к соратникам за пределами камеры (#offscreenIndicators)
+ * - рисует плавающие маркеры 3D-пингов (#pingOverlayContainer)
+ */
+function updateOffscreenArrowsAndPingMarkers() {
+  const arrowsEl = DOM_CACHE.offscreenIndicators || getById('offscreenIndicators');
+  const pingsEl = DOM_CACHE.pingOverlayContainer || getById('pingOverlayContainer');
+  if (!state || state.isGameOver) return;
+
+  const vw = window.innerWidth || 1024;
+  const vh = window.innerHeight || 768;
+  const halfW = vw * 0.5;
+  const halfH = vh * 0.5;
+  const player = state.player;
+
+  // 1. Экранные стрелки-указатели к союзникам за пределами камеры
+  if (arrowsEl) {
+    if (!state.coopPeers || state.coopPeers.length === 0) {
+      if (arrowsEl.innerHTML !== '') arrowsEl.innerHTML = '';
+    } else {
+      let arrowsHtml = '';
+      for (let i = 0; i < state.coopPeers.length; i++) {
+        const peer = state.coopPeers[i];
+        const px = peer.ember && peer.ember.active ? peer.ember.x : peer.x;
+        const py = peer.ember && peer.ember.active ? peer.ember.y : peer.y;
+        const pz = peer.ember && peer.ember.active ? peer.ember.z : peer.z;
+
+        _tempVec3.set(px, py + 1.2, pz).project(camera);
+        const isBehind = _tempVec3.z > 1;
+        let ndcX = _tempVec3.x;
+        let ndcY = _tempVec3.y;
+        if (isBehind) {
+          ndcX = -ndcX;
+          ndcY = -ndcY;
+        }
+
+        const isOffscreen = isBehind || Math.abs(ndcX) > 0.88 || Math.abs(ndcY) > 0.84;
+        const isEmber = !!(peer.ember && peer.ember.active);
+        // Показываем стрелку, если союзник за пределами экрана ИЛИ если он упал в «Угасающий уголь»!
+        if (!isOffscreen && !isEmber) continue;
+
+        const angle = Math.atan2(-ndcY, ndcX);
+        const radiusX = halfW - 68;
+        const radiusY = halfH - 58;
+        const clampedX = isOffscreen
+          ? halfW + Math.cos(angle) * radiusX
+          : Math.max(70, Math.min(vw - 70, (ndcX * 0.5 + 0.5) * vw));
+        const clampedY = isOffscreen
+          ? halfH + Math.sin(angle) * radiusY
+          : Math.max(60, Math.min(vh - 60, (-ndcY * 0.5 + 0.5) * vh - 28));
+
+        const distMeters = Math.round(
+          Math.sqrt((px - player.x) ** 2 + (py - player.y) ** 2 + (pz - player.z) ** 2)
+        );
+        const dy = py - player.y;
+        const vertBadge = dy > 3.5 ? '▲+' + Math.round(dy) + 'м' : dy < -3.5 ? '▼' + Math.round(dy) + 'м' : '';
+        const deg = Math.round((angle * 180) / Math.PI);
+        const colorCss = isEmber ? '#ff5828' : peer.colorCss || '#38f2dc';
+        const emberAlert = isEmber ? ' · 🕯 РАЗДУТЬ!' : '';
+
+        arrowsHtml +=
+          `<div class="ally-arrow-indicator" style="left:${clampedX.toFixed(0)}px;top:${clampedY.toFixed(0)}px;border-color:${colorCss}">` +
+          `<span class="ally-arrow-chevron" style="color:${colorCss};transform:rotate(${deg}deg)">➤</span>` +
+          `<span>${peer.shortName || 'Союзник'} · ${distMeters}м ${vertBadge}${emberAlert}</span>` +
+          `</div>`;
+      }
+      if (arrowsEl._lastHtml !== arrowsHtml) {
+        arrowsEl._lastHtml = arrowsHtml;
+        arrowsEl.innerHTML = arrowsHtml;
+      }
+    }
+  }
+
+  // 2. Экранные маркеры активных 3D-пингов
+  if (pingsEl) {
+    if (!state.activePings || state.activePings.length === 0) {
+      if (pingsEl._lastHtml !== '') {
+        pingsEl._lastHtml = '';
+        pingsEl.innerHTML = '';
+      }
+    } else {
+      let pingsHtml = '';
+      for (let i = 0; i < state.activePings.length; i++) {
+        const pg = state.activePings[i];
+        _tempVec3.set(pg.x, pg.y + 2.8, pg.z).project(camera);
+        const isBehind = _tempVec3.z > 1;
+        let ndcX = _tempVec3.x;
+        let ndcY = _tempVec3.y;
+        if (isBehind) {
+          ndcX = -ndcX;
+          ndcY = -ndcY;
+        }
+
+        let screenX = (ndcX * 0.5 + 0.5) * vw;
+        let screenY = (-ndcY * 0.5 + 0.5) * vh;
+        if (isBehind || Math.abs(ndcX) > 0.9 || Math.abs(ndcY) > 0.85) {
+          const ang = Math.atan2(-ndcY, ndcX);
+          screenX = halfW + Math.cos(ang) * (halfW - 76);
+          screenY = halfH + Math.sin(ang) * (halfH - 64);
+        } else {
+          screenX = Math.max(76, Math.min(vw - 76, screenX));
+          screenY = Math.max(64, Math.min(vh - 64, screenY));
+        }
+
+        const dist = Math.round(
+          Math.sqrt((pg.x - player.x) ** 2 + (pg.y - player.y) ** 2 + (pg.z - player.z) ** 2)
+        );
+        pingsHtml +=
+          `<div class="ping-screen-marker" style="left:${screenX.toFixed(0)}px;top:${screenY.toFixed(0)}px;border-color:${pg.colorCss || '#ffd048'}">` +
+          `<div class="ping-screen-title" style="color:${pg.colorCss || '#ffd048'}">${pg.icon} ${pg.label}</div>` +
+          `<div class="ping-screen-sub">${pg.subLabel ? pg.subLabel + ' · ' : ''}${dist} м · ${Math.ceil(pg.life)}с</div>` +
+          `</div>`;
+      }
+      if (pingsEl._lastHtml !== pingsHtml) {
+        pingsEl._lastHtml = pingsHtml;
+        pingsEl.innerHTML = pingsHtml;
+      }
+    }
+  }
 }
 
 /**

@@ -46,7 +46,9 @@ const SOUND_PRESETS = {
   shield: [880, 0.07, 'square', 0.035],
   summon: [150, 0.35, 'triangle', 0.06],
   geyser: [85, 0.5, 'sawtooth', 0.1],
-  storm: [64, 0.9, 'sawtooth', 0.11]
+  storm: [64, 0.9, 'sawtooth', 0.11],
+  ping: [920, 0.22, 'triangle', 0.085],
+  vote: [560, 0.14, 'sine', 0.07]
 };
 
 const DEFAULT_SOUND_PRESET = [440, 0.1, 'sine', 0.05];
@@ -337,7 +339,7 @@ function playSound(soundName) {
     oscillator.type = waveType;
     oscillator.frequency.setValueAtTime(frequency, currentTime);
     oscillator.frequency.exponentialRampToValueAtTime(
-      Math.max(20, frequency * (soundName === 'pickup' || soundName === 'win' ? 1.45 : 0.4)),
+      Math.max(20, frequency * (soundName === 'pickup' || soundName === 'win' || soundName === 'ping' || soundName === 'vote' ? 1.45 : 0.4)),
       currentTime + duration
     );
 

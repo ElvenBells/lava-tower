@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Lava Tower — Три Башни (Three.js + GLSL)</title>
+  <title>Lava Tower — Три Башни (Three.js + GLSL · Co-op)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -18,22 +18,37 @@
     </div>
   </div>
 
+  <!-- Основной HUD игрока и компактные виджеты союзников (Блок 4) -->
   <div id="hud">
     <div class="bar"><i id="hb"></i></div>
     <div class="bar"><i id="xb"></i></div>
     <div id="st"></div>
+    <div id="coopPartyHud" class="coop-party-hud"></div>
   </div>
+
+  <!-- Экранные стрелки-указатели к союзникам за пределами камеры (Блок 4) -->
+  <div id="offscreenIndicators" class="offscreen-indicators"></div>
+
+  <!-- Экранные маркеры 3D-пингов (сундук, сундук гильдии, алтарь, босс, лестница) -->
+  <div id="pingOverlayContainer" class="ping-overlay-container"></div>
+
+  <!-- Панель быстрого голосования за Глобальный пакт (F1 — За / F2 — Против) без паузы -->
+  <div id="pactVoteWidget" class="pact-vote-widget" style="display:none"></div>
+
+  <!-- Безпаузный хотбар выбора наград из 3 карточек (клавиши 1, 2, 3 и R для переброса) -->
+  <div id="upgradeHotbar" class="upgrade-hotbar" style="display:none"></div>
 
   <!-- Панель параметров шейдеров/VFX, фонового звука и управления Бурей -->
   <div id="topVfxBar">
     <div id="vfxBanner" class="vfx-banner"></div>
     <div class="vfx-actions">
+      <button id="pingActionBtn" type="button" class="vfx-btn" onclick="triggerPlayer3DPing()">📍 Пинг: СКМ / V</button>
       <button id="audioToggleBtn" type="button" class="vfx-btn" onclick="toggleGameAudioMute()">🔊 Горн: Вкл</button>
       <button id="stormToggleBtn" type="button" class="vfx-btn" onclick="triggerOrToggleStorm()">🌪 Буря: Авто / B</button>
     </div>
   </div>
 
-  <div id="pauseHint">ESC — пауза · B — вызвать бурю</div>
+  <div id="pauseHint">ESC — пауза · 1/2/3/R — карточки · G — сбросить золото · СКМ/V — 3D-пинг · F1/F2 — пакт · B — буря</div>
   <div id="toast"></div>
 
   <div id="ov" class="ov">

@@ -27,6 +27,10 @@ scene.add(coopEventVisualGroup);
 const fadingEmberGroup = new THREE.Group();
 scene.add(fadingEmberGroup);
 
+// 3D-группа маркеров быстрых 3D-пингов (сундук, сундук гильдии, алтарь, босс, лестница)
+const pingVisualGroup = new THREE.Group();
+scene.add(pingVisualGroup);
+
 function buildCoopAllyAvatarMesh(tintHex) {
   const g = new THREE.Group();
   const cloakMat = new THREE.MeshStandardMaterial({
@@ -158,6 +162,56 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyF') {
     keysPressed.interactCore = 1;
   }
+  // Безпаузный выбор карточек наград на бегу клавишами 1, 2, 3 и переброс клавишей R (Блок 4)
+  if (state && !state.isGameOver && !state.pauseState && state.activeHotbarOffer) {
+    if (event.code === 'Digit1' || event.code === 'Numpad1') {
+      event.preventDefault();
+      if (typeof pickUpgrade === 'function') pickUpgrade(0);
+      return;
+    }
+    if (event.code === 'Digit2' || event.code === 'Numpad2') {
+      event.preventDefault();
+      if (typeof pickUpgrade === 'function') pickUpgrade(1);
+      return;
+    }
+    if (event.code === 'Digit3' || event.code === 'Numpad3') {
+      event.preventDefault();
+      if (typeof pickUpgrade === 'function') pickUpgrade(2);
+      return;
+    }
+    if (event.code === 'KeyR') {
+      event.preventDefault();
+      if (typeof rerollUpgrades === 'function') rerollUpgrades();
+      return;
+    }
+  }
+  // Быстрое голосование за Глобальный пакт: F1 — За, F2 — Против (Блок 4)
+  if (state && !state.isGameOver && state.activePactVote) {
+    if (event.code === 'F1') {
+      event.preventDefault();
+      if (typeof castPactVote === 'function') castPactVote(1);
+      return;
+    }
+    if (event.code === 'F2') {
+      event.preventDefault();
+      if (typeof castPactVote === 'function') castPactVote(0);
+      return;
+    }
+  }
+  // Сброс золотых монет союзникам по клавише G (Блок 4)
+  if (event.code === 'KeyG' && state && !state.isGameOver && !state.pauseState) {
+    event.preventDefault();
+    if (typeof dropGoldForAlly === 'function') {
+      dropGoldForAlly();
+    }
+  }
+  // Быстрый 3D-пинг по клавише V (альтернатива нажатию колёсика мыши)
+  if (event.code === 'KeyV' && state && !state.isGameOver && !state.pauseState) {
+    event.preventDefault();
+    if (typeof triggerPlayer3DPing === 'function') {
+      triggerPlayer3DPing();
+    }
+  }
   if (event.code === 'KeyB') {
     if (typeof triggerOrToggleStorm === 'function') {
       triggerOrToggleStorm();
@@ -173,7 +227,15 @@ window.addEventListener('keyup', (event) => {
   keysPressed[event.code] = 0;
 });
 
-window.addEventListener('mousedown', () => {
+window.addEventListener('mousedown', (event) => {
+  // Нажатие колёсика мыши (Middle Click, button === 1) ставит 3D-пинг без сброса pointerLock
+  if (event && event.button === 1) {
+    event.preventDefault();
+    if (state && !state.isGameOver && !state.pauseState && typeof triggerPlayer3DPing === 'function') {
+      triggerPlayer3DPing();
+    }
+    return;
+  }
   isMouseDown = 1;
 });
 
@@ -1465,6 +1527,7 @@ function initializeRun(mode) {
   floorQuestGroup.clear();
   coopEventVisualGroup.clear();
   fadingEmberGroup.clear();
+  if (typeof pingVisualGroup !== 'undefined') pingVisualGroup.clear();
   if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
   if (state) {
     state.projectiles.length = 0;
@@ -1585,7 +1648,13 @@ function initializeRun(mode) {
     chestsOpened: 0,
     toastTimer: 0,
     hintCooldown: 0,
-    currentOfferChestKey: 0
+    currentOfferChestKey: 0,
+    activeHotbarOffer: 0,
+    pendingOfferQueue: [],
+    offerSeq: 0,
+    activePactVote: null,
+    activePings: [],
+    guildChestsOpened: 0
   };
 
   for (let i = 0; i < 12; i++) {
@@ -1702,11 +1771,29 @@ function initializeRun(mode) {
     const peerHeroId = candidateAllyHeroes[(pIdx - 1) % candidateAllyHeroes.length] || 'hun';
     const loadout = allyLoadouts[(pIdx - 1) % allyLoadouts.length];
     const heroShortName = (HEROES[peerHeroId] && HEROES[peerHeroId].name.split('·')[1] || 'Союзник').trim();
+    const allyCssColors = ['#38f2dc', '#ffb838', '#c868ff'];
+    const initWepLevels = {};
+    for (const wk of loadout.weapons.slice(0, MAX_WEAPON_SLOTS)) {
+      initWepLevels[wk] = 1;
+    }
     state.coopPeers.push({
       id: pIdx + 1,
       heroId: peerHeroId,
+      shortName: heroShortName,
+      roleTitle: loadout.roleTitle,
       name: `${heroShortName} (${loadout.roleTitle})`,
+      colorHex: allyColors[(pIdx - 1) % allyColors.length],
+      colorCss: allyCssColors[(pIdx - 1) % allyCssColors.length],
+      level: 1,
+      gold: 5 + 3 * (metaProgress.forge.gld | 0),
       weapons: loadout.weapons.slice(0, MAX_WEAPON_SLOTS),
+      weaponLevels: initWepLevels,
+      tomeLevels: {
+        hp: pIdx === 3 ? 1 : 0,
+        spd: pIdx === 1 ? 1 : 0,
+        dmg: pIdx === 2 ? 1 : 0,
+        mag: 0
+      },
       shotCounter: 0,
       x: ax,
       y: 0.01,
@@ -1938,6 +2025,52 @@ function updateCoopPeersStep(dt) {
       targetX = Math.cos(secAngle) * orbitR;
       targetZ = Math.sin(secAngle) * orbitR;
       targetY = activeFloor * 14;
+    } else if (
+      state.pickups.some(
+        (pk) => pk.type === 2 && pk.droppedByPlayer && Math.abs(pk.y - peer.y) < 3.5 && hypot2D(pk.x - peer.x, pk.z - peer.z) < 16
+      ) &&
+      i === 0
+    ) {
+      // Союзник подбегает подобрать сброшенную игроком (клавиша G) монету
+      const droppedCoin = state.pickups.find(
+        (pk) => pk.type === 2 && pk.droppedByPlayer && Math.abs(pk.y - peer.y) < 3.5
+      );
+      if (droppedCoin) {
+        targetX = droppedCoin.x;
+        targetY = droppedCoin.y - 0.5;
+        targetZ = droppedCoin.z;
+        moveSpeedCap = 9.5;
+      }
+    } else if (
+      chests.some(
+        (c) =>
+          c.isGuildChest &&
+          !c.isOpen &&
+          c.floor === activeFloor &&
+          (hypot2D(player.x - c.x, player.z - c.z) < 6.5 ||
+            (state.activePings && state.activePings.some((pg) => pg.targetRef === c)))
+      )
+    ) {
+      // Когда игрок подходит к «Сундуку гильдии» или пингует его, союзники сбегаются скинуться золотом в складчину!
+      const gChest = chests.find((c) => c.isGuildChest && !c.isOpen && c.floor === activeFloor);
+      if (gChest) {
+        const ang = (i / Math.max(1, state.coopPeers.length)) * TWO_PI + 0.5;
+        targetX = gChest.x + Math.cos(ang) * 1.6;
+        targetY = gChest.y;
+        targetZ = gChest.z + Math.sin(ang) * 1.6;
+        moveSpeedCap = 9.6;
+      }
+    } else if (
+      state.activePings &&
+      state.activePings.length > 0 &&
+      Math.abs(state.activePings[state.activePings.length - 1].y - activeFloor * 14) < 8
+    ) {
+      // Реакция отряда на активный 3D-пинг игрока (подтягиваются к помеченному объекту)
+      const latestPing = state.activePings[state.activePings.length - 1];
+      const ang = (i / Math.max(1, state.coopPeers.length)) * TWO_PI + state.elapsedTime * 0.3;
+      targetX = latestPing.x + Math.cos(ang) * 2.4;
+      targetY = latestPing.y;
+      targetZ = latestPing.z + Math.sin(ang) * 2.4;
     } else {
       // На обычных этажах снайперский союзник занимает балкон (floorY + 6), а остальные держат широкий строй
       const floorBals = balconiesByFloor[activeFloor] || [];
@@ -3435,6 +3568,9 @@ function updateGameStep(dt) {
   for (let i = state.pickups.length - 1; i >= 0; i--) {
     const pickup = state.pickups[i];
     pickup.lifetime -= dt;
+    if (pickup.pickupLockTimer > 0) {
+      pickup.pickupLockTimer = Math.max(0, pickup.pickupLockTimer - dt);
+    }
     if (
       pickup.lifetime <= 0 ||
       pickup.y < state.lavaY + 0.2 ||
@@ -3445,15 +3581,57 @@ function updateGameStep(dt) {
       continue;
     }
 
-    const dx = player.x - pickup.x;
-    const dy = player.y + 0.8 - pickup.y;
-    const dz = player.z - pickup.z;
-    const distSq = dx * dx + dy * dy + dz * dz;
+    // Определяем ближайшего получателя:
+    // - Кристаллы опыта (type === 0) идут в общую командную шкалу от любого игрока/союзника
+    // - Золото (type === 2) идёт в личный кошелёк подобравшего (а сброшенная игроком монета G приоритетно притягивается к союзнику!)
+    let targetCollector = 'player';
+    let targetX = player.x;
+    let targetY = player.y + 0.8;
+    let targetZ = player.z;
+    let dx = targetX - pickup.x;
+    let dy = targetY - pickup.y;
+    let dz = targetZ - pickup.z;
+    let distSq = dx * dx + dy * dy + dz * dz;
 
-    if (!pickup.isMagnetized && distSq < magnetRadiusSq) {
+    const lockedForPlayer = pickup.type === 2 && pickup.droppedByPlayer && (pickup.pickupLockTimer || 0) > 0;
+    if (lockedForPlayer) {
+      distSq = 1e12;
+    }
+
+    if (state.coopPeers && state.coopPeers.length > 0 && (pickup.type === 0 || pickup.type === 2)) {
+      for (let pi = 0; pi < state.coopPeers.length; pi++) {
+        const peer = state.coopPeers[pi];
+        if (peer.ember && (peer.ember.active || peer.ember.lostInLava)) continue;
+        const pdx = peer.x - pickup.x;
+        const pdy = peer.y + 0.8 - pickup.y;
+        const pdz = peer.z - pickup.z;
+        const pDistSq = pdx * pdx + pdy * pdy + pdz * pdz;
+        const peerMagSq = pickup.droppedByPlayer ? magnetRadiusSq * 2.2 : magnetRadiusSq;
+        if (pDistSq < peerMagSq && pDistSq < distSq) {
+          distSq = pDistSq;
+          dx = pdx;
+          dy = pdy;
+          dz = pdz;
+          targetCollector = peer;
+        }
+      }
+    }
+
+    if (!pickup.isMagnetized && distSq < (pickup.droppedByPlayer ? magnetRadiusSq * 2.2 : magnetRadiusSq)) {
       pickup.isMagnetized = 1;
+      pickup.magnetTarget = targetCollector;
     }
     if (pickup.isMagnetized) {
+      if (pickup.magnetTarget && pickup.magnetTarget !== 'player') {
+        const peer = pickup.magnetTarget;
+        if (!peer.ember || (!peer.ember.active && !peer.ember.lostInLava)) {
+          dx = peer.x - pickup.x;
+          dy = peer.y + 0.8 - pickup.y;
+          dz = peer.z - pickup.z;
+          distSq = dx * dx + dy * dy + dz * dz;
+          targetCollector = peer;
+        }
+      }
       pickup.speed += 40 * dt;
       const dist = Math.sqrt(distSq) || 1;
       const stepDist = Math.min(dist, pickup.speed * dt);
@@ -3461,15 +3639,33 @@ function updateGameStep(dt) {
       pickup.y += (dy / dist) * stepDist;
       pickup.z += (dz / dist) * stepDist;
 
-      if (dist < 0.9) {
+      if (dist < 0.95) {
         if (pickup.type === 0) {
+          // Общий командный опыт (никто не ворует прокачку у союзников)
           state.xp += pickup.value * (1 + 0.1 * state.tomeLevels.mag);
         } else if (pickup.type === 1) {
           if (!isPlayerInEmber) {
             player.hp = Math.min(state.maxHp, player.hp + state.maxHp * pickup.value);
           }
         } else {
-          state.gold += pickup.value;
+          // Личный кошелёк золота (игрок или союзник)
+          if (targetCollector && targetCollector !== 'player') {
+            targetCollector.gold = (targetCollector.gold || 0) + pickup.value;
+            if (pickup.droppedByPlayer) {
+              showToast(
+                '🪙 ' +
+                  (targetCollector.shortName || targetCollector.name) +
+                  ' получил +' +
+                  pickup.value +
+                  ' золота (в кошельке: ' +
+                  (targetCollector.gold | 0) +
+                  ')',
+                2.0
+              );
+            }
+          } else {
+            state.gold += pickup.value;
+          }
         }
         playSound('pickup');
         const pickedType = pickup.type;
@@ -3477,24 +3673,121 @@ function updateGameStep(dt) {
         state.pickups.pop();
         if (pickedType === 0) {
           checkLevelUp();
-          if (state.pauseState) break;
         }
       }
     }
   }
 
+  // Открытие обычных сундуков (1 + N) и складчина в большой «Сундук гильдии» без паузы
   if (!state.pauseState && !isPlayerInEmber) {
     for (let ci = 0; ci < chests.length; ci++) {
       const chest = chests[ci];
       if (chest.isOpen) continue;
+
+      const effChestMul =
+        typeof getEffectiveChestCostMultiplier === 'function'
+          ? getEffectiveChestCostMultiplier(chest.x, chest.y, chest.z)
+          : state.chestCostMultiplier;
+      const finalCost = Math.max(1, Math.ceil(chest.cost * effChestMul));
+
+      if (chest.isGuildChest) {
+        chest.playerContribCd = Math.max(0, (chest.playerContribCd || 0) - dt);
+        chest.allyContribTimer = Math.max(0, (chest.allyContribTimer || 0) - dt);
+        const playerNearGuildChest =
+          Math.abs(player.y - chest.y) < 2.8 && hypot2D(player.x - chest.x, player.z - chest.z) < 2.9;
+
+        // Вклад игрока при подходе к Сундуку гильдии
+        if (playerNearGuildChest && state.gold >= 1 && chest.contributedGold < finalCost && chest.playerContribCd <= 0) {
+          const chunk = Math.min(
+            state.gold | 0,
+            finalCost - chest.contributedGold,
+            Math.max(1, Math.ceil(finalCost * 0.25))
+          );
+          if (chunk > 0) {
+            state.gold -= chunk;
+            chest.contributedGold += chunk;
+            chest.playerContribCd = 0.22;
+            playSound('pickup');
+            spawnSparkBurst(chest.x, chest.y + 0.9, chest.z, 8, 'gold');
+          }
+        }
+
+        // Вклад союзников в складчину Сундука гильдии
+        if (
+          state.coopPeers &&
+          state.coopPeers.length > 0 &&
+          chest.contributedGold < finalCost &&
+          chest.allyContribTimer <= 0 &&
+          (playerNearGuildChest || chest.contributedGold > 0)
+        ) {
+          for (let pi = 0; pi < state.coopPeers.length; pi++) {
+            const peer = state.coopPeers[pi];
+            if (peer.ember && (peer.ember.active || peer.ember.lostInLava)) continue;
+            if (Math.abs(peer.y - chest.y) < 3.5 && hypot2D(peer.x - chest.x, peer.z - chest.z) < 4.5) {
+              const peerChunk = Math.min(
+                Math.max(1, peer.gold | 0),
+                finalCost - chest.contributedGold,
+                Math.max(1, Math.ceil(finalCost * 0.25))
+              );
+              peer.gold = Math.max(0, (peer.gold | 0) - peerChunk);
+              chest.contributedGold += peerChunk;
+              chest.allyContribTimer = 0.32;
+              playSound('pickup');
+              spawnSparkBurst(chest.x, chest.y + 1.0, chest.z, 7, 'gold');
+              break;
+            }
+          }
+        }
+
+        if (chest.contributedGold >= finalCost) {
+          chest.isOpen = 1;
+          chest.group.visible = false;
+          state.chestsOpened++;
+          state.guildChestsOpened = (state.guildChestsOpened || 0) + 1;
+          if (state.chestsOpened >= 3) {
+            unlockHero('smi');
+          }
+          playSound('win');
+          spawnWaveRingEffect(chest.x, chest.y + 0.6, chest.z, 4.4, 0x38ffe8);
+          spawnSparkBurst(chest.x, chest.y + 1.1, chest.z, 34, 'gold');
+
+          // Каждый союзник тоже получает карточку улучшения из Сундука гильдии!
+          if (state.coopPeers && state.coopPeers.length) {
+            for (let pi = 0; pi < state.coopPeers.length; pi++) {
+              const peer = state.coopPeers[pi];
+              if (typeof upgradeCoopPeerLoadout === 'function') {
+                upgradeCoopPeerLoadout(peer);
+              }
+              spawnWaveRingEffect(peer.x, peer.y + 0.2, peer.z, 2.4, peer.colorHex || 0x38ffe8);
+            }
+          }
+
+          showToast(
+            '🏛 Сундук гильдии открыт в складчину (' +
+              finalCost +
+              ' зол.)! Каждый участник отряда получил карточку улучшения!',
+            3.6
+          );
+          showUpgradeOfferModal(0, 'gchest' + state.chestsOpened);
+          break;
+        } else if (playerNearGuildChest && state.hintCooldown <= 0) {
+          state.hintCooldown = 0.85;
+          showToast(
+            '🏛 Сундук гильдии (складчина): ' +
+              chest.contributedGold +
+              '/' +
+              finalCost +
+              ' золота · Союзники скидываются вместе с вами!',
+            1.4
+          );
+        }
+        continue;
+      }
+
       if (
         Math.abs(player.y - chest.y) < 2.5 &&
         hypot2D(player.x - chest.x, player.z - chest.z) < 2.2
       ) {
-        const effChestMul = typeof getEffectiveChestCostMultiplier === 'function'
-          ? getEffectiveChestCostMultiplier(chest.x, chest.y, chest.z)
-          : state.chestCostMultiplier;
-        const finalCost = Math.ceil(chest.cost * effChestMul);
         if (state.gold >= finalCost) {
           state.gold -= finalCost;
           chest.isOpen = 1;
@@ -3509,7 +3802,7 @@ function updateGameStep(dt) {
           break;
         } else if (state.hintCooldown <= 0) {
           state.hintCooldown = 0.9;
-          showToast('Сундук: ' + finalCost + ' золота (у вас ' + (state.gold | 0) + ')', 1.2);
+          showToast('Сундук: ' + finalCost + ' золота (у вас ' + (state.gold | 0) + ', G — обмен с отрядом)', 1.2);
         }
       }
     }
@@ -3527,6 +3820,13 @@ function updateGameStep(dt) {
         break;
       }
     }
+  }
+
+  if (typeof updatePactVoteStep === 'function') {
+    updatePactVoteStep(dt);
+  }
+  if (typeof updateActivePingsStep === 'function') {
+    updateActivePingsStep(dt);
   }
 
   if (state.maxFloorReached > state.lastAnnouncedFloor) {

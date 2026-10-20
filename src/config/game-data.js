@@ -18,6 +18,8 @@ const MAX_WEAPON_SLOTS = 2;
  */
 const WEAPONS = {
   fire: {
+    icon: '🔥',
+    shortName: 'Шары',
     name: 'Огненные шары',
     tags: ['fire'],
     isHeavyMelee: 0,
@@ -25,6 +27,8 @@ const WEAPONS = {
     description: 'Залп лавовых метеоров, поджигающих цели на 3 с (база для Пара и Детонации шлака)'
   },
   blade: {
+    icon: '🗡',
+    shortName: 'Клинки',
     name: 'Орбитальные клинки',
     tags: ['kin'],
     isHeavyMelee: 0,
@@ -32,6 +36,8 @@ const WEAPONS = {
     description: 'Вращающиеся вокруг героя клинки-осколки, резонирующие со стихийными тегами'
   },
   wave: {
+    icon: '🔨',
+    shortName: 'Волна',
     name: 'Ударная волна',
     tags: ['kin'],
     isHeavyMelee: 1,
@@ -39,6 +45,8 @@ const WEAPONS = {
     description: 'Тяжёлый круговой удар: вызывает Детонацию шлака по горящим и Коллапс Пустоты (+50%) по стянутым'
   },
   spear: {
+    icon: '❄',
+    shortName: 'Копья',
     name: 'Морозные копья',
     tags: ['ice'],
     isHeavyMelee: 0,
@@ -46,6 +54,8 @@ const WEAPONS = {
     description: 'Сверхзвуковые пронзающие ледяные копья: замораживают ряд врагов (база для Пара и Сверхпроводимости)'
   },
   chain: {
+    icon: '⚡',
+    shortName: 'Молния',
     name: 'Цепная молния',
     tags: ['elec'],
     isHeavyMelee: 0,
@@ -53,6 +63,8 @@ const WEAPONS = {
     description: 'Дуговой разряд по цепочке целей; по замёрзшим запускает Сверхпроводимость (−30% защиты всему этажу)'
   },
   grav: {
+    icon: '🌀',
+    shortName: 'Сфера',
     name: 'Сфера гравитации',
     tags: ['void', 'kin'],
     isHeavyMelee: 0,
@@ -60,6 +72,8 @@ const WEAPONS = {
     description: 'Сингулярность стягивает и замедляет мобов в одну точку, подготавливая Коллапс Пустоты (+50% урона)'
   },
   totem: {
+    icon: '🗼',
+    shortName: 'Тотем',
     name: 'Магмовый тотем-турель',
     tags: ['fire'],
     isHeavyMelee: 0,
@@ -67,6 +81,8 @@ const WEAPONS = {
     description: 'Устанавливает турель горна, ведущую перекрёстный огонь лавовыми залпами и поджигающую врагов'
   },
   shield: {
+    icon: '🛡',
+    shortName: 'Щит',
     name: 'Кузнечный щит-бумеранг',
     tags: ['kin'],
     isHeavyMelee: 1,
@@ -74,6 +90,8 @@ const WEAPONS = {
     description: 'Тяжёлый зубчатый щит-бумеранг: пробивает толпу туда-обратно, вызывая Детонацию шлака и Коллапс Пустоты'
   },
   scythe: {
+    icon: '🌙',
+    shortName: 'Коса',
     name: 'Коса Бездны',
     tags: ['void', 'ice'],
     isHeavyMelee: 1,
@@ -199,11 +217,26 @@ const ITEMS = {
  * Тома характеристик.
  */
 const TOMES = {
-  hp: { name: 'Том жизни', description: '+20 макс. здоровья' },
-  spd: { name: 'Том скорости', description: '+8% скорости' },
-  dmg: { name: 'Том силы', description: '+10% урона' },
-  mag: { name: 'Том притяжения', description: '+35% радиус сбора, +10% опыта' }
+  hp: { icon: '❤️', shortName: 'HP', name: 'Том жизни', description: '+20 макс. здоровья' },
+  spd: { icon: '👟', shortName: 'Скор.', name: 'Том скорости', description: '+8% скорости' },
+  dmg: { icon: '⚔️', shortName: 'Сила', name: 'Том силы', description: '+10% урона' },
+  mag: { icon: '🧲', shortName: 'Магнит', name: 'Том притяжения', description: '+35% радиус сбора, +10% опыта' }
 };
+
+/**
+ * Командная формула требуемого опыта для следующего уровня:
+ * xpRequired = (6 + 5 * state.level) * (1 + 0.35 * (playerCount - 1))
+ */
+function getTeamXpRequired(level, playerCount) {
+  const lv = Math.max(1, level !== undefined ? level : (typeof state !== 'undefined' && state ? state.level : 1));
+  const pCount = Math.max(
+    1,
+    playerCount !== undefined
+      ? playerCount
+      : (typeof state !== 'undefined' && state && state.playerCount) || 1
+  );
+  return Math.round((6 + 5 * lv) * (1 + 0.35 * (pCount - 1)));
+}
 
 /**
  * Мутаторы ежедневного забега.
@@ -560,53 +593,79 @@ const FADING_EMBER_CONFIG = {
  * Алтари пактов (риск в обмен на награду, с учётом лимита 2 слотов оружия).
  */
 const PACTS = {
+  blood: {
+    id: 'blood',
+    scope: 'personal',
+    icon: '🩸',
+    name: 'Кровавая жертва',
+    categoryLabel: 'Личная сделка · Мгновенно',
+    description: 'Только вы: −25% текущего HP, +15 личного золота',
+    apply: (runState) => {
+      runState.player.hp = Math.max(1, Math.round(runState.player.hp * 0.75));
+      runState.gold += 15;
+    }
+  },
+  frail: {
+    id: 'frail',
+    scope: 'personal',
+    icon: '🗡',
+    name: 'Хрупкая сила',
+    categoryLabel: 'Личная сделка · Мгновенно',
+    description: 'Только вы: макс. HP −20%, активное оружие +1 уровень',
+    apply: (runState) => {
+      runState.maxHp = Math.max(20, Math.round(runState.maxHp * 0.8));
+      runState.player.hp = Math.min(runState.player.hp, runState.maxHp);
+      const upgradeableWeapons = Object.keys(runState.weaponLevels).filter(
+        (key) => runState.weaponLevels[key] > 0 && runState.weaponLevels[key] < 8
+      );
+      if (upgradeableWeapons.length) {
+        const randomWeapon = upgradeableWeapons[Math.floor(Math.random() * upgradeableWeapons.length)];
+        runState.weaponLevels[randomWeapon]++;
+      } else {
+        const anyWep = Object.keys(runState.weaponLevels)[0] || 'fire';
+        runState.weaponLevels[anyWep] = Math.min(8, (runState.weaponLevels[anyWep] || 1) + 1);
+      }
+    }
+  },
   rage: {
+    id: 'rage',
+    scope: 'global',
+    icon: '🌋',
     name: 'Ярость лавы',
-    description: 'Лава на 20% быстрее, урон +25%',
+    categoryLabel: 'Глобальный пакт · Голосование (F1/F2)',
+    description: 'Весь мир: лава на 20% быстрее, урон отряда +25%',
     apply: (runState) => {
       runState.lavaSpeedMultiplier *= 1.2;
       runState.damageMultiplier *= 1.25;
     }
   },
-  frail: {
-    name: 'Хрупкая сила',
-    description: 'Макс. HP −20%, активное оружие +1 уровень',
-    apply: (runState) => {
-      runState.maxHp = Math.round(runState.maxHp * 0.8);
-      runState.player.hp = Math.min(runState.player.hp, runState.maxHp);
-      const upgradeableWeapons = Object.keys(runState.weaponLevels).filter(
-        (key) => runState.weaponLevels[key] < 8
-      );
-      if (upgradeableWeapons.length) {
-        const randomWeapon = upgradeableWeapons[Math.floor(Math.random() * upgradeableWeapons.length)];
-        runState.weaponLevels[randomWeapon]++;
-      }
-    }
-  },
   greed: {
+    id: 'greed',
+    scope: 'global',
+    icon: '🪙',
     name: 'Жадность',
-    description: 'Золото ×2, элитных мобов вдвое больше',
+    categoryLabel: 'Глобальный пакт · Голосование (F1/F2)',
+    description: 'Весь мир: золото ×2, элитных мобов вдвое больше',
     apply: (runState) => {
       runState.isGreedPactActive = 1;
     }
   },
-  blood: {
-    name: 'Кровавая жертва',
-    description: '−25% текущего HP, +15 золота',
-    apply: (runState) => {
-      runState.player.hp = Math.max(1, runState.player.hp * 0.75);
-      runState.gold += 15;
-    }
-  },
   swift: {
+    id: 'swift',
+    scope: 'global',
+    icon: '💨',
     name: 'Лёгкие ноги',
-    description: 'Вы быстрее на 20%, но мобы быстрее на 15%',
+    categoryLabel: 'Глобальный пакт · Голосование (F1/F2)',
+    description: 'Весь мир: отряд быстрее на 20%, но мобы быстрее на 15%',
     apply: (runState) => {
       runState.playerSpeedMultiplier = (runState.playerSpeedMultiplier || 1) * 1.2;
       runState.enemySpeedMultiplier = (runState.enemySpeedMultiplier || 1) * 1.15;
     }
   }
 };
+
+const PERSONAL_PACT_KEYS = ['blood', 'frail'];
+const GLOBAL_PACT_KEYS = ['rage', 'greed', 'swift'];
 
 /**
  * Конфигурация трёх башен с зафиксированными параметрами шейдеров/VFX из 3D-макетов

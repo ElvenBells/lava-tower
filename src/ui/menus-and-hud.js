@@ -515,6 +515,79 @@ function recalculatePlayerTagCounts() {
   }
 }
 
+function debugTriggerHotbarOfferTest() {
+  if (!state || state.isGameOver) return;
+  state.rerollsLeft = Math.max(1, state.rerollsLeft || 0);
+  resumeGame();
+  showUpgradeOfferModal(0, 'test-hotbar-' + (++state.offerSeq));
+  showToast('🎴 Хотбар наград открыт внизу экрана! Выбирайте на бегу клавишами 1, 2, 3 или R (без паузы)', 3.6);
+}
+
+function debugTeleportToGuildChest() {
+  if (!state || state.isGameOver) return;
+  const f = state.maxFloorReached;
+  let gChest = chests.find((c) => c.isGuildChest && !c.isOpen && c.floor === f);
+  if (!gChest) {
+    gChest = chests.find((c) => c.isGuildChest && !c.isOpen);
+  }
+  state.gold += 15;
+  if (gChest) {
+    state.player.x = gChest.x;
+    state.player.y = gChest.y + 0.1;
+    state.player.z = gChest.z + 1.8;
+    state.player.vy = 0;
+    state.player.lastGroundY = gChest.y;
+    resumeGame();
+    triggerPlayer3DPing('guild_chest');
+    showToast('🏛 Телепорт к «Сундуку гильдии» (+15 золота)! Союзники уже бегут скинуться в складчину!', 3.8);
+  } else {
+    resumeGame();
+    showToast('🪙 +15 золота выдано! Все Сундуки гильдии уже открыты', 2.6);
+  }
+}
+
+let _debugPactToggle = 0;
+function debugTriggerPactTest() {
+  if (!state || state.isGameOver) return;
+  resumeGame();
+  const isGlobal = _debugPactToggle++ % 2 === 0;
+  if (isGlobal) {
+    const globalKeys = ['rage', 'greed', 'swift'];
+    const pKey = globalKeys[_debugPactToggle % globalKeys.length];
+    openPactModal({
+      x: state.player.x,
+      y: state.player.lastGroundY,
+      z: state.player.z,
+      floor: state.maxFloorReached,
+      isOpen: 0,
+      group: { visible: true },
+      pactKey: pKey,
+      pactScope: 'global'
+    });
+  } else {
+    const persKeys = ['blood', 'frail'];
+    const pKey = persKeys[_debugPactToggle % persKeys.length];
+    openPactModal({
+      x: state.player.x,
+      y: state.player.lastGroundY,
+      z: state.player.z,
+      floor: state.maxFloorReached,
+      isOpen: 0,
+      group: { visible: true },
+      pactKey: pKey,
+      pactScope: 'personal'
+    });
+  }
+}
+
+function debugTriggerPingAndGoldDrop() {
+  if (!state || state.isGameOver) return;
+  state.gold = Math.max(state.gold, 8);
+  resumeGame();
+  dropGoldForAlly();
+  triggerPlayer3DPing();
+}
+
 function pauseGame() {
   if (!state || state.isGameOver) return;
   state.pauseState = 2;
@@ -522,6 +595,10 @@ function pauseGame() {
     <h2>ПАУЗА</h2>
     <p style="font-size:12px;opacity:.85">Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · Сетка ${GRID_DIM}×${GRID_DIM} (R=${TOWER_FLOOR_RADIUS} м) · Игроков: ${state.playerCount}</p>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
+    <button onclick="debugTriggerHotbarOfferTest()">🎴 ТЕСТ БЛОК 4: Безпаузный хотбар из 3 карточек (клавиши 1, 2, 3 и R)</button>
+    <button onclick="debugTeleportToGuildChest()">🏛 ТЕСТ БЛОК 4: К «Сундуку гильдии» (+15 золота на складчину отряда)</button>
+    <button onclick="debugTriggerPactTest()">🔮 ТЕСТ БЛОК 4: Алтарь пакта (Голосование F1/F2 за Глобальный / Мгновенный личный)</button>
+    <button onclick="debugTriggerPingAndGoldDrop()">📍 ТЕСТ БЛОК 4: 3D-пинг (СКМ/V) + Сброс монет союзнику (клавиша G)</button>
     <button onclick="debugCycleWeaponLoadoutPair()">⚔ ТЕСТ БЛОК 3: Сменить пару оружия (2 слота из 9 видов)</button>
     <button onclick="debugTriggerElementalReactionShowcase()">⚗ ТЕСТ БЛОК 3: Вызвать межклассовую реакцию (Пар / Сверхпровод. / Шлак / Коллапс)</button>
     <button onclick="debugCycleTradeoffAndVerticalBuild()">⚖ ТЕСТ БЛОК 3: Реликвия с компромиссом / Вертикальная роль (comp и heart)</button>
@@ -556,6 +633,7 @@ function quitToMenu() {
   if (typeof floorQuestGroup !== 'undefined') floorQuestGroup.clear();
   if (typeof coopEventVisualGroup !== 'undefined') coopEventVisualGroup.clear();
   if (typeof fadingEmberGroup !== 'undefined') fadingEmberGroup.clear();
+  if (typeof pingVisualGroup !== 'undefined') pingVisualGroup.clear();
   if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
   resetBossEffects();
   state.projectiles.length = 0;
@@ -563,6 +641,10 @@ function quitToMenu() {
   state.isGameOver = 1;
   getById('hud').style.display = 'none';
   getById('pauseHint').style.display = 'none';
+  if (getById('upgradeHotbar')) getById('upgradeHotbar').style.display = 'none';
+  if (getById('pactVoteWidget')) getById('pactVoteWidget').style.display = 'none';
+  if (getById('offscreenIndicators')) getById('offscreenIndicators').innerHTML = '';
+  if (getById('pingOverlayContainer')) getById('pingOverlayContainer').innerHTML = '';
   getById('bossHp').classList.remove('visible');
   state = null;
   applyTowerTheme(TOWERS[selectedTowerId] || TOWERS.ash);
@@ -574,17 +656,113 @@ function quitToMenu() {
   showMainMenu();
 }
 
+/* ---------- 3Б. Блок 4: Безпаузный хотбар наград (1, 2, 3, R), Сброс золота (G), Личные/Глобальные пакты (F1/F2) и 3D-пинги ---------- */
+
+function renderUpgradeHotbarUI() {
+  const hotbarEl = getById('upgradeHotbar');
+  if (!hotbarEl || !state || !state.activeHotbarOffer || !state.currentOffers) {
+    if (hotbarEl) hotbarEl.style.display = 'none';
+    return;
+  }
+
+  const equippedWeaponKeys = Object.keys(state.weaponLevels).filter(
+    (k) => state.weaponLevels[k] > 0
+  );
+  const maxSlots = typeof MAX_WEAPON_SLOTS !== 'undefined' ? MAX_WEAPON_SLOTS : 2;
+  const cKey = String(state.currentOfferChestKey || '');
+  const sourceLabel = cKey.startsWith('gchest')
+    ? '🏛 Сундук гильдии (складчина)'
+    : cKey.startsWith('chest')
+      ? '📦 Сундук'
+      : '⚡ Уровень отряда ' + state.level;
+  const queueLen = (state.pendingOfferQueue && state.pendingOfferQueue.length) || 0;
+  const queueBadgeHtml =
+    queueLen > 0 ? `<span class="hotbar-queue-badge">+${queueLen} в очереди</span>` : '';
+
+  const cardsHtml = state.currentOffers
+    .map((entry, idx) => {
+      const [category, key] = entry;
+      const isWeapon = category === 'w';
+      const isTome = category === 't';
+      const isTradeoff = category === 'i' && ITEMS[key] && ITEMS[key].isTradeoff;
+      const icon = isWeapon
+        ? WEAPONS[key].icon || '⚔️'
+        : isTome
+          ? TOMES[key].icon || '📘'
+          : isTradeoff
+            ? '⚖️'
+            : '💎';
+      const title = isWeapon
+        ? WEAPONS[key].name
+        : isTome
+          ? TOMES[key].name
+          : ITEMS[key].name;
+      const badge = isWeapon
+        ? state.weaponLevels[key]
+          ? 'ур. ' + (state.weaponLevels[key] + 1)
+          : `слот ${equippedWeaponKeys.length + 1}/${maxSlots}`
+        : isTome
+          ? '×' + ((state.tomeLevels[key] || 0) + 1)
+          : (isTradeoff ? '⚠ ' : '') + '×' + ((state.itemsOwned[key] || 0) + 1);
+      const subtitle = isWeapon
+        ? WEAPONS[key].description || 'Автоатака, 8 уровней'
+        : isTome
+          ? TOMES[key].description
+          : ITEMS[key].description;
+
+      return (
+        `<button type="button" class="hotbar-card cat-${category}${isTradeoff ? ' tradeoff' : ''}" onclick="pickUpgrade(${idx})">` +
+        `<div class="hotbar-card-top">` +
+        `<span class="hotbar-key-badge">${idx + 1}</span>` +
+        `<span class="hotbar-card-name">${icon} ${title}</span>` +
+        `<span class="hotbar-card-lv">${badge}</span>` +
+        `</div>` +
+        `<div class="hotbar-card-desc">${subtitle}</div>` +
+        `</button>`
+      );
+    })
+    .join('');
+
+  const rerollHtml =
+    state.rerollsLeft > 0
+      ? `<button type="button" class="hotbar-reroll-btn" onclick="rerollUpgrades()"><b>[R]</b> Переброс (${state.rerollsLeft})</button>`
+      : `<span style="font-size:11px;opacity:.75">Клавиши <b>1 · 2 · 3</b> — выбор на бегу</span>`;
+
+  hotbarEl.innerHTML =
+    `<div class="hotbar-header">` +
+    `<div><span class="hotbar-title">${sourceLabel}</span> · <small style="opacity:.88">Оружие: ${equippedWeaponKeys.length}/${maxSlots}</small>${queueBadgeHtml}</div>` +
+    `${rerollHtml}` +
+    `</div>` +
+    `<div class="hotbar-cards-row">${cardsHtml}</div>`;
+
+  hotbarEl.style.display = 'flex';
+}
+
+/**
+ * Безпаузный хотбар выбора наград из 3 карточек внизу экрана (клавиши 1, 2, 3 и R для переброса).
+ * Не ставит игру на паузу (state.pauseState остаётся 0) и не сбрасывает pointerLock!
+ */
 function showUpgradeOfferModal(isReroll, chestKey) {
-  state.pauseState = 1;
-  state.currentOfferChestKey = chestKey || 0;
+  if (!state || state.isGameOver) return;
+  if (!state.pendingOfferQueue) state.pendingOfferQueue = [];
+
+  if (!isReroll && state.activeHotbarOffer) {
+    state.pendingOfferQueue.push(chestKey || 'lvl-' + state.level + '-' + (++state.offerSeq));
+    renderUpgradeHotbarUI();
+    return;
+  }
+
+  state.activeHotbarOffer = 1;
+  state.currentOfferChestKey = chestKey || 'lvl-' + state.level;
   const offerSeedKey =
-    (chestKey || 'offer-' + state.level) +
+    state.currentOfferChestKey +
     (isReroll ? 'r' + (state.rerollCount = (state.rerollCount || 0) + 1) : '');
 
   const equippedWeaponKeys = Object.keys(state.weaponLevels).filter(
     (k) => state.weaponLevels[k] > 0
   );
-  const weaponSlotsFull = equippedWeaponKeys.length >= (typeof MAX_WEAPON_SLOTS !== 'undefined' ? MAX_WEAPON_SLOTS : 2);
+  const weaponSlotsFull =
+    equippedWeaponKeys.length >= (typeof MAX_WEAPON_SLOTS !== 'undefined' ? MAX_WEAPON_SLOTS : 2);
 
   state.currentOffers = UPGRADE_POOL.map((entry, idx) => [
     seededRandom(state.seed, offerSeedKey, idx),
@@ -605,55 +783,30 @@ function showUpgradeOfferModal(isReroll, chestKey) {
     .slice(0, 3)
     .map((pair) => pair[1]);
 
-  getById('pn').innerHTML =
-    `<h3>${chestKey ? 'Сундук' : 'Уровень ' + state.level} <small style="font-size:12px;opacity:.85">· Слоты оружия: ${equippedWeaponKeys.length}/${MAX_WEAPON_SLOTS}</small></h3>` +
-    state.currentOffers
-      .map((entry, idx) => {
-        const [category, key] = entry;
-        const isWeapon = category === 'w';
-        const isTome = category === 't';
-        const title = isWeapon
-          ? WEAPONS[key].name
-          : isTome
-            ? TOMES[key].name
-            : ITEMS[key].name;
-        const badge = isWeapon
-          ? state.weaponLevels[key]
-            ? 'ур. ' + (state.weaponLevels[key] + 1)
-            : `слот ${equippedWeaponKeys.length + 1}/${MAX_WEAPON_SLOTS}`
-          : isTome
-            ? ''
-            : (ITEMS[key].isTradeoff ? '⚠ ' : '') + '×' + ((state.itemsOwned[key] || 0) + 1);
-        const subtitle = isWeapon
-          ? (WEAPONS[key].description || 'Автоатака, 8 уровней')
-          : isTome
-            ? TOMES[key].description
-            : ITEMS[key].description;
-
-        return `<button onclick="pickUpgrade(${idx})"><b>${title}</b> ${badge}<br><small>${subtitle}</small></button>`;
-      })
-      .join('') +
-    (state.rerollsLeft > 0
-      ? `<button onclick="rerollUpgrades()">Переброс (осталось: ${state.rerollsLeft})</button>`
-      : '');
-
-  getById('ov').style.display = 'flex';
-  if (document.exitPointerLock) document.exitPointerLock();
+  renderUpgradeHotbarUI();
 }
 
 function rerollUpgrades() {
-  if (!state || state.rerollsLeft <= 0) return;
+  if (!state || !state.activeHotbarOffer || state.rerollsLeft <= 0) return;
   state.rerollsLeft--;
+  playSound('pickup');
   showUpgradeOfferModal(1, state.currentOfferChestKey);
 }
 
 function pickUpgrade(offerIndex) {
+  if (!state || !state.activeHotbarOffer || !state.currentOffers || !state.currentOffers[offerIndex]) {
+    return;
+  }
   playSound('pickup');
   const [category, key] = state.currentOffers[offerIndex];
+  let pickedTitle = '';
+
   if (category === 'w') {
     state.weaponLevels[key] = (state.weaponLevels[key] || 0) + 1;
+    pickedTitle = `${WEAPONS[key].icon || '⚔️'} ${WEAPONS[key].name} (ур. ${state.weaponLevels[key]})`;
   } else if (category === 'i') {
     state.itemsOwned[key] = (state.itemsOwned[key] || 0) + 1;
+    pickedTitle = `💎 ${ITEMS[key].name} (×${state.itemsOwned[key]})`;
   } else {
     state.tomeLevels[key]++;
     state.tomeFlashType = key;
@@ -662,6 +815,7 @@ function pickUpgrade(offerIndex) {
       state.maxHp += 20;
       state.player.hp += 20;
     }
+    pickedTitle = `${TOMES[key].icon || '📘'} ${TOMES[key].name} (×${state.tomeLevels[key]})`;
     const tomeColors = { hp: 0xff2840, spd: 0x45ff88, dmg: 0xff8818, mag: 0x38f0ff };
     if (state.player && typeof spawnWaveRingEffect === 'function') {
       spawnWaveRingEffect(
@@ -679,60 +833,590 @@ function pickUpgrade(offerIndex) {
     state.player.hp = Math.min(state.player.hp, state.maxHp);
   }
   recalculatePlayerTagCounts();
+  showToast('Выбрано [' + (offerIndex + 1) + ']: ' + pickedTitle, 1.8);
 
-  state.pauseState = 0;
-  getById('ov').style.display = 'none';
-  requestPointerLock();
-  checkLevelUp();
+  if (state.pendingOfferQueue && state.pendingOfferQueue.length > 0) {
+    const nextKey = state.pendingOfferQueue.shift();
+    state.activeHotbarOffer = 0;
+    showUpgradeOfferModal(0, nextKey);
+  } else {
+    state.activeHotbarOffer = 0;
+    const hotbarEl = getById('upgradeHotbar');
+    if (hotbarEl) hotbarEl.style.display = 'none';
+    checkLevelUp();
+  }
 }
 
+/**
+ * Сброс золотых монет союзникам по клавише G (или прямой вклад в Сундук гильдии рядом).
+ */
+function dropGoldForAlly() {
+  if (!state || state.isGameOver || state.pauseState) return;
+  const player = state.player;
+
+  // Если игрок стоит прямо у открываемого «Сундука гильдии», G вносит золото в складчину
+  const nearGuildChest = chests.find(
+    (c) =>
+      c.isGuildChest &&
+      !c.isOpen &&
+      Math.abs(c.y - player.y) < 3.0 &&
+      hypot2D(c.x - player.x, c.z - player.z) < 3.6
+  );
+  if (nearGuildChest && state.gold >= 1) {
+    const effMul =
+      typeof getEffectiveChestCostMultiplier === 'function'
+        ? getEffectiveChestCostMultiplier(nearGuildChest.x, nearGuildChest.y, nearGuildChest.z)
+        : state.chestCostMultiplier || 1;
+    const finalCost = Math.max(1, Math.ceil(nearGuildChest.cost * effMul));
+    const needed = Math.max(0, finalCost - nearGuildChest.contributedGold);
+    const give = Math.min(state.gold | 0, needed, 5);
+    if (give > 0) {
+      state.gold -= give;
+      nearGuildChest.contributedGold += give;
+      playSound('pickup');
+      spawnSparkBurst(nearGuildChest.x, nearGuildChest.y + 0.9, nearGuildChest.z, 12, 'gold');
+      showToast(
+        `🏛 Вы внесли +${give} золота в «Сундук гильдии» (${nearGuildChest.contributedGold}/${finalCost})!`,
+        1.8
+      );
+      return;
+    }
+  }
+
+  if ((state.gold | 0) < 1) {
+    showToast('🪙 У вас нет золота для сброса союзникам (клавиша G)', 1.5);
+    return;
+  }
+
+  const dropAmount = Math.min(state.gold | 0, 3);
+  state.gold -= dropAmount;
+
+  let dirX = Math.sin(state.facingAngle);
+  let dirZ = Math.cos(state.facingAngle);
+  if (state.coopPeers && state.coopPeers.length > 0) {
+    let nearestPeer = null;
+    let bestD = 14;
+    for (const peer of state.coopPeers) {
+      if (peer.ember && (peer.ember.active || peer.ember.lostInLava)) continue;
+      if (Math.abs(peer.y - player.y) < 3.5) {
+        const d = hypot2D(peer.x - player.x, peer.z - player.z);
+        if (d < bestD && d > 0.2) {
+          bestD = d;
+          nearestPeer = peer;
+        }
+      }
+    }
+    if (nearestPeer) {
+      dirX = (nearestPeer.x - player.x) / bestD;
+      dirZ = (nearestPeer.z - player.z) / bestD;
+    }
+  }
+
+  const dropX = player.x + dirX * 2.1;
+  const dropZ = player.z + dirZ * 2.1;
+  const groundY = getGroundHeightAt(dropX, player.lastGroundY + 1, dropZ);
+  const safeY = groundY >= player.lastGroundY - 2 ? groundY + 0.72 : player.lastGroundY + 0.72;
+
+  state.pickups.push({
+    type: 2,
+    x: dropX,
+    y: safeY,
+    z: dropZ,
+    value: dropAmount,
+    lifetime: 55,
+    isMagnetized: 0,
+    speed: 7,
+    phase: Math.random() * 6.28,
+    droppedByPlayer: 1,
+    pickupLockTimer: 1.5
+  });
+
+  playSound('pickup');
+  spawnSparkBurst(dropX, safeY, dropZ, 12, 'gold');
+  showToast(`🪙 Вы сбросили ${dropAmount} золота союзникам [G]!`, 1.9);
+}
+
+/**
+ * Разделение Алтарей пакта (PACTS) на:
+ * 1) Мгновенные личные сделки (Кровавая жертва, Хрупкая сила — рискует один игрок, без паузы)
+ * 2) Глобальные модификаторы мира (Ярость лавы, Жадность, Лёгкие ноги — быстрое голосование F1 За / F2 Против)
+ */
 function openPactModal(altar) {
-  state.pauseState = 1;
-  state.activePactAltar = altar;
+  if (!state || state.isGameOver || !altar) return;
   altar.isOpen = 1;
-  altar.group.visible = false;
+  if (altar.group) altar.group.visible = false;
 
-  const pactKeys = Object.keys(PACTS)
-    .map((key) => [
-      seededRandom(state.seed, 'alt' + altar.floor, key.charCodeAt(0) * 7 + key.length),
-      key
-    ])
-    .sort((a, b) => a[0] - b[0])
-    .slice(0, 2)
-    .map((pair) => pair[1]);
+  const pactKey =
+    altar.pactKey ||
+    (altar.floor % 2 === 1
+      ? PERSONAL_PACT_KEYS[altar.floor % PERSONAL_PACT_KEYS.length]
+      : GLOBAL_PACT_KEYS[altar.floor % GLOBAL_PACT_KEYS.length]);
+  const pact = PACTS[pactKey] || PACTS.blood;
 
-  state.currentPactOffers = pactKeys;
+  if (pact.scope === 'personal' || altar.pactScope === 'personal') {
+    // Мгновенная личная сделка без остановки игры и без голосования
+    pact.apply(state);
+    recalculatePlayerTagCounts();
+    playSound('boom');
+    spawnWaveRingEffect(state.player.x, state.player.y + 0.2, state.player.z, 3.2, 0xff3860);
+    spawnSparkBurst(state.player.x, state.player.y + 0.8, state.player.z, 22, 'fire');
+    showToast(
+      `${pact.icon || '🩸'} Личный пакт принят мгновенно: «${pact.name}» (${pact.description})`,
+      3.4
+    );
+    return;
+  }
 
-  getById('pn').innerHTML =
-    '<h3>Алтарь пакта</h3>' +
-    pactKeys
-      .map(
-        (key, idx) =>
-          `<button onclick="pickPact(${idx})"><b>${PACTS[key].name}</b><br><small>${PACTS[key].description}</small></button>`
-      )
-      .join('') +
-    '<button onclick="pickPact(-1)">Отказаться (алтарь останется)</button>';
+  // Глобальный модификатор мира: запускаем быстрое командное голосование (F1 — За / F2 — Против) без паузы!
+  const peerVoteTimers = {};
+  if (state.coopPeers && state.coopPeers.length) {
+    for (let i = 0; i < state.coopPeers.length; i++) {
+      const peer = state.coopPeers[i];
+      peerVoteTimers[peer.id] = 0.75 + i * 0.45;
+    }
+  }
 
-  getById('ov').style.display = 'flex';
-  if (document.exitPointerLock) document.exitPointerLock();
+  state.activePactVote = {
+    altar,
+    pactKey,
+    timeLeft: 9.0,
+    maxTime: 9.0,
+    votes: { 1: null },
+    peerVoteTimers
+  };
+
   playSound('summon');
+  renderPactVoteWidget();
+  showToast(
+    `🔮 Глобальный пакт «${pact.name}»: голосуйте на бегу [F1 — ЗА] / [F2 — ПРОТИВ]`,
+    3.0
+  );
+}
+
+function renderPactVoteWidget() {
+  const widgetEl = getById('pactVoteWidget');
+  if (!widgetEl) return;
+  const voteState = state && state.activePactVote;
+  if (!voteState) {
+    widgetEl.style.display = 'none';
+    return;
+  }
+
+  const pact = PACTS[voteState.pactKey] || PACTS.rage;
+  const totalPlayers = Math.max(1, state.playerCount || 1);
+  const pips = [];
+
+  for (let pid = 1; pid <= totalPlayers; pid++) {
+    const v = voteState.votes[pid];
+    const label = pid === 1 ? 'Вы' : `Игр.${pid}`;
+    const cls = v === 1 ? 'yes' : v === 0 ? 'no' : '';
+    const mark = v === 1 ? '✓' : v === 0 ? '✕' : '…';
+    pips.push(`<span class="pact-pip ${cls}">${label}: ${mark}</span>`);
+  }
+
+  const pct = Math.max(0, Math.min(100, (voteState.timeLeft / voteState.maxTime) * 100)).toFixed(1);
+
+  widgetEl.innerHTML =
+    `<div class="pact-vote-top">` +
+    `<span class="pact-vote-title">${pact.icon || '🔮'} АЛТАРЬ ПАКТА: ${pact.name}</span>` +
+    `<span class="pact-vote-scope">Глобальный · ${Math.ceil(voteState.timeLeft)} с</span>` +
+    `</div>` +
+    `<div class="pact-vote-desc">${pact.description}</div>` +
+    `<div class="pact-vote-actions">` +
+    `<div class="pact-vote-btns">` +
+    `<button type="button" class="pact-btn yes" onclick="castPactVote(1)"><b>[F1]</b> ЗА</button>` +
+    `<button type="button" class="pact-btn no" onclick="castPactVote(0)"><b>[F2]</b> ПРОТИВ</button>` +
+    `</div>` +
+    `<div class="pact-vote-pips">${pips.join('')}</div>` +
+    `</div>` +
+    `<div class="pact-timer-bar"><div class="pact-timer-fill" style="width:${pct}%"></div></div>`;
+
+  widgetEl.style.display = 'block';
+}
+
+function castPactVote(voteYes) {
+  if (!state || !state.activePactVote) return;
+  const voteState = state.activePactVote;
+  voteState.votes[1] = voteYes ? 1 : 0;
+  playSound('vote');
+
+  // Ускоряем ответы симулируемых союзников после выбора игрока
+  if (state.coopPeers && state.coopPeers.length) {
+    for (let i = 0; i < state.coopPeers.length; i++) {
+      const peer = state.coopPeers[i];
+      if (voteState.votes[peer.id] === undefined || voteState.votes[peer.id] === null) {
+        voteState.peerVoteTimers[peer.id] = Math.min(
+          voteState.peerVoteTimers[peer.id] || 0.3,
+          0.18 + i * 0.14
+        );
+      }
+    }
+  }
+  renderPactVoteWidget();
+}
+
+function resolvePactVote() {
+  if (!state || !state.activePactVote) return;
+  const voteState = state.activePactVote;
+  const pact = PACTS[voteState.pactKey] || PACTS.rage;
+  const altar = voteState.altar;
+
+  let yesVotes = 0;
+  let noVotes = 0;
+  const totalPlayers = Math.max(1, state.playerCount || 1);
+  for (let pid = 1; pid <= totalPlayers; pid++) {
+    if (voteState.votes[pid] === 1) yesVotes++;
+    else if (voteState.votes[pid] === 0) noVotes++;
+  }
+
+  state.activePactVote = null;
+  const widgetEl = getById('pactVoteWidget');
+  if (widgetEl) widgetEl.style.display = 'none';
+
+  // При равенстве голосов решающим считается голос хоста/игрока (или большинство ЗА)
+  const approved =
+    yesVotes > noVotes || (yesVotes === noVotes && voteState.votes[1] === 1 && yesVotes > 0);
+
+  if (approved) {
+    pact.apply(state);
+    playSound('boom');
+    spawnWaveRingEffect(state.player.x, state.player.y + 0.2, state.player.z, 4.2, 0xb848ff);
+    showToast(
+      `✅ Голосование (${yesVotes} ЗА / ${noVotes} ПРОТИВ): Глобальный пакт «${pact.name}» активирован!`,
+      3.2
+    );
+  } else {
+    if (altar) {
+      altar.isOpen = 0;
+      if (altar.group) altar.group.visible = true;
+      altar.cooldownUntil = state.elapsedTime + 5.5;
+    }
+    showToast(
+      `❌ Голосование (${yesVotes} ЗА / ${noVotes} ПРОТИВ): отряд отклонил пакт «${pact.name}»`,
+      2.6
+    );
+  }
+}
+
+function updatePactVoteStep(dt) {
+  if (!state || !state.activePactVote) return;
+  const voteState = state.activePactVote;
+  voteState.timeLeft -= dt;
+
+  const totalPlayers = Math.max(1, state.playerCount || 1);
+  if (state.coopPeers && state.coopPeers.length) {
+    for (let i = 0; i < state.coopPeers.length; i++) {
+      const peer = state.coopPeers[i];
+      if (voteState.votes[peer.id] !== undefined && voteState.votes[peer.id] !== null) continue;
+      voteState.peerVoteTimers[peer.id] = (voteState.peerVoteTimers[peer.id] || 0.8) - dt;
+      if (voteState.peerVoteTimers[peer.id] <= 0) {
+        // Если игрок уже проголосовал, союзники поддерживают тактику лидера (либо оценивают своё здоровье)
+        if (voteState.votes[1] !== null && voteState.votes[1] !== undefined) {
+          voteState.votes[peer.id] = i === 0 ? voteState.votes[1] : (peer.hp > peer.maxHp * 0.35 ? voteState.votes[1] : 0);
+        } else {
+          voteState.votes[peer.id] = peer.hp > peer.maxHp * 0.4 ? 1 : 0;
+        }
+        playSound('vote');
+      }
+    }
+  }
+
+  let votedCount = 0;
+  for (let pid = 1; pid <= totalPlayers; pid++) {
+    if (voteState.votes[pid] === 1 || voteState.votes[pid] === 0) {
+      votedCount++;
+    }
+  }
+
+  if (votedCount >= totalPlayers && voteState.votes[1] !== null) {
+    resolvePactVote();
+    return;
+  }
+  if (voteState.timeLeft <= 0) {
+    if (voteState.votes[1] === null) voteState.votes[1] = 0;
+    resolvePactVote();
+    return;
+  }
+
+  if ((state.frameCount & 3) === 0) {
+    renderPactVoteWidget();
+  }
 }
 
 function pickPact(choiceIndex) {
-  const altar = state.activePactAltar;
-  if (choiceIndex >= 0) {
-    const pactKey = state.currentPactOffers[choiceIndex];
-    PACTS[pactKey].apply(state);
-    playSound('boom');
-    showToast('Пакт: ' + PACTS[pactKey].name, 2.2);
-  } else {
-    altar.isOpen = 0;
-    altar.group.visible = true;
-    altar.cooldownUntil = state.elapsedTime + 5;
+  castPactVote(choiceIndex >= 0 ? 1 : 0);
+}
+
+/**
+ * Создаёт 3D-маяк пинга в мире (лучевой столб, рунное кольцо на полу и вращающийся ромб).
+ */
+function createPing3DBeaconMesh(colorHex) {
+  const g = new THREE.Group();
+
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(1.15, 1.52, 28),
+    new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.08;
+  g.add(ring);
+
+  const beamGeo = new THREE.CylinderGeometry(0.12, 0.34, 6.2, 12, 1, true);
+  beamGeo.translate(0, 3.1, 0);
+  const beam = new THREE.Mesh(
+    beamGeo,
+    new THREE.MeshBasicMaterial({
+      color: colorHex,
+      transparent: true,
+      opacity: 0.34,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  g.add(beam);
+
+  const diamond = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.42, 0),
+    new THREE.MeshBasicMaterial({ color: colorHex })
+  );
+  diamond.position.y = 2.65;
+  g.add(diamond);
+
+  g.userData = { ring, beam, diamond };
+  if (typeof pingVisualGroup !== 'undefined') {
+    pingVisualGroup.add(g);
   }
-  state.pauseState = 0;
-  getById('ov').style.display = 'none';
-  requestPointerLock();
+  return g;
+}
+
+let _pingCycleIndex = 0;
+
+/**
+ * Быстрый 3D-пинг по нажатию колёсика мыши (СКМ) или клавиши V:
+ * помечает сундук, Сундук гильдии, алтарь пакта, босса/элиту или лестницу.
+ */
+function triggerPlayer3DPing(forcedKind) {
+  if (!state || state.isGameOver) return;
+  if (!state.activePings) state.activePings = [];
+
+  const player = state.player;
+  const activeFloor = Math.min(
+    GRID_FLOORS - 1,
+    Math.max(0, Math.floor(player.lastGroundY / 14 + 0.07))
+  );
+
+  // Вектор взгляда камеры в горизонтальной плоскости
+  const lookDirX = -Math.sin(state.cameraYaw);
+  const lookDirZ = -Math.cos(state.cameraYaw);
+
+  const candidates = [];
+
+  // 1. Боссы и элитные Хранители печати
+  for (const e of state.enemies) {
+    if (e.hp <= 0) continue;
+    if (e.type === 'b' || e.isSealGuardian || e.eliteType) {
+      const isBoss = e.type === 'b';
+      candidates.push({
+        kind: isBoss ? 'boss' : 'elite',
+        icon: isBoss ? '👹' : '⚔️',
+        label: isBoss ? `БОСС: ${e.bossName || 'Хранитель'}` : 'ЭЛИТНЫЙ ВРАГ',
+        subLabel: `${Math.ceil(e.hp)} HP`,
+        colorHex: 0xff3858,
+        colorCss: '#ff3858',
+        x: e.x,
+        y: e.y,
+        z: e.z,
+        targetRef: e,
+        followEntity: e
+      });
+    }
+  }
+
+  // 2. Сундуки гильдии и обычные сундуки на текущем и соседнем этаже
+  for (const c of chests) {
+    if (c.isOpen || Math.abs(c.floor - activeFloor) > 1) continue;
+    const effMul =
+      typeof getEffectiveChestCostMultiplier === 'function'
+        ? getEffectiveChestCostMultiplier(c.x, c.y, c.z)
+        : state.chestCostMultiplier || 1;
+    const finalCost = Math.max(1, Math.ceil(c.cost * effMul));
+    if (c.isGuildChest) {
+      candidates.push({
+        kind: 'guild_chest',
+        icon: '🏛',
+        label: 'СУНДУК ГИЛЬДИИ (Складчина)',
+        subLabel: `${c.contributedGold}/${finalCost} зол.`,
+        colorHex: 0x38ffe8,
+        colorCss: '#38ffe8',
+        x: c.x,
+        y: c.y,
+        z: c.z,
+        targetRef: c
+      });
+    } else {
+      candidates.push({
+        kind: 'chest',
+        icon: '📦',
+        label: 'СУНДУК',
+        subLabel: `${finalCost} зол.`,
+        colorHex: 0xffc838,
+        colorCss: '#ffc838',
+        x: c.x,
+        y: c.y,
+        z: c.z,
+        targetRef: c
+      });
+    }
+  }
+
+  // 3. Алтари пакта
+  for (const a of altars) {
+    if (a.isOpen || Math.abs(a.floor - activeFloor) > 1) continue;
+    const pact = (a.pactKey && PACTS[a.pactKey]) || PACTS.rage;
+    const isPers = a.pactScope === 'personal' || pact.scope === 'personal';
+    candidates.push({
+      kind: 'altar',
+      icon: isPers ? '🩸' : '🔮',
+      label: `АЛТАРЬ: ${pact.name}`,
+      subLabel: isPers ? 'Личный пакт' : 'Голосование F1/F2',
+      colorHex: isPers ? 0xff4868 : 0xd868ff,
+      colorCss: isPers ? '#ff4868' : '#d868ff',
+      x: a.x,
+      y: a.y,
+      z: a.z,
+      targetRef: a
+    });
+  }
+
+  // 4. Лестница на следующий этаж
+  const floorStairs =
+    (typeof stairPositionsByFloor !== 'undefined' && stairPositionsByFloor[activeFloor]) || [];
+  if (floorStairs.length > 0) {
+    const [sx, sz, sy] = floorStairs[0];
+    const isSealed =
+      state.floorQuest && state.floorQuest.floor === activeFloor && !state.floorQuest.completed;
+    candidates.push({
+      kind: 'stairs',
+      icon: '🪜',
+      label: `ЛЕСТНИЦА (Этаж ${activeFloor + 2})`,
+      subLabel: isSealed ? 'Заперта печатью' : 'Путь открыт',
+      colorHex: 0x48ff98,
+      colorCss: '#48ff98',
+      x: sx,
+      y: sy - 1.5,
+      z: sz,
+      targetRef: null
+    });
+  }
+
+  if (!candidates.length) return;
+
+  // Оцениваем кандидатов по направлению взгляда камеры и расстоянию
+  for (const cand of candidates) {
+    const dx = cand.x - player.x;
+    const dz = cand.z - player.z;
+    const dist = hypot2D(dx, dz) || 1;
+    const dot = (dx / dist) * lookDirX + (dz / dist) * lookDirZ;
+    cand.dist = dist;
+    cand.aimScore = dot * 18 - dist * 0.25 + (cand.kind === 'guild_chest' ? 4 : 0);
+  }
+
+  let chosen = null;
+  if (forcedKind) {
+    chosen = candidates.find((c) => c.kind === forcedKind);
+  }
+  if (!chosen) {
+    // Сортируем по aimScore, но позволяем циклически переключать цели при повторных пингах подряд
+    candidates.sort((a, b) => b.aimScore - a.aimScore);
+    const topPool = candidates.slice(0, Math.min(4, candidates.length));
+    chosen = topPool[_pingCycleIndex++ % topPool.length];
+  }
+
+  // Ограничиваем число одновременных пингов до 2
+  while (state.activePings.length >= 2) {
+    const oldPing = state.activePings.shift();
+    if (oldPing && oldPing.mesh && typeof pingVisualGroup !== 'undefined') {
+      pingVisualGroup.remove(oldPing.mesh);
+    }
+  }
+
+  const mesh = createPing3DBeaconMesh(chosen.colorHex);
+  mesh.position.set(chosen.x, chosen.y, chosen.z);
+
+  const pingObj = {
+    ...chosen,
+    ownerName: playerNickname || 'Вы',
+    life: 7.5,
+    maxLife: 7.5,
+    mesh
+  };
+  state.activePings.push(pingObj);
+
+  playSound('ping');
+  spawnWaveRingEffect(chosen.x, chosen.y + 0.2, chosen.z, 3.0, chosen.colorHex);
+  showToast(
+    `📍 Пинг (${pingObj.ownerName}): ${chosen.icon} ${chosen.label} · ${Math.round(chosen.dist)} м`,
+    2.4
+  );
+}
+
+function updateActivePingsStep(dt) {
+  if (!state || !state.activePings || !state.activePings.length) return;
+  const time = state.elapsedTime;
+
+  for (let i = state.activePings.length - 1; i >= 0; i--) {
+    const pg = state.activePings[i];
+    pg.life -= dt;
+
+    // Если пинг привязан к движущемуся боссу/элите, обновляем координаты
+    if (pg.followEntity) {
+      if (pg.followEntity.hp <= 0) {
+        pg.life = 0;
+      } else {
+        pg.x = pg.followEntity.x;
+        pg.y = pg.followEntity.y;
+        pg.z = pg.followEntity.z;
+        pg.subLabel = `${Math.ceil(pg.followEntity.hp)} HP`;
+      }
+    } else if (pg.targetRef && pg.targetRef.isOpen) {
+      pg.life = Math.min(pg.life, 0.5);
+    } else if (pg.kind === 'guild_chest' && pg.targetRef) {
+      const effMul =
+        typeof getEffectiveChestCostMultiplier === 'function'
+          ? getEffectiveChestCostMultiplier(pg.x, pg.y, pg.z)
+          : state.chestCostMultiplier || 1;
+      const finalCost = Math.max(1, Math.ceil(pg.targetRef.cost * effMul));
+      pg.subLabel = `${pg.targetRef.contributedGold}/${finalCost} зол.`;
+    }
+
+    if (pg.life <= 0) {
+      if (pg.mesh && typeof pingVisualGroup !== 'undefined') {
+        pingVisualGroup.remove(pg.mesh);
+      }
+      state.activePings.splice(i, 1);
+      continue;
+    }
+
+    if (pg.mesh) {
+      pg.mesh.position.set(pg.x, pg.y, pg.z);
+      const ud = pg.mesh.userData;
+      if (ud) {
+        ud.ring.rotation.z = time * 2.4;
+        const pulse = 1 + Math.sin(time * 7) * 0.16;
+        ud.ring.scale.setScalar(pulse);
+        ud.diamond.rotation.y = time * 3.2;
+        ud.diamond.position.y = 2.55 + Math.sin(time * 5) * 0.22;
+      }
+    }
+  }
 }
 
 /* ---------- 4. Таблица рекордов, главное меню и завершение забега ---------- */
@@ -820,8 +1504,13 @@ function finishRun(isVictory) {
     storage.set('lt_lb', leaderboard.slice(-300));
   }
 
+  if (typeof pingVisualGroup !== 'undefined') pingVisualGroup.clear();
   getById('hud').style.display = 'none';
   getById('pauseHint').style.display = 'none';
+  if (getById('upgradeHotbar')) getById('upgradeHotbar').style.display = 'none';
+  if (getById('pactVoteWidget')) getById('pactVoteWidget').style.display = 'none';
+  if (getById('offscreenIndicators')) getById('offscreenIndicators').innerHTML = '';
+  if (getById('pingOverlayContainer')) getById('pingOverlayContainer').innerHTML = '';
   if (document.exitPointerLock) document.exitPointerLock();
   getById('bossHp').classList.remove('visible');
 
@@ -851,7 +1540,7 @@ function showMainMenu() {
 
   getById('pn').innerHTML =
     `<h1>LAVA TOWER · CO-OP</h1>` +
-    `<p>Расширенная генерация башни для 1–4 игроков: масштабируемые этажи (15×15 / 19×19 / 23×23), широкие мосты и кольца (8 м), снайперские полуэтажи-балконы (+6 м), изолированные сектора после развилок, 3 последовательных Акта и безопасные «Залы Кузницы» с паузой лавы.</p>` +
+    `<p>Кооперативная версия для 1–4 игроков (Блоки 1–4): масштабируемые этажи (15×15 / 19×19 / 23×23), командные печати и события, матрица 4 стихийных реакций, безпаузный хотбар наград (1/2/3/R), общий опыт + личное золото (G — сброс), «Сундуки гильдии» в складчину, личные/глобальные пакты (F1/F2), HUD союзников и 3D-пинги (СКМ/V).</p>` +
     `<p>Ник: <input id="nk" value="${escapeHtml(playerNickname)}" maxlength="16"></p>` +
     `<button onclick="startRun(0)" style="background:#4a1d0f;border-color:#ffd040;font-size:16px">▶ НАЧАТЬ ЗАБЕГ (${COOP_SCALE_PRESETS[selectedPlayerCount].label})</button>` +
     `${buildCoopAndCampaignSelectHtml()}` +
@@ -860,7 +1549,7 @@ function showMainMenu() {
     `${buildHeroSelectHtml()}` +
     `<button onclick="startRun(1)">☀ РЕЙТИНГ ДНЯ<br><small style="color:#c9a2ff;font-family:Rubik">Сид ${todayCode} · 3 Акта · старт: ${dailyWeaponName} · мутатор: ${dailyMutatorName}</small></button>` +
     `${buildLeaderboardHtml()}` +
-    `<small style="font-size:11px;opacity:0.7">WASD — бег, пробел — прыжок (двойной), Shift — рывок, прыжковые пады — взлёт на балконы (+6 м). <b>ESC — пауза и быстрые телепорты теста механик.</b></small>`;
+    `<small style="font-size:11px;opacity:0.78">WASD — бег · Пробел — прыжок · Shift — рывок · <b>1/2/3/R</b> — выбор карточек без паузы · <b>G</b> — скинуть золото · <b>СКМ / V</b> — 3D-пинг · <b>F1/F2</b> — голосование пакта · <b>ESC</b> — пауза и тесты Блоков 1–4.</small>`;
 
   getById('ov').style.display = 'flex';
 }
@@ -890,3 +1579,12 @@ window.debugTriggerFadingEmberTest = debugTriggerFadingEmberTest;
 window.debugCycleWeaponLoadoutPair = debugCycleWeaponLoadoutPair;
 window.debugTriggerElementalReactionShowcase = debugTriggerElementalReactionShowcase;
 window.debugCycleTradeoffAndVerticalBuild = debugCycleTradeoffAndVerticalBuild;
+window.pickUpgrade = pickUpgrade;
+window.rerollUpgrades = rerollUpgrades;
+window.dropGoldForAlly = dropGoldForAlly;
+window.castPactVote = castPactVote;
+window.triggerPlayer3DPing = triggerPlayer3DPing;
+window.debugTriggerHotbarOfferTest = debugTriggerHotbarOfferTest;
+window.debugTeleportToGuildChest = debugTeleportToGuildChest;
+window.debugTriggerPactTest = debugTriggerPactTest;
+window.debugTriggerPingAndGoldDrop = debugTriggerPingAndGoldDrop;
