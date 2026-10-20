@@ -79,6 +79,9 @@ function gameLoop(timestamp) {
     pickupInstancedMesh.count = 0;
     healPickupInstancedMesh.count = 0;
     goldPickupInstancedMesh.count = 0;
+    if (typeof resetSwarmInstancedMeshes === 'function') {
+      resetSwarmInstancedMeshes();
+    }
     lavaMesh.position.y = -4.5;
     lavaLight.position.set(0, 6, 0);
 

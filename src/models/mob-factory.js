@@ -2,8 +2,10 @@
    Фабрика и объектный пул мешей мобов и боссов с поддержкой 3 башен:
    - 12 типов обычных мобов (4 роли × 3 башни: 'ash', 'ice', 'void')
    - 9 уникальных боссов (3 тира × 3 башни)
+   - Единый THREE.InstancedMesh для мелких мобов роя (type === 's', до 400 врагов)
    ========================================================================== */
 
+const MAX_ENEMIES_LIMIT = 400;
 const PROTOTYPE_VARIANTS = 2;
 const ENEMY_PROTOTYPES = {
   ash: { s: [], r: null, l: [], t: [] },
@@ -18,6 +20,168 @@ for (const towerId of ['ash', 'ice', 'void']) {
     ENEMY_PROTOTYPES[towerId].t.push(buildGuardPrototype(towerId));
   }
   ENEMY_PROTOTYPES[towerId].r = buildShypPrototype(towerId);
+}
+
+/**
+ * Сливает набор геометрий прототипа роя ('s') в единую вершинную BufferGeometry
+ * с сохранением существующих атрибутов цвета вершин (vertexColors) для THREE.InstancedMesh.
+ */
+function buildUnifiedSwarmInstancedGeometry(proto, towerId) {
+  const entries = [];
+  const identityMat = new THREE.Matrix4();
+
+  const coreColor =
+    towerId === 'ice'
+      ? new THREE.Color(0x68dcff)
+      : towerId === 'void'
+        ? new THREE.Color(0xa848ff)
+        : new THREE.Color(0xff5a18);
+  const eyeOuterCol =
+    towerId === 'ice'
+      ? new THREE.Color(0x70e4ff)
+      : towerId === 'void'
+        ? new THREE.Color(0xd868ff)
+        : new THREE.Color(0xffb820);
+  const eyeInnerCol =
+    towerId === 'ice'
+      ? new THREE.Color(0xffffff)
+      : towerId === 'void'
+        ? new THREE.Color(0xf8e0ff)
+        : new THREE.Color(0xfff8d0);
+  const debrisCol =
+    towerId === 'ice'
+      ? new THREE.Color(0xa8e8ff)
+      : towerId === 'void'
+        ? new THREE.Color(0x8a38d8)
+        : new THREE.Color(0x3d3d44);
+
+  if (proto.coreGeo) {
+    entries.push({ geo: proto.coreGeo, matrix: identityMat, fallbackColor: coreColor });
+  }
+  if (proto.chunksRockGeo) {
+    entries.push({ geo: proto.chunksRockGeo, matrix: identityMat, fallbackColor: new THREE.Color(0x382e32) });
+  }
+  if (proto.chunksBurgGeo) {
+    entries.push({ geo: proto.chunksBurgGeo, matrix: identityMat, fallbackColor: coreColor });
+  }
+  if (proto.wingGeoL) {
+    entries.push({ geo: proto.wingGeoL, matrix: identityMat, fallbackColor: coreColor });
+  }
+  if (proto.wingGeoR) {
+    entries.push({ geo: proto.wingGeoR, matrix: identityMat, fallbackColor: coreColor });
+  }
+  if (proto.flameCrownGeo) {
+    entries.push({ geo: proto.flameCrownGeo, matrix: identityMat, fallbackColor: new THREE.Color(0xff9820) });
+  }
+  if (proto.eyeOuterGeo) {
+    entries.push({ geo: proto.eyeOuterGeo, matrix: identityMat, fallbackColor: eyeOuterCol });
+  }
+  if (proto.eyeInnerGeo) {
+    entries.push({ geo: proto.eyeInnerGeo, matrix: identityMat, fallbackColor: eyeInnerCol });
+  }
+  if (proto.debrisGeo) {
+    for (let i = 0; i < 4; i++) {
+      const ang = (i * Math.PI) / 2 + 0.4;
+      const mat4 = computeTransformMatrix(
+        Math.cos(ang) * 1.65,
+        0.55 + (i % 2) * 0.45,
+        Math.sin(ang) * 1.65,
+        i * 0.7,
+        ang,
+        0,
+        0.85,
+        0.85,
+        0.85
+      ).clone();
+      entries.push({ geo: proto.debrisGeo, matrix: mat4, fallbackColor: debrisCol });
+    }
+  }
+
+  let totalVertices = 0;
+  const prepared = [];
+  for (const item of entries) {
+    const cloned = item.geo.clone();
+    const nonIdx = cloned.index ? cloned.toNonIndexed() : cloned;
+    nonIdx.applyMatrix4(item.matrix);
+    prepared.push({ geom: nonIdx, fallbackColor: item.fallbackColor });
+    totalVertices += nonIdx.attributes.position.count;
+  }
+
+  const positions = new Float32Array(totalVertices * 3);
+  const normals = new Float32Array(totalVertices * 3);
+  const colors = new Float32Array(totalVertices * 3);
+  let offset = 0;
+
+  for (const item of prepared) {
+    const geom = item.geom;
+    const count = geom.attributes.position.count;
+    positions.set(geom.attributes.position.array.subarray(0, count * 3), offset * 3);
+    if (geom.attributes.normal) {
+      normals.set(geom.attributes.normal.array.subarray(0, count * 3), offset * 3);
+    }
+    const colAttr = geom.attributes.color;
+    if (colAttr) {
+      colors.set(colAttr.array.subarray(0, count * 3), offset * 3);
+    } else {
+      const fc = item.fallbackColor || coreColor;
+      for (let i = 0; i < count; i++) {
+        colors[(offset + i) * 3] = fc.r;
+        colors[(offset + i) * 3 + 1] = fc.g;
+        colors[(offset + i) * 3 + 2] = fc.b;
+      }
+    }
+    offset += count;
+  }
+
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  return merged;
+}
+
+// Единый пул THREE.InstancedMesh для мелких мобов роя (type === 's') по примеру блоков башни
+const swarmInstancedMeshByBiome = {};
+const _swarmInitDummy = new THREE.Object3D();
+const _swarmInitColor = new THREE.Color(0xffffff);
+_swarmInitDummy.position.set(0, -999, 0);
+_swarmInitDummy.scale.set(0, 0, 0);
+_swarmInitDummy.updateMatrix();
+
+for (const towerId of ['ash', 'ice', 'void']) {
+  const proto = ENEMY_PROTOTYPES[towerId].s[0];
+  const swarmGeo = buildUnifiedSwarmInstancedGeometry(proto, towerId);
+  const swarmMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: towerId === 'ice' ? 0.2 : 0.72,
+    metalness: towerId === 'ice' ? 0.3 : 0.15,
+    flatShading: true,
+    emissive: towerId === 'ice' ? 0x185888 : towerId === 'void' ? 0x581888 : 0x581808,
+    emissiveIntensity: 0.55
+  });
+  const instMesh = new THREE.InstancedMesh(swarmGeo, swarmMat, MAX_ENEMIES_LIMIT);
+  instMesh.frustumCulled = false;
+  instMesh.count = 0;
+  for (let i = 0; i < MAX_ENEMIES_LIMIT; i++) {
+    instMesh.setMatrixAt(i, _swarmInitDummy.matrix);
+    instMesh.setColorAt(i, _swarmInitColor);
+  }
+  instMesh.instanceMatrix.needsUpdate = true;
+  if (instMesh.instanceColor) instMesh.instanceColor.needsUpdate = true;
+  scene.add(instMesh);
+  swarmInstancedMeshByBiome[towerId] = instMesh;
+}
+
+let swarmInstancedMesh = swarmInstancedMeshByBiome.ash;
+
+function resetSwarmInstancedMeshes() {
+  for (const towerId of ['ash', 'ice', 'void']) {
+    const im = swarmInstancedMeshByBiome[towerId];
+    if (im) {
+      im.count = 0;
+    }
+  }
 }
 
 const mobPool = {};

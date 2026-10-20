@@ -69,19 +69,68 @@ function collectNearbyEnemies(x, z, outEnemies) {
   }
 }
 
-function findNearestEnemy(maxRadius, fromX, fromZ) {
-  const ox = fromX !== undefined ? fromX : state.player.x;
-  const oz = fromZ !== undefined ? fromZ : state.player.z;
-  let nearest = null;
-  let minDistance = maxRadius;
-  for (const enemy of state.enemies) {
-    const dist = hypot2D(enemy.x - ox, enemy.z - oz);
-    if (dist < minDistance) {
-      minDistance = dist;
-      nearest = enemy;
+/**
+ * Поиск приоритетной цели для атаки игрока, союзника или турели с учётом
+ * массива `state.players`, пространственной сетки и системы распределения агрессии (Threat).
+ */
+function findNearestEnemy(maxRadius, fromX, fromZ, options) {
+  let sourceUnit = state.player;
+  let ox = state.player.x;
+  let oz = state.player.z;
+  let oy = state.player.y;
+
+  if (fromX && typeof fromX === 'object') {
+    sourceUnit = fromX;
+    ox = fromX.x;
+    oz = fromX.z;
+    oy = fromX.y !== undefined ? fromX.y : state.player.y;
+  } else if (fromX !== undefined && fromZ !== undefined) {
+    ox = fromX;
+    oz = fromZ;
+    if (state.players && state.players.length > 1) {
+      let bestP = state.player;
+      let bestPDist = hypot2D(state.player.x - ox, state.player.z - oz);
+      for (let i = 0; i < state.players.length; i++) {
+        const p = state.players[i];
+        const d = hypot2D(p.x - ox, p.z - oz);
+        if (d < bestPDist) {
+          bestPDist = d;
+          bestP = p;
+        }
+      }
+      sourceUnit = bestP;
+      oy = bestP.y !== undefined ? bestP.y : oy;
     }
   }
-  return nearest;
+
+  let bestEnemy = null;
+  let bestEffectiveDist = maxRadius;
+
+  for (let i = 0; i < state.enemies.length; i++) {
+    const enemy = state.enemies[i];
+    if (enemy.hp <= 0) continue;
+    const dist = hypot2D(enemy.x - ox, enemy.z - oz);
+    if (dist >= maxRadius) continue;
+
+    // Учитываем, атакует ли этот враг именно данного игрока (Threat / Multi-Target),
+    // а также приоритет боссов и Хранителей печати
+    let effectiveDist = dist;
+    if (enemy.targetPlayer === sourceUnit) {
+      effectiveDist *= 0.82;
+    }
+    if (enemy.type === 'b' || enemy.isSealGuardian) {
+      effectiveDist *= 0.88;
+    }
+    if (Math.abs((enemy.y || 0) - oy) > 8.5) {
+      effectiveDist += 6.0;
+    }
+
+    if (effectiveDist < bestEffectiveDist) {
+      bestEffectiveDist = effectiveDist;
+      bestEnemy = enemy;
+    }
+  }
+  return bestEnemy;
 }
 
 /* ---------- 2. Кооперативные ауры героев, вертикальная специализация и множители урона ---------- */
@@ -625,6 +674,20 @@ function damageEnemy(enemy, baseDmg, tags, isFire, isChainHit, options) {
     dmg *= 1.3;
   }
 
+  // Механика 12-го этажа «Перегрузка ядра» и уязвимые отдушины спины (KOLOSS_VENTS)
+  if (
+    enemy.type === 'b' &&
+    enemy.bkind === 'koloss' &&
+    typeof evaluateKolossVentBackstabMultiplier === 'function'
+  ) {
+    dmg *= evaluateKolossVentBackstabMultiplier(enemy, opts.attackerUnit, dmg);
+  }
+
+  // Регистрация агрессии (Threat) по массиву state.players от нанесённого урона
+  if (typeof registerPlayerThreatOnEnemy === 'function') {
+    registerPlayerThreatOnEnemy(enemy, opts.attackerUnit, dmg, opts);
+  }
+
   // --- РЕАКЦИЯ 4: КОЛЛАПС ПУСТОТЫ (Стяжка/Замедление + Танковый/Тяжёлый удар ближнего боя) ---
   if (isHeavyMelee && (wasPulled || wasSlowed)) {
     dmg *= 1.5;
@@ -1165,7 +1228,11 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
     tintState: 0,
     lodTier: -1,
     groundCheckTick: 0,
-    groundY: null
+    groundY: null,
+    threatMap: {},
+    targetPlayer: null,
+    retargetTimer: 0,
+    aggroSlot: (state.totalEnemiesSpawned = (state.totalEnemiesSpawned || 0) + 1)
   };
 
   let groundY0 =
@@ -1279,8 +1346,15 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
   enemy.targetY = targetY;
   enemy.y = startY;
 
-  enemy.mesh = MobFactory.acquire(type, enemy.bkind, state.towerId);
-  scene.add(enemy.mesh);
+  // Мелкие мобы роя (type === 's') рендерятся через единый THREE.InstancedMesh (до 400 мобов без просадки FPS)
+  if (type === 's' && typeof swarmInstancedMeshByBiome !== 'undefined') {
+    enemy.isInstancedSwarm = 1;
+    enemy.towerId = state.towerId || 'ash';
+    enemy.mesh = null;
+  } else {
+    enemy.mesh = MobFactory.acquire(type, enemy.bkind, state.towerId);
+    scene.add(enemy.mesh);
+  }
   state.enemies.push(enemy);
 
   if (type === 'b') {

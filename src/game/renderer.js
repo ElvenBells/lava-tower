@@ -97,17 +97,81 @@ function renderGameFrame(dt) {
   }
   camera.lookAt(player.x, player.y + 1, player.z);
 
-  // Отрисовка и анимация всех активных врагов
+  // Отрисовка и анимация всех активных врагов (включая единый THREE.InstancedMesh для роя 's' до 400 мобов)
   let activeEliteMarkers = 0;
+  const swarmCounts = { ash: 0, ice: 0, void: 0 };
+  const swarmTintCol = new THREE.Color();
 
   for (let ei = 0; ei < state.enemies.length; ei++) {
     const enemy = state.enemies[ei];
     const baseStats = ENEMY_TYPES[enemy.type];
+    const faceTarget = enemy.targetPlayer || player;
+
+    // Рендеринг мелких мобов роя (type === 's') через единый THREE.InstancedMesh по примеру блоков башни
+    if (enemy.type === 's' && !enemy.mesh && typeof swarmInstancedMeshByBiome !== 'undefined') {
+      const bId = enemy.towerId || state.towerId || 'ash';
+      const instMesh = swarmInstancedMeshByBiome[bId] || swarmInstancedMeshByBiome.ash;
+      const idx = swarmCounts[bId] || 0;
+      if (instMesh && idx < MAX_ENEMIES_LIMIT) {
+        const eliteScale = enemy.eliteScale || 1;
+        const hasWings = bId === 'ice' || bId === 'void';
+        const hoverBoost = hasWings ? 0.36 + Math.sin(time * 6.5 + enemy.x) * 0.14 : 0;
+        const sY = baseStats.scale * (enemy.scaleY || 1) * eliteScale;
+        const sXZ = baseStats.scale * (enemy.scaleXZ || 1) * eliteScale;
+
+        _projectileDummyObj.position.set(
+          enemy.x,
+          enemy.y + baseStats.radius + hoverBoost + (eliteScale - 1) * baseStats.scale,
+          enemy.z
+        );
+        const yaw = hasWings
+          ? Math.atan2(faceTarget.x - enemy.x, faceTarget.z - enemy.z)
+          : time * 0.35 + enemy.x * 0.5;
+        _projectileDummyObj.rotation.set(0, yaw, 0);
+        _projectileDummyObj.scale.set(sXZ, sY, sXZ);
+        _projectileDummyObj.updateMatrix();
+        instMesh.setMatrixAt(idx, _projectileDummyObj.matrix);
+
+        if (enemy.burnTimer > 0) {
+          swarmTintCol.setHex(0xff6820);
+        } else if (enemy.slowTimer > 0) {
+          swarmTintCol.setHex(0x68dcff);
+        } else if ((enemy.pullTimer || 0) > 0) {
+          swarmTintCol.setHex(0xd878ff);
+        } else if (enemy.eliteType === 'armor') {
+          swarmTintCol.setHex(0x88c8ff);
+        } else if (enemy.eliteType === 'swift') {
+          swarmTintCol.setHex(0xffe868);
+        } else if (enemy.eliteType === 'volt') {
+          swarmTintCol.setHex(0xff6878);
+        } else {
+          swarmTintCol.setHex(0xffffff);
+        }
+        instMesh.setColorAt(idx, swarmTintCol);
+        swarmCounts[bId] = idx + 1;
+      }
+
+      if (enemy.eliteType && activeEliteMarkers < eliteMarkerSprites.length) {
+        const eliteScale = enemy.eliteScale || 1;
+        const marker = eliteMarkerSprites[activeEliteMarkers++];
+        marker.visible = true;
+        marker.material = ELITE_MARKER_MATERIALS[enemy.eliteType];
+        marker.position.set(
+          enemy.x,
+          enemy.y + baseStats.radius * 2 * eliteScale + 1.4,
+          enemy.z
+        );
+        marker.material.rotation = time * 1.2;
+        marker.scale.setScalar(2.15 + Math.sin(time * 6.5 + ei) * 0.32);
+      }
+      continue;
+    }
+
     if (!enemy.mesh) continue;
 
     const ud = enemy.mesh.userData;
-    const dx = player.x - enemy.x;
-    const dz = player.z - enemy.z;
+    const dx = faceTarget.x - enemy.x;
+    const dz = faceTarget.z - enemy.z;
     const dist2D = Math.sqrt(dx * dx + dz * dz) || 1;
     const dy = player.y - enemy.y;
     const dist3D = Math.sqrt(dx * dx + dz * dz + dy * dy);
@@ -530,6 +594,20 @@ function renderGameFrame(dt) {
     }
   }
 
+  if (typeof swarmInstancedMeshByBiome !== 'undefined') {
+    for (const bId of ['ash', 'ice', 'void']) {
+      const im = swarmInstancedMeshByBiome[bId];
+      if (!im) continue;
+      const cnt = swarmCounts[bId] || 0;
+      im.count = cnt;
+      if (cnt > 0) {
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      }
+    }
+    swarmInstancedMesh = swarmInstancedMeshByBiome[state.towerId || 'ash'] || swarmInstancedMeshByBiome.ash;
+  }
+
   for (let q = activeEliteMarkers; q < eliteMarkerSprites.length; q++) {
     eliteMarkerSprites[q].visible = false;
   }
@@ -883,6 +961,27 @@ function renderGameFrame(dt) {
     }
 
     let coopDebuffSuffix = '';
+    if (
+      activeBoss.bkind === 'womb' &&
+      activeBoss.shield &&
+      (activeBoss.occupiedSummonRings || 0) > 0
+    ) {
+      coopDebuffSuffix += ` · 🔓 ВЗЛОМ РУН (${activeBoss.occupiedSummonRings}/${activeBoss.requiredSummonRings || 2}) ×${(activeBoss.shieldDecayMultiplier || 1).toFixed(1)}`;
+    }
+    if (activeBoss.bkind === 'koloss' && activeBoss.bossState === 'coreOverload') {
+      const reqHits = Math.max(4, (state.playerCount || 2) * 3);
+      coopDebuffSuffix += ` · 🔥 ПЕРЕГРУЗКА ЯДРА (ОТДУШИНЫ СПИНЫ: ${activeBoss.ventOverloadHits || 0}/${reqHits})`;
+    }
+    if (
+      activeBoss.bkind === 'golem' &&
+      state.blueprintDamageLines &&
+      state.blueprintDamageLines.length > 0
+    ) {
+      coopDebuffSuffix += ' · 📐 ЛИНИЯ УРОНА';
+    }
+    if (activeBoss.targetPlayer && (state.playerCount || 1) >= 2) {
+      coopDebuffSuffix += ` · 👁 Агро: ${activeBoss.targetPlayer.shortName || 'Игрок 1'}`;
+    }
     if ((activeBoss.hunterMarkTimer || 0) > 0) coopDebuffSuffix += ' · 🎯 МЕТКА +25%';
     if ((activeBoss.armorBreakTimer || 0) > 0) coopDebuffSuffix += ' · ⚡ СВЕРХПРОВОД. −30% ЗАЩ.';
     if ((activeBoss.blindTimer || 0) > 0) coopDebuffSuffix += ' · 💨 ОСЛЕПЛЁН';

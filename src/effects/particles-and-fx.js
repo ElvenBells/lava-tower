@@ -271,7 +271,7 @@ const bossRingGeo = (function buildBossRing3DGeo() {
 })();
 
 const bossRings = [];
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 10; i++) {
   const mesh = new THREE.Mesh(
     bossRingGeo,
     new THREE.MeshBasicMaterial({
@@ -287,7 +287,7 @@ for (let i = 0; i < 6; i++) {
   mesh.visible = false;
   mesh.renderOrder = 4;
   scene.add(mesh);
-  bossRings.push({ mesh, active: 0, x: 0, y: 0, z: 0, radius: 0, speed: 9, damage: 0, hasHit: 0, maxRadius: 15 });
+  bossRings.push({ mesh, active: 0, x: 0, y: 0, z: 0, radius: 0, speed: 9, damage: 0, hasHit: 0, hitMask: 0, maxRadius: 15 });
 }
 let bossRingCursor = 0;
 
@@ -301,6 +301,7 @@ function spawnBossRing(x, y, z, damage, speed, maxRadius) {
   ring.speed = speed || 9;
   ring.damage = damage || 0;
   ring.hasHit = 0;
+  ring.hitMask = 0;
   ring.maxRadius = maxRadius || 15;
   ring.mesh.visible = true;
   ring.mesh.position.set(x, y + 0.05, z);
@@ -310,7 +311,7 @@ function spawnBossRing(x, y, z, damage, speed, maxRadius) {
 
 const bossArcGeo = new THREE.RingGeometry(0.95, 1.25, 52, 1, 0, Math.PI * 1.5);
 const bossArcs = [];
-for (let i = 0; i < 4; i++) {
+for (let i = 0; i < 8; i++) {
   const mesh = new THREE.Mesh(
     bossArcGeo,
     new THREE.MeshBasicMaterial({
@@ -326,7 +327,7 @@ for (let i = 0; i < 4; i++) {
   mesh.visible = false;
   mesh.renderOrder = 4;
   scene.add(mesh);
-  bossArcs.push({ mesh, active: 0, x: 0, y: 0, z: 0, radius: 0, gapAngle: 0, damage: 0, hasHit: 0 });
+  bossArcs.push({ mesh, active: 0, x: 0, y: 0, z: 0, radius: 0, gapAngle: 0, damage: 0, hasHit: 0, hitMask: 0 });
 }
 let bossArcCursor = 0;
 
@@ -340,6 +341,7 @@ function spawnBossArc(x, y, z, gapAngle, damage) {
   arc.gapAngle = gapAngle;
   arc.damage = damage;
   arc.hasHit = 0;
+  arc.hitMask = 0;
   arc.mesh.visible = true;
   arc.mesh.position.set(x, y + 0.08, z);
   arc.mesh.rotation.z = -Math.PI * 1.75 - gapAngle;
@@ -351,7 +353,7 @@ const bossGeysers = [];
 const geyserJetGeo = new THREE.CylinderGeometry(0.28, 0.62, 7, 10, 1, true);
 geyserJetGeo.translate(0, 3.5, 0);
 
-for (let i = 0; i < 3; i++) {
+for (let i = 0; i < 12; i++) {
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(1.1, 1.5, 32),
     new THREE.MeshBasicMaterial({
@@ -384,10 +386,94 @@ for (let i = 0; i < 3; i++) {
   jet.scale.y = 0.01;
   scene.add(jet);
 
-  bossGeysers.push({ stage: 0, timer: 0, x: 0, y: 0, z: 0, ring, jet, hasHit: 0 });
+  bossGeysers.push({ stage: 0, timer: 0, x: 0, y: 0, z: 0, ring, jet, hasHit: 0, hitMask: 0 });
+}
+
+function activateGeyserSlot(slotIdx, x, y, z) {
+  if (slotIdx < 0 || slotIdx >= bossGeysers.length) return;
+  const geyser = bossGeysers[slotIdx];
+  geyser.stage = 1;
+  geyser.timer = 0;
+  geyser.x = x;
+  geyser.y = y;
+  geyser.z = z;
+  geyser.hasHit = 0;
+  geyser.hitMask = 0;
+  geyser.ring.position.set(x, y + 0.06, z);
+  geyser.ring.visible = true;
+  geyser.ring.material.opacity = 0.35;
+  geyser.jet.position.set(x, y + 0.05, z);
+  geyser.jet.visible = false;
+  geyser.jet.scale.y = 0.01;
+}
+
+/**
+ * Синхронное извержение гейзеров (bossGeysers) под позициями всех живых игроков
+ * + дополнительные гейзеры вокруг них (Блок 5 — боссы 12-го этажа).
+ */
+function placeCoopBossGeysers(bossEntity, livingPlayers) {
+  const maxR = (typeof TOWER_FLOOR_RADIUS !== 'undefined' ? TOWER_FLOOR_RADIUS : 28) - 2.2;
+  const maxRSq = maxR * maxR;
+  const playersList =
+    Array.isArray(livingPlayers) && livingPlayers.length
+      ? livingPlayers
+      : typeof getLivingPlayers === 'function'
+        ? getLivingPlayers()
+        : [state.player];
+
+  let placed = 0;
+  const chosenPoints = [];
+  const baseFloorY = bossEntity ? bossEntity.y : state.player.lastGroundY;
+
+  // 1. Гарантированный синхронный гейзер прямо под позицией каждого живого игрока!
+  for (let i = 0; i < playersList.length && placed < bossGeysers.length; i++) {
+    const p = playersList[i];
+    if (!p) continue;
+    let gx = p.x;
+    let gz = p.z;
+    const r = hypot2D(gx, gz);
+    if (r > maxR) {
+      gx *= maxR / r;
+      gz *= maxR / r;
+    }
+    const gy = p.lastGroundY !== undefined ? p.lastGroundY : baseFloorY;
+    chosenPoints.push([gx, gz]);
+    activateGeyserSlot(placed++, gx, gy, gz);
+  }
+
+  // 2. Дополнительные гейзеры в окрестности отряда (до 3 + playerCount гейзеров)
+  const targetTotal = Math.min(bossGeysers.length, Math.max(4, playersList.length * 2 + 1));
+  let attempts = 0;
+  while (placed < targetTotal && attempts++ < 45) {
+    const anchor = playersList[attempts % playersList.length] || state.player;
+    const angle = Math.random() * TWO_PI;
+    const radius = 3.2 + Math.random() * 5.8;
+    const x = anchor.x + Math.cos(angle) * radius;
+    const z = anchor.z + Math.sin(angle) * radius;
+    if (x * x + z * z > maxRSq) continue;
+
+    let isValid = true;
+    for (const pt of chosenPoints) {
+      if (hypot2D(pt[0] - x, pt[1] - z) < 3.2) {
+        isValid = false;
+        break;
+      }
+    }
+    if (!isValid) continue;
+
+    chosenPoints.push([x, z]);
+    const gy = anchor.lastGroundY !== undefined ? anchor.lastGroundY : baseFloorY;
+    activateGeyserSlot(placed++, x, gy, z);
+  }
 }
 
 function placeGeysersNear(playerX, playerY, playerZ) {
+  if (typeof state !== 'undefined' && state && typeof getLivingPlayers === 'function') {
+    placeCoopBossGeysers({ y: playerY }, getLivingPlayers());
+    return;
+  }
+  const maxR = (typeof TOWER_FLOOR_RADIUS !== 'undefined' ? TOWER_FLOOR_RADIUS : 28) - 2.2;
+  const maxRSq = maxR * maxR;
   let placed = 0;
   let attempts = 0;
   const chosenPoints = [];
@@ -396,7 +482,7 @@ function placeGeysersNear(playerX, playerY, playerZ) {
     const radius = 3.5 + Math.random() * 6.5;
     const x = playerX + Math.cos(angle) * radius;
     const z = playerZ + Math.sin(angle) * radius;
-    if (x * x + z * z > 700) continue;
+    if (x * x + z * z > maxRSq) continue;
 
     let isValid = hypot2D(x - playerX, z - playerZ) > 3.2;
     for (const pt of chosenPoints) {
@@ -405,19 +491,7 @@ function placeGeysersNear(playerX, playerY, playerZ) {
     if (!isValid) continue;
 
     chosenPoints.push([x, z]);
-    const geyser = bossGeysers[placed++];
-    geyser.stage = 1;
-    geyser.timer = 0;
-    geyser.x = x;
-    geyser.y = playerY;
-    geyser.z = z;
-    geyser.hasHit = 0;
-    geyser.ring.position.set(x, playerY + 0.06, z);
-    geyser.ring.visible = true;
-    geyser.ring.material.opacity = 0.3;
-    geyser.jet.position.set(x, playerY + 0.05, z);
-    geyser.jet.visible = false;
-    geyser.jet.scale.y = 0.01;
+    activateGeyserSlot(placed++, x, playerY, z);
   }
 }
 
@@ -475,14 +549,15 @@ for (let i = 0; i < 4; i++) {
 let summonRingsTargetOpacity = 0;
 
 function placeSummonRings(bossEntity) {
+  const maxRingR = (typeof TOWER_FLOOR_RADIUS !== 'undefined' ? TOWER_FLOOR_RADIUS : 28) - 2.5;
   for (let i = 0; i < 4; i++) {
     const angle = (i / 4) * TWO_PI + 0.6;
     let x = bossEntity.x + Math.cos(angle) * 6.5;
     let z = bossEntity.z + Math.sin(angle) * 6.5;
     const radialDist = hypot2D(x, z);
-    if (radialDist > 26) {
-      x *= 26 / radialDist;
-      z *= 26 / radialDist;
+    if (radialDist > maxRingR) {
+      x *= maxRingR / radialDist;
+      z *= maxRingR / radialDist;
     }
     const ring = summonRings[i];
     ring.x = x;
@@ -2512,11 +2587,22 @@ function syncBossVisualEffects(dt) {
   }
 
   for (const ring of summonRings) {
+    const targetOp = ring.occupied ? Math.min(1.0, summonRingsTargetOpacity + 0.35) : summonRingsTargetOpacity;
     ring.mesh.material.opacity +=
-      (summonRingsTargetOpacity - ring.mesh.material.opacity) * Math.min(1, dt * 4);
+      (targetOp - ring.mesh.material.opacity) * Math.min(1, dt * 5);
     ring.mesh.visible = ring.mesh.material.opacity > 0.02;
     if (ring.mesh.visible) {
-      ring.mesh.rotation.z += dt * 0.8;
+      ring.mesh.rotation.z += dt * (ring.occupied ? 3.2 : 0.9);
+      const pulseS = ring.occupied
+        ? 1.26 + Math.sin((state ? state.elapsedTime : 0) * 12) * 0.1
+        : 1.0 + Math.sin((state ? state.elapsedTime : 0) * 4) * 0.04;
+      ring.mesh.scale.setScalar(pulseS);
+      if (ring.occupied) {
+        ring.mesh.material.color.setHex(0x38ffe8);
+      } else {
+        const tid = (state && state.towerId) || 'ash';
+        ring.mesh.material.color.setHex(tid === 'ice' ? 0x88ecff : tid === 'void' ? 0xd878ff : 0xc070ff);
+      }
     }
   }
 
