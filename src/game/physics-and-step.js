@@ -726,7 +726,8 @@ function updateFloorMiniQuestStep(dt) {
       const c = q.circles[i];
       if (!c.captured) {
         // Базовый темп + быстрый заряд при удержании круга (снятие печати за 15–22 с)
-        const chargeRate = (c.isOccupied ? 0.21 * syncMultiplier : 0.042) * dt;
+        const wanBoost = (typeof isHeroCoopAuraActiveAt === 'function' && isHeroCoopAuraActiveAt('wan', c.x, c.y, c.z, 12)) ? 1.25 : 1.0;
+        const chargeRate = (c.isOccupied ? 0.21 * syncMultiplier * wanBoost : 0.042) * dt;
         c.charge = Math.min(1, c.charge + chargeRate);
         if (c.charge >= 1) {
           c.captured = 1;
@@ -1247,7 +1248,8 @@ function updateFadingEmbersStep(dt) {
         }
 
         if (allyChanneling > 0) {
-          pEmber.progress += dt * (1 + (allyChanneling - 1) * 0.35);
+          const wanReviveBoost = (typeof isHeroCoopAuraActiveAt === 'function' && isHeroCoopAuraActiveAt('wan', pEmber.x, pEmber.y, pEmber.z, 12)) ? 1.25 : 1.0;
+          pEmber.progress += dt * (1 + (allyChanneling - 1) * 0.35) * wanReviveBoost;
           if (Math.random() < 0.35) {
             spawnSparkBurst(pEmber.x, pEmber.y + 0.6, pEmber.z, 2, 'fire');
           }
@@ -1344,7 +1346,8 @@ function updateFadingEmbersStep(dt) {
       }
 
       if (revivers > 0) {
-        emb.progress += dt * (1 + (revivers - 1) * 0.35);
+        const wanPeerBoost = (typeof isHeroCoopAuraActiveAt === 'function' && isHeroCoopAuraActiveAt('wan', emb.x, emb.y, emb.z, 12)) ? 1.25 : 1.0;
+        emb.progress += dt * (1 + (revivers - 1) * 0.35) * wanPeerBoost;
         if (Math.random() < 0.35) {
           spawnSparkBurst(emb.x, emb.y + 0.6, emb.z, 2, 'xp');
         }
@@ -1462,6 +1465,7 @@ function initializeRun(mode) {
   floorQuestGroup.clear();
   coopEventVisualGroup.clear();
   fadingEmberGroup.clear();
+  if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
   if (state) {
     state.projectiles.length = 0;
     state.bladePositions.length = 0;
@@ -1546,6 +1550,18 @@ function initializeRun(mode) {
     tagCounts: {},
     enemies: [],
     projectiles: [],
+    magmaTotems: [],
+    gravitySpheres: [],
+    boomerangs: [],
+    combatMagmaPuddles: [],
+    reactionCounts: { steam: 0, superconduct: 0, slag: 0, collapse: 0 },
+    lastReactionKey: null,
+    lastReactionTimer: 0,
+    reactionToastCooldown: 0,
+    isWandererAuraActive: 0,
+    isPilgrimAuraActive: 0,
+    isBlacksmithAuraActive: 0,
+    isLowerGuardianActive: 0,
     bladePositions: [],
     activeBladeCount: 0,
     spawnBudget: 10,
@@ -1621,8 +1637,9 @@ function initializeRun(mode) {
   state.isGreedPactActive = 0;
   state.currentPactOffers = null;
 
+  const allWeaponKeys = Object.keys(WEAPONS);
   const startingWeapon = mode
-    ? ['fire', 'blade', 'wave'][Math.floor(seededRandom(seed, 'hero', 0) * 3)]
+    ? allWeaponKeys[Math.floor(seededRandom(seed, 'hero', 0) * allWeaponKeys.length)]
     : heroCfg.startWeapon;
   state.weaponLevels[startingWeapon] = 1;
 
@@ -1654,7 +1671,27 @@ function initializeRun(mode) {
   // Создаём симулируемых кооп-союзников (для 2–4 игроков), которые выполняют мини-квесты печатей,
   // разделяются на развилках, занимают балконы, поддерживают кооп-события и раздувают «Угасающий уголь»
   const allyColors = [0x38f2dc, 0xffb838, 0xc868ff];
-  const allyNames = ['Союзник 2 (Снайпер)', 'Союзник 3 (Штурмовик)', 'Союзник 4 (Страж)'];
+  const candidateAllyHeroes = ['hun', 'ash', 'smi', 'pil', 'wan'].filter((h) => h !== heroId);
+  const allyLoadouts = [
+    {
+      roleTitle: 'Верхний стрелок',
+      weapons: ['spear', 'chain'],
+      prefersBalcony: 1,
+      prefersLowerGuard: 0
+    },
+    {
+      roleTitle: 'Контроль / Пиромант',
+      weapons: ['grav', 'totem'],
+      prefersBalcony: 0,
+      prefersLowerGuard: 0
+    },
+    {
+      roleTitle: 'Нижний страж',
+      weapons: ['shield', 'wave'],
+      prefersBalcony: 0,
+      prefersLowerGuard: 1
+    }
+  ];
   for (let pIdx = 1; pIdx < playerCount; pIdx++) {
     const startAng = (pIdx / playerCount) * TWO_PI;
     const mesh = buildCoopAllyAvatarMesh(allyColors[(pIdx - 1) % allyColors.length]);
@@ -1662,9 +1699,15 @@ function initializeRun(mode) {
     const az = Math.sin(startAng) * 3.2;
     mesh.position.set(ax, 0.01, az);
     coopAlliesGroup.add(mesh);
+    const peerHeroId = candidateAllyHeroes[(pIdx - 1) % candidateAllyHeroes.length] || 'hun';
+    const loadout = allyLoadouts[(pIdx - 1) % allyLoadouts.length];
+    const heroShortName = (HEROES[peerHeroId] && HEROES[peerHeroId].name.split('·')[1] || 'Союзник').trim();
     state.coopPeers.push({
       id: pIdx + 1,
-      name: allyNames[(pIdx - 1) % allyNames.length],
+      heroId: peerHeroId,
+      name: `${heroShortName} (${loadout.roleTitle})`,
+      weapons: loadout.weapons.slice(0, MAX_WEAPON_SLOTS),
+      shotCounter: 0,
       x: ax,
       y: 0.01,
       z: az,
@@ -1675,7 +1718,8 @@ function initializeRun(mode) {
       ember: null,
       facingAngle: startAng,
       sectorRoute: (pIdx % 2) + 1,
-      prefersBalcony: pIdx === 1 ? 1 : 0,
+      prefersBalcony: loadout.prefersBalcony,
+      prefersLowerGuard: loadout.prefersLowerGuard,
       shootCooldown: 0.4 * pIdx,
       onReadyPlate: 0,
       mesh
@@ -1959,16 +2003,69 @@ function updateCoopPeersStep(dt) {
         const shotAngle = Math.atan2(targetEnemy.z - peer.z, targetEnemy.x - peer.x);
         const coopBonus =
           (state.isTetherChainActive ? 1.35 : 1) * (state.isPolarResonanceActive ? 1.4 : 1);
-        state.projectiles.push({
-          x: peer.x,
-          y: peer.y + 1.0,
-          z: peer.z,
-          vx: Math.cos(shotAngle) * (isPeerOnBalcony ? 24 : 19),
-          vz: Math.sin(shotAngle) * (isPeerOnBalcony ? 24 : 19),
-          lifetime: 1.4,
-          damage: BASE_DAMAGE * (isPeerOnBalcony ? 0.65 : 0.48) * coopBonus,
-          isFire: 1
-        });
+        const peerWeapons = (peer.weapons && peer.weapons.length) ? peer.weapons : ['spear', 'chain'];
+        const chosenWep = peerWeapons[(peer.shotCounter = (peer.shotCounter || 0) + 1) % peerWeapons.length];
+
+        if (chosenWep === 'spear') {
+          // Морозные копья [ice] союзника: пронзают и замораживают врагов (под Пар и Сверхпроводимость)
+          state.projectiles.push({
+            x: peer.x,
+            y: peer.y + 1.0,
+            z: peer.z,
+            vx: Math.cos(shotAngle) * 26,
+            vz: Math.sin(shotAngle) * 26,
+            lifetime: 1.45,
+            damage: BASE_DAMAGE * (isPeerOnBalcony ? 0.68 : 0.5) * coopBonus,
+            isFire: 0,
+            tags: ['ice'],
+            projKind: 'spear',
+            pierceLeft: 2,
+            hitSet: new Set(),
+            attackerHeroId: peer.heroId
+          });
+        } else if (chosenWep === 'chain') {
+          // Цепная молния [elec] союзника: запускает Сверхпроводимость по замороженным целям
+          const hitY = targetEnemy.y + (targetEnemy.radius || 0.8);
+          spawnGlobalBolt(peer.x, peer.y + 1.1, peer.z, targetEnemy.x, hitY, targetEnemy.z, 0.14, 9, 0x70e8ff);
+          damageEnemy(targetEnemy, BASE_DAMAGE * 0.55 * coopBonus, ['elec'], 0, 0, {
+            attackerHeroId: peer.heroId
+          });
+        } else if (chosenWep === 'grav' && typeof spawnGravitySphereEntity === 'function') {
+          // Сфера гравитации [void, kin] союзника: стягивает врагов в одну точку под Коллапс Пустоты
+          spawnGravitySphereEntity(peer.x, peer.y, peer.z, targetEnemy.x, targetEnemy.y, targetEnemy.z, 2);
+          peer.shootCooldown = 2.8;
+        } else if (chosenWep === 'totem' && typeof deployMagmaTotem === 'function' && (peer.shotCounter % 4 === 0)) {
+          deployMagmaTotem(peer.x, peer.y, peer.z, 2, 'peer_' + peer.id);
+        } else if (chosenWep === 'shield' && typeof spawnForgeShieldBoomerang === 'function') {
+          // Кузнечный щит-бумеранг [kin] союзника: тяжёлый удар (Детонация шлака и Коллапс Пустоты)
+          spawnForgeShieldBoomerang(peer, targetEnemy.x, targetEnemy.z, 2, 0);
+          peer.shootCooldown = 1.65;
+        } else if (chosenWep === 'wave') {
+          // Ударная волна [kin] союзника-Стража
+          spawnWaveRingEffect(peer.x, peer.y + 0.15, peer.z, 4.2, 0x80e0ff);
+          for (const e of state.enemies) {
+            if (hypot2D(e.x - peer.x, e.z - peer.z) <= 4.5 && Math.abs(e.y - peer.y) < 3.0) {
+              damageEnemy(e, BASE_DAMAGE * 0.6 * coopBonus, ['kin'], 0, 0, {
+                isHeavyMelee: 1,
+                canDetonateSlag: 1,
+                attackerHeroId: peer.heroId
+              });
+            }
+          }
+        } else {
+          state.projectiles.push({
+            x: peer.x,
+            y: peer.y + 1.0,
+            z: peer.z,
+            vx: Math.cos(shotAngle) * (isPeerOnBalcony ? 24 : 19),
+            vz: Math.sin(shotAngle) * (isPeerOnBalcony ? 24 : 19),
+            lifetime: 1.4,
+            damage: BASE_DAMAGE * (isPeerOnBalcony ? 0.65 : 0.48) * coopBonus,
+            isFire: 1,
+            tags: ['fire'],
+            attackerHeroId: peer.heroId
+          });
+        }
       }
     }
   }
@@ -2020,6 +2117,14 @@ function updateGameStep(dt) {
     : 1;
   const polarSpeedBoost = state.isPolarResonanceActive ? 1.2 : 1;
 
+  if (typeof updateCombatDeployablesStep === 'function') {
+    updateCombatDeployablesStep(dt);
+  }
+
+  // Свинцовые наплечники (lead): −25% скорости за стак; кооп-аура Странника: +15% скорости
+  const leadSlowFactor = owned.lead ? Math.max(0.35, Math.pow(0.75, owned.lead)) : 1;
+  const wandererSpeedBoost = state.isWandererAuraActive ? 1.15 : 1;
+
   const moveSpeed =
     7 *
     (1 + 0.08 * state.tomeLevels.spd) *
@@ -2027,7 +2132,9 @@ function updateGameStep(dt) {
     (state.chillTimer > 0 ? 0.55 : 1) *
     lavaSlowFactor *
     coreCarrierSlowFactor *
-    polarSpeedBoost;
+    polarSpeedBoost *
+    leadSlowFactor *
+    wandererSpeedBoost;
 
   if (
     !isPlayerInEmber &&
@@ -2038,7 +2145,9 @@ function updateGameStep(dt) {
     state.slideCooldown <= 0
   ) {
     state.slideTimer = 1;
-    state.slideCooldown = 1.3 / (1 + 0.3 * (owned.ice || 0));
+    const shacklePenalty = owned.void_shackle ? Math.pow(1.8, owned.void_shackle) : 1;
+    const pilgrimDashBonus = state.isPilgrimAuraActive ? 0.7 : 1;
+    state.slideCooldown = (1.3 / (1 + 0.3 * (owned.ice || 0))) * shacklePenalty * pilgrimDashBonus;
     state.invulnerabilityTimer = Math.max(state.invulnerabilityTimer, 0.3);
     player.slideDirX = wishLen ? wishX : -sinYaw;
     player.slideDirZ = wishLen ? wishZ : -cosYaw;
@@ -2074,7 +2183,7 @@ function updateGameStep(dt) {
     const pull = state.vortexPull;
     pull.timer -= dt;
     const distToVortex = hypot2D(pull.x - player.x, pull.z - player.z);
-    if (distToVortex > 2.6) {
+    if (distToVortex > 2.6 && !owned.lead) {
       velocityX += ((pull.x - player.x) / distToVortex) * pull.strength;
       velocityZ += ((pull.z - player.z) / distToVortex) * pull.strength;
     }
@@ -2147,6 +2256,7 @@ function updateGameStep(dt) {
         playSound('jump');
       } else if (
         !state.disableDoubleJump &&
+        !owned.lead &&
         !state.isCarryingForgeCore &&
         player.doubleJumpsUsed < (state.maxExtraJumps || 1)
       ) {
@@ -2374,6 +2484,24 @@ function updateGameStep(dt) {
     }
   }
 
+  // Вертикальная специализация «Нижний страж» (Лавовое сердце у лавы или союзник-Страж):
+  // замедляет подъём лавы для всей команды на 22% за стак!
+  const playerNearLavaWithHeart = owned.heart > 0 && player.y - state.lavaY < 7.0;
+  const allyLowerGuardActive =
+    state.coopPeers &&
+    state.coopPeers.some(
+      (p) =>
+        p.prefersLowerGuard &&
+        (!p.ember || (!p.ember.active && !p.ember.lostInLava)) &&
+        p.y - state.lavaY < 8.5
+    );
+  state.isLowerGuardianActive = playerNearLavaWithHeart || allyLowerGuardActive ? 1 : 0;
+  const lowerGuardianLavaSlow = playerNearLavaWithHeart
+    ? Math.max(0.45, Math.pow(0.78, owned.heart))
+    : allyLowerGuardActive
+      ? 0.82
+      : 1.0;
+
   // Подъём лавы (ставится на полную паузу в безопасном «Зале Кузницы»)
   const tierSpeed = [0.25, 0.35, 0.45][Math.min(2, Math.floor((state.maxFloorReached % 12) / 4))];
   const lavaRiseRate = state.isLavaPausedByForgeHall
@@ -2382,6 +2510,7 @@ function updateGameStep(dt) {
         0.62,
         tierSpeed *
           state.lavaSpeedMultiplier *
+          lowerGuardianLavaSlow *
           (state.bossFuryLavaMultiplier || 1) *
           (state.activeEvent && state.activeEvent.key === 'surge' ? 1.8 : 1) *
           (state.chosenRoute === 2 ? 1.15 : 1) *
@@ -2405,7 +2534,7 @@ function updateGameStep(dt) {
     const activePuddle = getActiveLavaPuddleUnderPlayer(player.x, player.y, player.z);
     if (activePuddle) {
       state.isStandingInLavaPuddle = 1;
-      const puddleDps = state.maxHp * 0.048 * dt;
+      const puddleDps = state.maxHp * 0.048 * (owned.heart ? Math.pow(0.6, owned.heart) : 1) * dt;
       player.hp -= puddleDps;
       state.timeSinceLastHit = 0;
       if (state.puddleSizzleCooldown <= 0) {
@@ -2421,7 +2550,7 @@ function updateGameStep(dt) {
     }
   }
 
-  if (!isPlayerInEmber && state.timeSinceLastHit > 3 && !isInLava && player.hp < state.maxHp) {
+  if (!isPlayerInEmber && !owned.cryo_core && state.timeSinceLastHit > 3 && !isInLava && player.hp < state.maxHp) {
     player.hp = Math.min(
       state.maxHp,
       player.hp + state.maxHp * 0.012 * (state.chosenRoute === 1 ? 2.0 : 1) * dt
@@ -2579,12 +2708,20 @@ function updateGameStep(dt) {
 
   buildEnemyGrid();
 
-  // Автоатака оружия игрока (отключается, если игрок несёт «Ядро горна» или находится в «Угасающем угле»)
+  // Автоатака оружия игрока (до 2 активных слотов из 9 видов оружия; отключается при переноске Ядра горна или в Угле)
   if (!isPlayerInEmber && !state.isCarryingForgeCore) {
+    const atkSpdMul =
+      typeof getPlayerAttackSpeedMultiplier === 'function' ? getPlayerAttackSpeedMultiplier() : 1;
+    const sniperRangeMul =
+      (state.isOnBalcony ? 1.5 : 1.0) *
+      (owned.comp && state.isOnBalcony ? 1 + 0.35 * owned.comp : 1.0);
+
     for (const weaponId in state.weaponLevels) {
       const weaponLv = state.weaponLevels[weaponId];
+      if (!weaponLv) continue;
+
       if (weaponId === 'blade') {
-        state.bladeOrbitAngle += dt * 3.2;
+        state.bladeOrbitAngle += dt * 3.2 * atkSpdMul;
         const bladeCount = 1 + weaponLv;
         state.activeBladeCount = bladeCount;
         for (let i = 0; i < bladeCount; i++) {
@@ -2592,7 +2729,7 @@ function updateGameStep(dt) {
           state.bladePositions[i][0] = player.x + Math.cos(angle) * 2.8;
           state.bladePositions[i][1] = player.z + Math.sin(angle) * 2.8;
         }
-        if ((state.bladeTickTimer -= dt) <= 0) {
+        if ((state.bladeTickTimer -= dt * atkSpdMul) <= 0) {
           state.bladeTickTimer = 0.25;
           const tickId = ++state.bladeTickId;
           for (let bi = 0; bi < bladeCount; bi++) {
@@ -2611,7 +2748,9 @@ function updateGameStep(dt) {
                   hitThreshold * hitThreshold &&
                 Math.abs(enemy.y + enemyRadius - player.y - 1) < enemyRadius + verticalTolerance
               ) {
-                damageEnemy(enemy, 0.5 * BASE_DAMAGE * (1 + 0.25 * weaponLv), ['kin']);
+                damageEnemy(enemy, 0.5 * BASE_DAMAGE * (1 + 0.25 * weaponLv), ['kin'], 0, 0, {
+                  canDetonateSlag: 1
+                });
                 spawnSparkBurst(
                   bx,
                   player.y + 1.0,
@@ -2627,12 +2766,15 @@ function updateGameStep(dt) {
         continue;
       }
 
-      if ((state.weaponCooldowns[weaponId] = (state.weaponCooldowns[weaponId] || 0) - dt) > 0) {
+      if (
+        (state.weaponCooldowns[weaponId] =
+          (state.weaponCooldowns[weaponId] || 0) - dt * atkSpdMul) > 0
+      ) {
         continue;
       }
 
       if (weaponId === 'fire') {
-        const targetRange = state.isOnBalcony ? 38 : 25;
+        const targetRange = 25 * sniperRangeMul;
         const target = findNearestEnemy(targetRange);
         state.weaponCooldowns.fire = 0.2;
         if (target && state.projectiles.length < 200) {
@@ -2650,23 +2792,149 @@ function updateGameStep(dt) {
               z: player.z,
               vx: Math.cos(angle) * projSpeed,
               vz: Math.sin(angle) * projSpeed,
-              lifetime: state.isOnBalcony ? 1.75 : 1.4,
+              lifetime: state.isOnBalcony ? 1.85 : 1.4,
               damage: BASE_DAMAGE * (1 + 0.3 * (weaponLv - 1)),
-              isFire: 1
+              isFire: 1,
+              tags: ['fire'],
+              projKind: 'fire'
             });
           }
         }
-      }
-
-      if (weaponId === 'wave') {
+      } else if (weaponId === 'wave') {
         state.weaponCooldowns.wave = 3.2 / (1 + 0.05 * weaponLv);
         triggerShockwave(
           player.x,
           player.z,
           4 + 0.4 * weaponLv,
-          BASE_DAMAGE * 1.1 * (1 + 0.3 * (weaponLv - 1)),
+          BASE_DAMAGE * 1.15 * (1 + 0.3 * (weaponLv - 1)),
           0,
-          ['kin']
+          ['kin'],
+          { isHeavyMelee: 1, canDetonateSlag: 1 }
+        );
+      } else if (weaponId === 'spear') {
+        // Морозные копья [ice]: быстрые пронзающие ледяные копья, замораживающие врагов
+        const targetRange = 28 * sniperRangeMul;
+        const target = findNearestEnemy(targetRange);
+        state.weaponCooldowns.spear = 0.2;
+        if (target && state.projectiles.length < 210) {
+          state.weaponCooldowns.spear = 0.92 / (1 + 0.08 * weaponLv);
+          const spearCount = weaponLv >= 6 ? 3 : weaponLv >= 3 ? 2 : 1;
+          const baseAngle = Math.atan2(target.z - player.z, target.x - player.x);
+          const projSpeed = state.isOnBalcony ? 31 : 26;
+          playSound('shoot');
+          for (let i = 0; i < spearCount; i++) {
+            const angle = baseAngle + (i - (spearCount - 1) / 2) * 0.12;
+            state.projectiles.push({
+              x: player.x,
+              y: player.y + 1.0,
+              z: player.z,
+              vx: Math.cos(angle) * projSpeed,
+              vz: Math.sin(angle) * projSpeed,
+              lifetime: 1.55,
+              damage: BASE_DAMAGE * (0.95 + 0.28 * (weaponLv - 1)),
+              isFire: 0,
+              tags: ['ice'],
+              projKind: 'spear',
+              pierceLeft: 2 + (weaponLv >> 1),
+              hitSet: new Set()
+            });
+          }
+        }
+      } else if (weaponId === 'chain') {
+        // Цепная молния [elec]: прыгает по цепочке врагов и запускает Сверхпроводимость по замёрзшим
+        const targetRange = 24 * sniperRangeMul;
+        const firstTarget = findNearestEnemy(targetRange);
+        state.weaponCooldowns.chain = 0.25;
+        if (firstTarget) {
+          state.weaponCooldowns.chain = 1.38 / (1 + 0.09 * weaponLv);
+          const maxJumps = 3 + ((weaponLv / 2) | 0);
+          const visited = new Set([firstTarget]);
+          let curTarget = firstTarget;
+          let prevX = player.x;
+          let prevY = player.y + 1.1;
+          let prevZ = player.z;
+          playSound('shoot');
+
+          for (let j = 0; j < maxJumps && curTarget; j++) {
+            const hitY = curTarget.y + (curTarget.radius || 0.8);
+            spawnGlobalBolt(prevX, prevY, prevZ, curTarget.x, hitY, curTarget.z, 0.15, 10, 0x78e8ff);
+            damageEnemy(
+              curTarget,
+              BASE_DAMAGE * (0.85 + 0.25 * (weaponLv - 1)) * Math.pow(0.88, j),
+              ['elec'],
+              0,
+              j > 0
+            );
+            prevX = curTarget.x;
+            prevY = hitY;
+            prevZ = curTarget.z;
+
+            let nextTarget = null;
+            let bestDist = 11.5;
+            for (const cand of state.enemies) {
+              if (cand.hp > 0 && !visited.has(cand)) {
+                const d = hypot2D(cand.x - curTarget.x, cand.z - curTarget.z);
+                if (d < bestDist) {
+                  bestDist = d;
+                  nextTarget = cand;
+                }
+              }
+            }
+            if (nextTarget) visited.add(nextTarget);
+            curTarget = nextTarget;
+          }
+        }
+      } else if (weaponId === 'grav') {
+        // Сфера гравитации [void, kin]: стягивает и замедляет врагов в одну точку под Коллапс Пустоты
+        const target = findNearestEnemy(26 * sniperRangeMul);
+        state.weaponCooldowns.grav = 0.35;
+        if (target && typeof spawnGravitySphereEntity === 'function') {
+          state.weaponCooldowns.grav = 4.0 / (1 + 0.07 * weaponLv);
+          playSound('summon');
+          spawnGravitySphereEntity(
+            player.x,
+            player.y,
+            player.z,
+            target.x,
+            target.y,
+            target.z,
+            weaponLv
+          );
+        }
+      } else if (weaponId === 'totem') {
+        // Магмовый тотем-турель [fire]: устанавливает турель, обстреливающую мобов лавой
+        state.weaponCooldowns.totem = 5.2 / (1 + 0.07 * weaponLv);
+        if (typeof deployMagmaTotem === 'function') {
+          const placeX = player.x + Math.sin(state.facingAngle) * 1.8;
+          const placeZ = player.z + Math.cos(state.facingAngle) * 1.8;
+          deployMagmaTotem(placeX, player.y, placeZ, weaponLv, 'player');
+          playSound('summon');
+        }
+      } else if (weaponId === 'shield') {
+        // Кузнечный щит-бумеранг [kin]: тяжёлый пробивающий щит туда-обратно
+        const target = findNearestEnemy(20);
+        state.weaponCooldowns.shield = 2.0 / (1 + 0.08 * weaponLv);
+        const tx = target ? target.x : player.x + Math.sin(state.facingAngle) * 10;
+        const tz = target ? target.z : player.z + Math.cos(state.facingAngle) * 10;
+        if (typeof spawnForgeShieldBoomerang === 'function') {
+          playSound('shoot');
+          spawnForgeShieldBoomerang(player, tx, tz, weaponLv, 1);
+        }
+      } else if (weaponId === 'scythe') {
+        // Коса Бездны [void, ice]: тяжёлый серповидный взмах ближнего боя со стяжкой и охлаждением
+        state.weaponCooldowns.scythe = 2.35 / (1 + 0.08 * weaponLv);
+        const cleaveRadius = (4.4 + 0.35 * weaponLv) * getPlayerAoeRadiusMultiplier();
+        if (typeof spawnVoidLandingRing === 'function') {
+          spawnVoidLandingRing(player.x, player.y + 0.05, player.z);
+        }
+        triggerShockwave(
+          player.x,
+          player.z,
+          cleaveRadius,
+          BASE_DAMAGE * 1.2 * (1 + 0.28 * (weaponLv - 1)),
+          0,
+          ['void', 'ice'],
+          { isHeavyMelee: 1, ringColor: 0x9858ff }
         );
       }
     }
@@ -2700,20 +2968,37 @@ function updateGameStep(dt) {
       collectNearbyEnemies(proj.x, proj.z, _hitCandidates);
       for (let hi = 0; hi < _hitCandidates.length; hi++) {
         const enemy = _hitCandidates[hi];
+        if (proj.hitSet && proj.hitSet.has(enemy)) continue;
         const enemyRadius =
           enemy.radius !== undefined ? enemy.radius : ENEMY_TYPES[enemy.type].radius;
-        const hitThreshold = enemyRadius + 0.4;
-        const verticalTolerance = enemy.type === 'b' ? 6.5 : state.isOnBalcony ? 6.8 : 2.2;
+        const hitThreshold = enemyRadius + (proj.projKind === 'spear' ? 0.55 : 0.4);
+        const verticalTolerance = enemy.type === 'b' ? 6.5 : state.isOnBalcony ? 6.8 : 2.4;
         if (
           (proj.x - enemy.x) * (proj.x - enemy.x) + (proj.z - enemy.z) * (proj.z - enemy.z) <
             hitThreshold * hitThreshold &&
           Math.abs(proj.y - (enemy.y + enemyRadius)) < enemyRadius + verticalTolerance
         ) {
-          damageEnemy(enemy, proj.damage, ['fire'], proj.isFire);
-          spawnSparkBurst(proj.x, enemy.y + 0.8, proj.z, 7, 'fire');
-          spawnSlagBurst(proj.x, enemy.y + 0.2, proj.z, 2, 0.55);
-          isExpired = 1;
-          break;
+          const pTags = proj.tags || (proj.isFire ? ['fire'] : ['kin']);
+          damageEnemy(enemy, proj.damage, pTags, proj.isFire, 0, {
+            attackerHeroId: proj.attackerHeroId
+          });
+          if (proj.projKind === 'spear') {
+            spawnSparkBurst(proj.x, enemy.y + 0.8, proj.z, 7, 'xp');
+            if (typeof spawnFrostSlideCrystal === 'function') {
+              spawnFrostSlideCrystal(enemy.x, enemy.y, enemy.z);
+            }
+          } else {
+            spawnSparkBurst(proj.x, enemy.y + 0.8, proj.z, 7, 'fire');
+            spawnSlagBurst(proj.x, enemy.y + 0.2, proj.z, 2, 0.55);
+          }
+          if (proj.pierceLeft && proj.pierceLeft > 0) {
+            proj.pierceLeft--;
+            if (proj.hitSet) proj.hitSet.add(enemy);
+            proj.damage *= 0.88;
+          } else {
+            isExpired = 1;
+            break;
+          }
         }
       }
     }
@@ -2753,6 +3038,12 @@ function updateGameStep(dt) {
       }
       enemy.burnTimer -= dt;
       enemy.slowTimer -= dt;
+      enemy.pullTimer = Math.max(0, (enemy.pullTimer || 0) - dt);
+      enemy.blindTimer = Math.max(0, (enemy.blindTimer || 0) - dt);
+      enemy.armorBreakTimer = Math.max(0, (enemy.armorBreakTimer || 0) - dt);
+      enemy.hunterMarkTimer = Math.max(0, (enemy.hunterMarkTimer || 0) - dt);
+      enemy._collapseCd = Math.max(0, (enemy._collapseCd || 0) - dt);
+      enemy._slagCd = Math.max(0, (enemy._slagCd || 0) - dt);
       enemy.attackCooldown -= dt;
       continue;
     }
@@ -2785,7 +3076,8 @@ function updateGameStep(dt) {
     const baseMoveSpeed =
       (enemy.bossSpeed !== undefined ? enemy.bossSpeed : baseStats.speed) *
       towerMobSpeedBonus *
-      (enemy.slowTimer > 0 ? 0.7 : 1) *
+      (enemy.slowTimer > 0 ? 0.65 : 1) *
+      ((enemy.blindTimer || 0) > 0 ? 0.6 : 1) *
       (enemy.bossSpeedMul || 1) *
       (enemy.speedVariation || 1) *
       (state.enemySpeedMultiplier || 1);
@@ -3081,6 +3373,12 @@ function updateGameStep(dt) {
 
     enemy.burnTimer -= dt;
     enemy.slowTimer -= dt;
+    enemy.pullTimer = Math.max(0, (enemy.pullTimer || 0) - dt);
+    enemy.blindTimer = Math.max(0, (enemy.blindTimer || 0) - dt);
+    enemy.armorBreakTimer = Math.max(0, (enemy.armorBreakTimer || 0) - dt);
+    enemy.hunterMarkTimer = Math.max(0, (enemy.hunterMarkTimer || 0) - dt);
+    enemy._collapseCd = Math.max(0, (enemy._collapseCd || 0) - dt);
+    enemy._slagCd = Math.max(0, (enemy._slagCd || 0) - dt);
     enemy.attackCooldown -= dt;
     if (enemy.burnTimer > 0 && !enemy.shield) {
       enemy.hp -= BASE_DAMAGE * 0.3 * dt;
@@ -3096,7 +3394,7 @@ function updateGameStep(dt) {
       Math.abs(player.y - enemy.y) < (enemy.bkind === 'womb' ? 3.4 : 2.5) &&
       enemy.attackCooldown <= 0
     ) {
-      damagePlayer(contactDmg);
+      damagePlayer(contactDmg * ((enemy.blindTimer || 0) > 0 ? 0.5 : 1));
       if (enemy.type === 's' && state.towerId === 'ice') {
         state.chillTimer = Math.max(state.chillTimer, 1.4);
       }
@@ -3105,6 +3403,7 @@ function updateGameStep(dt) {
 
     if (
       enemy.type === 'r' &&
+      (enemy.blindTimer || 0) <= 0 &&
       enemy.attackCooldown <= 0 &&
       dist < 22 &&
       state.projectiles.length < 250
@@ -3192,7 +3491,10 @@ function updateGameStep(dt) {
         Math.abs(player.y - chest.y) < 2.5 &&
         hypot2D(player.x - chest.x, player.z - chest.z) < 2.2
       ) {
-        const finalCost = Math.ceil(chest.cost * state.chestCostMultiplier);
+        const effChestMul = typeof getEffectiveChestCostMultiplier === 'function'
+          ? getEffectiveChestCostMultiplier(chest.x, chest.y, chest.z)
+          : state.chestCostMultiplier;
+        const finalCost = Math.ceil(chest.cost * effChestMul);
         if (state.gold >= finalCost) {
           state.gold -= finalCost;
           chest.isOpen = 1;

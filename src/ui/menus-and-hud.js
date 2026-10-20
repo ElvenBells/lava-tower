@@ -410,6 +410,111 @@ function debugTriggerFadingEmberTest() {
   }
 }
 
+let _debugWeaponPairIdx = 0;
+function debugCycleWeaponLoadoutPair() {
+  if (!state || state.isGameOver) return;
+  const pairs = [
+    ['spear', 'chain'],
+    ['grav', 'wave'],
+    ['totem', 'shield'],
+    ['fire', 'scythe'],
+    ['blade', 'spear']
+  ];
+  const pair = pairs[_debugWeaponPairIdx++ % pairs.length];
+  state.weaponLevels = {};
+  state.weaponCooldowns = {};
+  state.weaponLevels[pair[0]] = 3;
+  state.weaponLevels[pair[1]] = 3;
+  if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
+  recalculatePlayerTagCounts();
+  resumeGame();
+  showToast(
+    `⚔ ТЕСТ СЛОТОВ (2/${MAX_WEAPON_SLOTS}): ${WEAPONS[pair[0]].name} (ур. 3) + ${WEAPONS[pair[1]].name} (ур. 3)`,
+    3.6
+  );
+}
+
+let _debugReactionDemoIdx = 0;
+function debugTriggerElementalReactionShowcase() {
+  if (!state || state.isGameOver) return;
+  resumeGame();
+  const reactionOrder = ['steam', 'superconduct', 'slag', 'collapse'];
+  const rKey = reactionOrder[_debugReactionDemoIdx++ % reactionOrder.length];
+  const p = state.player;
+  const forwardX = -Math.sin(state.cameraYaw) * 6.5;
+  const forwardZ = -Math.cos(state.cameraYaw) * 6.5;
+  const tx = p.x + forwardX;
+  const tz = p.z + forwardZ;
+
+  // Убедимся, что перед игроком есть группа мобов для наглядной демонстрации реакции
+  const demoEnemies = [];
+  for (let i = 0; i < 3; i++) {
+    const ang = (i * TWO_PI) / 3;
+    const e = spawnEnemy('t', tx + Math.cos(ang) * 1.8, tz + Math.sin(ang) * 1.8, 1.5);
+    e.isRising = false;
+    e.y = p.lastGroundY;
+    demoEnemies.push(e);
+  }
+  const primary = demoEnemies[0];
+
+  if (rKey === 'steam') {
+    for (const e of demoEnemies) e.slowTimer = 4.0;
+    damageEnemy(primary, BASE_DAMAGE * 1.5, ['fire'], 1, 0);
+  } else if (rKey === 'superconduct') {
+    for (const e of demoEnemies) e.slowTimer = 4.5;
+    damageEnemy(primary, BASE_DAMAGE * 1.4, ['elec'], 0, 0);
+  } else if (rKey === 'slag') {
+    for (const e of demoEnemies) e.burnTimer = 4.0;
+    damageEnemy(primary, BASE_DAMAGE * 1.4, ['kin'], 0, 0, { isHeavyMelee: 1, canDetonateSlag: 1 });
+  } else {
+    for (const e of demoEnemies) {
+      e.pullTimer = 3.0;
+      e.slowTimer = 3.0;
+    }
+    if (typeof spawnGravitySphereEntity === 'function') {
+      spawnGravitySphereEntity(p.x, p.y, p.z, tx, p.lastGroundY, tz, 3);
+    }
+    damageEnemy(primary, BASE_DAMAGE * 1.6, ['kin', 'void'], 0, 0, { isHeavyMelee: 1 });
+  }
+}
+
+let _debugRelicBuildIdx = 0;
+function debugCycleTradeoffAndVerticalBuild() {
+  if (!state || state.isGameOver) return;
+  const presets = [
+    { key: 'lead', msg: '⚖ Свинцовые наплечники: +60% урона и анти-отталкивание, но −25% скорости и без двойного прыжка' },
+    { key: 'glass', msg: '⚖ Стеклянный горн: итоговый урон ×1.8, но получаемый урон ×2.0' },
+    { key: 'heart', msg: '🌋 Роль «Нижний страж» (Лавовое сердце): у лавы +45% урона, −40% ожога и замедление лавы −22%' },
+    { key: 'comp', msg: '🎯 Роль «Верхний стрелок» (Компас высоты): до +65% урона на высоте и ×1.35 крит с балкона' },
+    { key: 'cryo_core', msg: '⚖ Криогенный реактор: +40% темпа атак и авто-заморозка, но макс. HP −25% и без регена' },
+    { key: 'void_shackle', msg: '⚖ Кандалы Пустоты: +45% радиуса взрывов и +35% урона по замедленным, но КД рывка ×1.8' }
+  ];
+  const chosen = presets[_debugRelicBuildIdx++ % presets.length];
+  state.itemsOwned[chosen.key] = (state.itemsOwned[chosen.key] || 0) + 1;
+  recalculatePlayerTagCounts();
+  resumeGame();
+  showToast(chosen.msg, 3.8);
+}
+
+function recalculatePlayerTagCounts() {
+  if (!state) return;
+  state.tagCounts = {};
+  for (const wKey in state.weaponLevels) {
+    if (state.weaponLevels[wKey] > 0 && WEAPONS[wKey] && WEAPONS[wKey].tags) {
+      for (const tag of WEAPONS[wKey].tags) {
+        state.tagCounts[tag] = (state.tagCounts[tag] || 0) + 1;
+      }
+    }
+  }
+  for (const itemKey in state.itemsOwned) {
+    if (ITEMS[itemKey] && ITEMS[itemKey].tags) {
+      for (const tag of ITEMS[itemKey].tags) {
+        state.tagCounts[tag] = (state.tagCounts[tag] || 0) + state.itemsOwned[itemKey];
+      }
+    }
+  }
+}
+
 function pauseGame() {
   if (!state || state.isGameOver) return;
   state.pauseState = 2;
@@ -417,6 +522,9 @@ function pauseGame() {
     <h2>ПАУЗА</h2>
     <p style="font-size:12px;opacity:.85">Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · Сетка ${GRID_DIM}×${GRID_DIM} (R=${TOWER_FLOOR_RADIUS} м) · Игроков: ${state.playerCount}</p>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
+    <button onclick="debugCycleWeaponLoadoutPair()">⚔ ТЕСТ БЛОК 3: Сменить пару оружия (2 слота из 9 видов)</button>
+    <button onclick="debugTriggerElementalReactionShowcase()">⚗ ТЕСТ БЛОК 3: Вызвать межклассовую реакцию (Пар / Сверхпровод. / Шлак / Коллапс)</button>
+    <button onclick="debugCycleTradeoffAndVerticalBuild()">⚖ ТЕСТ БЛОК 3: Реликвия с компромиссом / Вертикальная роль (comp и heart)</button>
     <button onclick="debugCycleFloorMiniQuest()">🔒 ТЕСТ БЛОК 2: Сменить мини-квест печати (Круги / Хранители / Ядро)</button>
     <button onclick="debugCycleCoopFloorEvent()">⛓ ТЕСТ БЛОК 2: Вызвать кооп-событие (Цепь / Полярный резонанс)</button>
     <button onclick="debugTriggerFadingEmberTest()">🕯 ТЕСТ БЛОК 2: Возрождение «Угасающий уголь» (3 сек. в круге)</button>
@@ -448,6 +556,7 @@ function quitToMenu() {
   if (typeof floorQuestGroup !== 'undefined') floorQuestGroup.clear();
   if (typeof coopEventVisualGroup !== 'undefined') coopEventVisualGroup.clear();
   if (typeof fadingEmberGroup !== 'undefined') fadingEmberGroup.clear();
+  if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
   resetBossEffects();
   state.projectiles.length = 0;
   state.bladePositions.length = 0;
@@ -472,6 +581,11 @@ function showUpgradeOfferModal(isReroll, chestKey) {
     (chestKey || 'offer-' + state.level) +
     (isReroll ? 'r' + (state.rerollCount = (state.rerollCount || 0) + 1) : '');
 
+  const equippedWeaponKeys = Object.keys(state.weaponLevels).filter(
+    (k) => state.weaponLevels[k] > 0
+  );
+  const weaponSlotsFull = equippedWeaponKeys.length >= (typeof MAX_WEAPON_SLOTS !== 'undefined' ? MAX_WEAPON_SLOTS : 2);
+
   state.currentOffers = UPGRADE_POOL.map((entry, idx) => [
     seededRandom(state.seed, offerSeedKey, idx),
     entry
@@ -479,6 +593,7 @@ function showUpgradeOfferModal(isReroll, chestKey) {
     .filter(
       ([, entry]) =>
         !(entry[0] === 'w' && state.weaponLevels[entry[1]] >= 8) &&
+        !(entry[0] === 'w' && weaponSlotsFull && !state.weaponLevels[entry[1]]) &&
         !(entry[0] === 'i' && state.itemsOwned[entry[1]] >= 5) &&
         !(
           entry[0] === 'i' &&
@@ -491,7 +606,7 @@ function showUpgradeOfferModal(isReroll, chestKey) {
     .map((pair) => pair[1]);
 
   getById('pn').innerHTML =
-    `<h3>${chestKey ? 'Сундук' : 'Уровень ' + state.level}</h3>` +
+    `<h3>${chestKey ? 'Сундук' : 'Уровень ' + state.level} <small style="font-size:12px;opacity:.85">· Слоты оружия: ${equippedWeaponKeys.length}/${MAX_WEAPON_SLOTS}</small></h3>` +
     state.currentOffers
       .map((entry, idx) => {
         const [category, key] = entry;
@@ -505,12 +620,12 @@ function showUpgradeOfferModal(isReroll, chestKey) {
         const badge = isWeapon
           ? state.weaponLevels[key]
             ? 'ур. ' + (state.weaponLevels[key] + 1)
-            : 'новое'
+            : `слот ${equippedWeaponKeys.length + 1}/${MAX_WEAPON_SLOTS}`
           : isTome
             ? ''
-            : '×' + ((state.itemsOwned[key] || 0) + 1);
+            : (ITEMS[key].isTradeoff ? '⚠ ' : '') + '×' + ((state.itemsOwned[key] || 0) + 1);
         const subtitle = isWeapon
-          ? 'Автоатака, 8 уровней'
+          ? (WEAPONS[key].description || 'Автоатака, 8 уровней')
           : isTome
             ? TOMES[key].description
             : ITEMS[key].description;
@@ -559,12 +674,11 @@ function pickUpgrade(offerIndex) {
     }
   }
 
-  state.tagCounts = {};
-  for (const itemKey in state.itemsOwned) {
-    for (const tag of ITEMS[itemKey].tags) {
-      state.tagCounts[tag] = (state.tagCounts[tag] || 0) + state.itemsOwned[itemKey];
-    }
+  if (category === 'i' && key === 'cryo_core') {
+    state.maxHp = Math.max(25, Math.round(state.maxHp * 0.75));
+    state.player.hp = Math.min(state.player.hp, state.maxHp);
   }
+  recalculatePlayerTagCounts();
 
   state.pauseState = 0;
   getById('ov').style.display = 'none';
@@ -676,6 +790,7 @@ function finishRun(isVictory) {
   if (typeof floorQuestGroup !== 'undefined') floorQuestGroup.clear();
   if (typeof coopEventVisualGroup !== 'undefined') coopEventVisualGroup.clear();
   if (typeof fadingEmberGroup !== 'undefined') fadingEmberGroup.clear();
+  if (typeof clearCombatDeployables === 'function') clearCombatDeployables();
   resetBossEffects();
 
   const durationSec = state.elapsedTime | 0;
@@ -771,3 +886,7 @@ window.pactPick = pickPact;
 window.debugCycleFloorMiniQuest = debugCycleFloorMiniQuest;
 window.debugCycleCoopFloorEvent = debugCycleCoopFloorEvent;
 window.debugTriggerFadingEmberTest = debugTriggerFadingEmberTest;
+
+window.debugCycleWeaponLoadoutPair = debugCycleWeaponLoadoutPair;
+window.debugTriggerElementalReactionShowcase = debugTriggerElementalReactionShowcase;
+window.debugCycleTradeoffAndVerticalBuild = debugCycleTradeoffAndVerticalBuild;

@@ -870,7 +870,11 @@ function renderGameFrame(dt) {
       }
     }
 
-    const fullBossTitle = activeBoss.bossName + statusSuffix;
+    let coopDebuffSuffix = '';
+    if ((activeBoss.hunterMarkTimer || 0) > 0) coopDebuffSuffix += ' · 🎯 МЕТКА +25%';
+    if ((activeBoss.armorBreakTimer || 0) > 0) coopDebuffSuffix += ' · ⚡ СВЕРХПРОВОД. −30% ЗАЩ.';
+    if ((activeBoss.blindTimer || 0) > 0) coopDebuffSuffix += ' · 💨 ОСЛЕПЛЁН';
+    const fullBossTitle = activeBoss.bossName + statusSuffix + coopDebuffSuffix;
     if (fullBossTitle !== lastBossNameText) {
       lastBossNameText = fullBossTitle;
       getById('bossName').textContent = fullBossTitle;
@@ -891,13 +895,18 @@ function renderGameFrame(dt) {
     DOM_CACHE.healthBar.style.width = Math.max(0, (player.hp / state.maxHp) * 100) + '%';
     DOM_CACHE.xpBar.style.width = (state.xp / (6 + 5 * state.level)) * 100 + '%';
 
-    const inventorySummary = [
-      ...Object.entries(state.weaponLevels).map(([k, v]) => WEAPONS[k].name + ' ' + v),
-      ...Object.entries(state.itemsOwned).map(([k, v]) => ITEMS[k].name + ' ×' + v),
+    const equippedWeaponList = Object.entries(state.weaponLevels)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => WEAPONS[k].name + ' ' + v);
+    const maxSlots = typeof MAX_WEAPON_SLOTS !== 'undefined' ? MAX_WEAPON_SLOTS : 2;
+    const weaponSlotsLabel = `Оружие (${equippedWeaponList.length}/${maxSlots}): ${equippedWeaponList.join(' + ') || 'нет'}`;
+    const itemsAndTomesList = [
+      ...Object.entries(state.itemsOwned).map(([k, v]) => (ITEMS[k].isTradeoff ? '⚠ ' : '') + ITEMS[k].name + ' ×' + v),
       ...Object.entries(state.tomeLevels || {})
         .filter(([, v]) => v > 0)
         .map(([k, v]) => TOMES[k].name + ' ×' + v)
     ].join(', ');
+    const inventorySummary = weaponSlotsLabel + (itemsAndTomesList ? ' · ' + itemsAndTomesList : '');
 
     const actLabel = state.isThreeActRun && typeof getFloorActNumber === 'function'
       ? 'Акт ' + getFloorActNumber(state.maxFloorReached) + ' · '
@@ -972,7 +981,10 @@ function renderGameFrame(dt) {
       `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м${state.isLavaPausedByForgeHall ? ' <b style="color:#48ffe8">(ПАУЗА)</b>' : ''} · золото: ${state.gold | 0}<br>` +
       `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
       `${questHtml}` +
-      `${state.isOnBalcony ? '<br><b style="color:#ffd858">🎯 Балкон (+6 м): дальность +50%, урон +20%</b>' : ''}` +
+      `${state.isOnBalcony ? '<br><b style="color:#ffd858">🎯 Верхний стрелок · Балкон (+6 м): дальность +50%, урон +20%' + (state.itemsOwned.comp ? ' + крит Компаса ×' + (1 + 0.35 * state.itemsOwned.comp).toFixed(2) : '') + '</b>' : ''}` +
+      `${state.isLowerGuardianActive ? '<br><b style="color:#ff8838">🌋 Нижний страж (у лавы): урон +45%, подъём лавы замедлен для отряда!</b>' : ''}` +
+      `${(state.isWandererAuraActive || state.isPilgrimAuraActive || state.isBlacksmithAuraActive) ? '<br><span style="color:#78f8ff">🌟 Кооп-ауры (12 м): ' + [state.isWandererAuraActive ? 'Странник (+15% скор./атака)' : '', state.isPilgrimAuraActive ? 'Пилигрим (−30% КД рывка)' : '', state.isBlacksmithAuraActive ? 'Кузнец (сундуки −30%, кин. +15%)' : ''].filter(Boolean).join(' · ') + '</span>' : ''}` +
+      `${state.reactionCounts && (state.reactionCounts.steam + state.reactionCounts.superconduct + state.reactionCounts.slag + state.reactionCounts.collapse > 0) ? '<br><span style="color:#d8b8ff">⚗ Реакции: Пар ×' + state.reactionCounts.steam + ' · Сверхпровод. ×' + state.reactionCounts.superconduct + ' · Шлак ×' + state.reactionCounts.slag + ' · Коллапс ×' + state.reactionCounts.collapse + '</span>' : ''}` +
       `${state.isLavaPausedByForgeHall ? '<br><b style="color:#48ffe8">⚒ Зал Кузницы · На плите: ' + (state.forgeHallReadyCount || 0) + '/' + (state.playerCount || 1) + '</b>' : ''}` +
       `${state.chosenRoute ? '<br>Сектор: ' + (state.chosenRoute === 1 ? '🌿 тихий (хил ×2.4)' : '🔥 опасный (золото ×2)') : ''}` +
       `${eventHtml}` +
