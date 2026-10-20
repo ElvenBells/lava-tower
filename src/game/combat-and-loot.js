@@ -1,6 +1,7 @@
 /* ==========================================================================
    Боевая система, пространственная сетка врагов (расширенная до R=50 м под 23×23),
-   спавн мобов, элиты, лут, переключение 3 актов и события этажей
+   спавн мобов, элиты, лут, переключение 3 актов, кооперативные события этажей
+   («Связующая цепь», «Полярный резонанс») и интеграция с печатями и «Угасающим углём»
    ========================================================================== */
 
 /* ---------- 1. Пространственная сетка врагов (ячейки 10×10 м, до ±50 м) ---------- */
@@ -103,6 +104,14 @@ function calculateDamageMultiplier(tags) {
   // Бонус снайперской позиции при стрельбе с вертикального полуэтажа-балкона (floorY + 6)
   if (state.isOnBalcony) {
     additiveBonus += 0.2;
+  }
+  // Кооперативное событие «Связующая цепь»: +35% к урону, пока игроки держатся ближе 10 м друг от друга
+  if (state.isTetherChainActive) {
+    additiveBonus += 0.35;
+  }
+  // Кооперативное событие «Полярный резонанс»: +40% к урону, пока игроки держат противоположные края арены
+  if (state.isPolarResonanceActive) {
+    additiveBonus += 0.4;
   }
 
   for (const tag of tags) {
@@ -234,6 +243,13 @@ function emitCombatEvent(eventName) {
 }
 
 function damagePlayer(amount, isLavaDamage) {
+  // Если игрок уже находится в состоянии «Угасающего угля», дополнительный урон не наносится
+  if (
+    state.playerEmber &&
+    (state.playerEmber.active || state.playerEmber.lostInLava)
+  ) {
+    return;
+  }
   if (!isLavaDamage) {
     if (state.invulnerabilityTimer > 0) return;
     state.invulnerabilityTimer = 0.4;
@@ -424,9 +440,10 @@ function spawnEnemy(type, x, z, hpScale, bossKind) {
       state.towerId === 'ice' ? 0x70dcff : state.towerId === 'void' ? 0xc068ff : 0xff7a20
     );
   }
+  return enemy;
 }
 
-function promoteToElite(enemy, floorIndex, forceElite) {
+function promoteToElite(enemy, floorIndex, forceElite, silentToast) {
   let activeElites = 0;
   for (const other of state.enemies) {
     if (other.eliteType) activeElites++;
@@ -452,10 +469,12 @@ function promoteToElite(enemy, floorIndex, forceElite) {
     enemy.contactDamage = baseStats.contactDamage * mod.damageMultiplier;
   }
 
-  const mobName =
-    (TOWER_MOB_NAMES[state.towerId] && TOWER_MOB_NAMES[state.towerId][enemy.type]) || '';
-  showToast('⚠ Элита: ' + mod.name + (mobName ? ' ' + mobName : ''), 1.8);
-  playSound('roar');
+  if (!silentToast) {
+    const mobName =
+      (TOWER_MOB_NAMES[state.towerId] && TOWER_MOB_NAMES[state.towerId][enemy.type]) || '';
+    showToast('⚠ Элита: ' + mod.name + (mobName ? ' ' + mobName : ''), 1.8);
+    playSound('roar');
+  }
 }
 
 /* ---------- 4. Выпадение лута и гибель врагов ---------- */
@@ -583,6 +602,28 @@ function killEnemy(enemyIndex) {
     dropEnemyLoot(enemy, xpValue);
   }
 
+  // Если убит элитный «Хранитель печати» текущего этажа — продвигаем командный мини-квест снятия печати
+  if (enemy.isSealGuardian && typeof onSealGuardianKilled === 'function') {
+    onSealGuardianKilled(enemy);
+  }
+
+  // Если убит целевой элитный моб события «Охота элит» — учитываем групповой прогресс
+  if (
+    enemy.isHuntTarget &&
+    state.activeEvent &&
+    state.activeEvent.key === 'hunt'
+  ) {
+    state.activeEvent.huntKilled = (state.activeEvent.huntKilled || 0) + 1;
+    if (state.activeEvent.huntKilled >= (state.activeEvent.huntTotal || 2)) {
+      const bonusGold = 6 + state.playerCount * 2;
+      state.gold += bonusGold;
+      state.player.hp = Math.min(state.maxHp, state.player.hp + state.maxHp * 0.2);
+      playSound('win');
+      showToast('🏆 Охота элит завершена отрядом! +' + bonusGold + ' золота и +20% HP', 2.8);
+      endFloorEvent(1);
+    }
+  }
+
   if (enemy.eliteType) {
     unlockHero('ash');
   }
@@ -598,6 +639,12 @@ function killEnemy(enemyIndex) {
     state.lavaY -= 12;
     state.activeBossCount = Math.max(0, (state.activeBossCount || 0) - 1);
 
+    // Возрождаем всех павших игроков/союзников (включая тех, чей «Угасающий уголь» ушёл под лаву!)
+    const revivedCount =
+      typeof reviveAllFallenEmbersOnBossVictory === 'function'
+        ? reviveAllFallenEmbersOnBossVictory()
+        : 0;
+
     if (enemy.gateFloor !== undefined && enemy.gateFloor < GRID_FLOORS - 1) {
       openBossGate(enemy.gateFloor);
       // Если после этого босса есть безопасный «Зал Кузницы», ставим подъём лавы на паузу,
@@ -606,11 +653,17 @@ function killEnemy(enemyIndex) {
         state.activeForgeHallFloor = enemy.gateFloor;
         state.isLavaPausedByForgeHall = 1;
         showToast(
-          '🔓 Печать снята! Впереди Зал Кузницы — лава на паузе, пока отряд не встанет на стартовую плиту!',
-          4.6
+          '🔓 Печать босса снята!' +
+            (revivedCount > 0 ? ' Павшие Угленосцы возрождены! ' : ' ') +
+            'Впереди Зал Кузницы — лава на паузе до сбора отряда!',
+          4.8
         );
       } else {
-        showToast('🔓 Печать снята — путь наверх открыт', 3.2);
+        showToast(
+          '🔓 Печать босса снята — путь наверх открыт' +
+            (revivedCount > 0 ? ' · Павшие возрождены!' : ''),
+          3.4
+        );
       }
     }
 
@@ -655,64 +708,133 @@ function killEnemy(enemyIndex) {
   checkLevelUp();
 }
 
-/* ---------- 5. События этажей и бесшовный переход между 3 актами ---------- */
+/* ---------- 5. События этажей (адаптированные под 2–4 игроков + кооперативные) и переходы актов ---------- */
 
 function startFloorEvent(eventKey) {
   const player = state.player;
   const maxSpawnR = TOWER_FLOOR_RADIUS - 4;
+  const evCfg = FLOOR_EVENTS[eventKey] || FLOOR_EVENTS.storm;
+
+  state.isTetherChainActive = 0;
+  state.isPolarResonanceActive = 0;
+  if (typeof clearCoopEventVisuals === 'function') {
+    clearCoopEventVisuals();
+  }
+
   if (eventKey === 'hunt') {
-    for (let q = 0; q < 2; q++) {
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const angle = Math.random() * TWO_PI;
-        let x = player.x + Math.cos(angle) * 13;
-        let z = player.z + Math.sin(angle) * 13;
+    const huntCount = Math.min(4, Math.max(2, (state.playerCount || 2) + 1));
+    let spawnedHunt = 0;
+    for (let q = 0; q < huntCount; q++) {
+      // Распределяем элитных охотников вокруг игрока и союзников
+      const anchor =
+        q > 0 && state.coopPeers && state.coopPeers[(q - 1) % state.coopPeers.length]
+          ? state.coopPeers[(q - 1) % state.coopPeers.length]
+          : player;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const angle = (q * TWO_PI) / huntCount + attempt * 0.55;
+        let x = anchor.x + Math.cos(angle) * 12;
+        let z = anchor.z + Math.sin(angle) * 12;
         const radialDist = hypot2D(x, z);
         if (radialDist > maxSpawnR) {
           x *= maxSpawnR / radialDist;
           z *= maxSpawnR / radialDist;
         }
         if (getGroundHeightAt(x, player.lastGroundY, z) < player.lastGroundY - 3) continue;
-        spawnEnemy(state.maxFloorReached >= 2 ? 't' : 'l', x, z, 1 + state.maxFloorReached * 0.12);
-        promoteToElite(state.enemies[state.enemies.length - 1], state.maxFloorReached, 1);
+        const e = spawnEnemy(
+          state.maxFloorReached >= 2 && q % 2 === 0 ? 't' : 'l',
+          x,
+          z,
+          1 + state.maxFloorReached * 0.12
+        );
+        promoteToElite(e, state.maxFloorReached, 1, q > 0);
+        e.isHuntTarget = 1;
+        spawnedHunt++;
         break;
       }
     }
+    state.activeEvent = {
+      key: 'hunt',
+      timeLeft: evCfg.duration || 20,
+      actionTimer: 1.5,
+      counter: 0,
+      huntTotal: Math.max(1, spawnedHunt),
+      huntKilled: 0
+    };
     return;
   }
+
+  const poleAngle = seededRandom(state.seed, 'polA', state.maxFloorReached) * TWO_PI;
+  const poleRadius = Math.max(14, TOWER_FLOOR_RADIUS * 0.68);
+
   state.activeEvent = {
     key: eventKey,
-    timeLeft: FLOOR_EVENTS[eventKey].duration,
-    actionTimer: 1,
-    counter: 0
+    timeLeft: evCfg.duration || 22,
+    actionTimer: 0.9,
+    counter: 0,
+    poleAngle,
+    poleAX: Math.cos(poleAngle) * poleRadius,
+    poleAZ: Math.sin(poleAngle) * poleRadius,
+    poleBX: -Math.cos(poleAngle) * poleRadius,
+    poleBZ: -Math.sin(poleAngle) * poleRadius,
+    resonancePulseTimer: 2.5
   };
+
+  if (typeof setupCoopEventVisuals === 'function') {
+    setupCoopEventVisuals(state.activeEvent);
+  }
 }
 
 function endFloorEvent(silent) {
-  const eventKey = state.activeEvent && state.activeEvent.key;
+  const ev = state.activeEvent;
+  const eventKey = ev && ev.key;
   state.activeEvent = null;
+  state.isTetherChainActive = 0;
+  state.isPolarResonanceActive = 0;
+  if (typeof clearCoopEventVisuals === 'function') {
+    clearCoopEventVisuals();
+  }
   if (silent) return;
   if (eventKey === 'surge') {
+    const reward = 5 + (state.playerCount || 2) * 2;
+    state.gold += reward;
+    showToast('🌊 Прилив отступил: +' + reward + ' золота отряду', 2.2);
+  } else if (eventKey === 'chain') {
     state.gold += 6;
-    showToast('Прилив отступил: +6 золота', 2);
+    showToast('⛓ Связующая цепь рассеялась: +6 золота за синхронность', 2.0);
+  } else if (eventKey === 'polar') {
+    state.gold += 8;
+    showToast('🧭 Полярный резонанс завершён: +8 золота отряду', 2.0);
   } else {
-    showToast('Событие окончено', 1.5);
+    showToast('Событие этажа окончено', 1.5);
   }
 }
 
 function updateFloorEvent(dt) {
   const ev = state.activeEvent;
+  if (!ev) return;
   const player = state.player;
   const maxBombR = TOWER_FLOOR_RADIUS - 1.5;
+
   if (ev.key === 'storm') {
     ev.actionTimer -= dt;
     if (ev.actionTimer <= 0) {
-      ev.actionTimer = 0.8;
+      // В группе шторм бьёт чаще и распределяется между позициями всех живых игроков
+      ev.actionTimer = Math.max(0.45, 0.85 - (state.playerCount - 1) * 0.1);
       ev.counter++;
-      let x = player.x + (Math.random() - 0.5) * 18;
-      let z = player.z + (Math.random() - 0.5) * 18;
-      if (ev.counter % 3 === 0) {
-        x = player.x;
-        z = player.z;
+      let anchorX = player.x;
+      let anchorZ = player.z;
+      if (state.coopPeers && state.coopPeers.length > 0 && ev.counter % 2 === 1) {
+        const peer = state.coopPeers[ev.counter % state.coopPeers.length];
+        if (peer && (!peer.ember || (!peer.ember.active && !peer.ember.lostInLava))) {
+          anchorX = peer.x;
+          anchorZ = peer.z;
+        }
+      }
+      let x = anchorX + (Math.random() - 0.5) * 18;
+      let z = anchorZ + (Math.random() - 0.5) * 18;
+      if (ev.counter % 4 === 0) {
+        x = anchorX;
+        z = anchorZ;
       }
       const radialDist = hypot2D(x, z);
       if (radialDist > maxBombR) {
@@ -728,6 +850,35 @@ function updateFloorEvent(dt) {
         radius: 2.8,
         damage: 14
       });
+      // Каждая 5-я метеорная воронка выбрасывает золотой самородок для группы
+      if (ev.counter % 5 === 0) {
+        spawnPickup(2, x, player.lastGroundY + 0.7, z, 1);
+      }
+    }
+  } else if (ev.key === 'gold') {
+    // «Золотая лихорадка» выбрасывает золотые гейзеры возле игроков каждые 3.2 с
+    ev.actionTimer -= dt;
+    if (ev.actionTimer <= 0) {
+      ev.actionTimer = 3.2;
+      ev.counter++;
+      const angle = Math.random() * TWO_PI;
+      const dist = 4 + Math.random() * 9;
+      let gx = player.x + Math.cos(angle) * dist;
+      let gz = player.z + Math.sin(angle) * dist;
+      const r = hypot2D(gx, gz);
+      if (r > maxBombR - 2) {
+        gx *= (maxBombR - 2) / r;
+        gz *= (maxBombR - 2) / r;
+      }
+      const gy = getGroundHeightAt(gx, player.lastGroundY + 1, gz);
+      if (gy >= player.lastGroundY - 2) {
+        spawnPickup(2, gx, gy + 0.75, gz, state.isGreedPactActive ? 2 : 1);
+        spawnSparkBurst(gx, gy + 0.4, gz, 10, 'gold');
+      }
+    }
+  } else if (ev.key === 'chain' || ev.key === 'polar') {
+    if (typeof updateCoopFloorEventStep === 'function') {
+      updateCoopFloorEventStep(ev, dt);
     }
   }
 }
@@ -785,7 +936,22 @@ function onFloorEnter() {
   }
 
   if (FORK_FLOORS.includes(floor) && !isBossFloorIndex(floor) && floor < GRID_FLOORS - 1) {
-    message += ' · РАЗВИЛКА: зелёная лестница — тихий сектор, красная — опасный сектор';
+    message += ' · РАЗВИЛКА: зелёная — тихий сектор, красная — опасный';
+  }
+
+  // Запускаем командный мини-квест для снятия малой печати лестницы на обычном этаже (15–25 с)
+  if (
+    !isBossFloorIndex(floor) &&
+    floor < GRID_FLOORS - 1 &&
+    typeof startFloorMiniQuest === 'function'
+  ) {
+    const questObj =
+      state.floorQuest && state.floorQuest.floor === floor
+        ? state.floorQuest
+        : startFloorMiniQuest(floor);
+    if (questObj && FLOOR_MINI_QUESTS[questObj.type]) {
+      message += ' · 🔒 Печать: ' + FLOOR_MINI_QUESTS[questObj.type].shortName;
+    }
   }
 
   if (state.activeEvent) {
@@ -797,16 +963,20 @@ function onFloorEnter() {
     !isBossFloorIndex(floor) &&
     floor < GRID_FLOORS - 1 &&
     !state.isLavaPausedByForgeHall &&
-    seededRandom(state.seed, 'evp', floor) < 0.55
+    seededRandom(state.seed, 'evp', floor) < 0.68
   ) {
-    const eventKey =
-      FLOOR_EVENT_KEYS[Math.floor(seededRandom(state.seed, 'ev', floor) * FLOOR_EVENT_KEYS.length)];
+    // В кооперативном режиме повышаем вероятность выбора кооп-событий «Связующая цепь» и «Полярный резонанс»
+    const roll = seededRandom(state.seed, 'ev', floor);
+    let eventKey = FLOOR_EVENT_KEYS[Math.floor(roll * FLOOR_EVENT_KEYS.length)];
+    if (state.playerCount >= 2 && seededRandom(state.seed, 'evcoop', floor) < 0.46) {
+      eventKey = floor % 2 === 0 ? 'chain' : 'polar';
+    }
     startFloorEvent(eventKey);
-    message += ' · ' + FLOOR_EVENTS[eventKey].name;
+    message += ' · ⚡ ' + (FLOOR_EVENTS[eventKey].shortName || FLOOR_EVENTS[eventKey].name);
   }
 
   showToast(
     message,
-    actTransitionBanner || FORK_FLOORS.includes(floor) || prevForks.length ? 4.8 : 2.8
+    actTransitionBanner || FORK_FLOORS.includes(floor) || prevForks.length ? 4.8 : 3.4
   );
 }

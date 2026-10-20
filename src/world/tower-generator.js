@@ -377,7 +377,7 @@ const altarGlowMat = new THREE.SpriteMaterial({
   scene.add(dummyAltar);
 })();
 
-// 1D. ПЕЧАТЬ (ВРАТА БОССА) — Мудборд 6
+// 1D. ПЕЧАТИ ЛЕСТНИЦ (ВЕЛИКИЕ ВРАТА БОССОВ И МАЛЫЕ ПЕЧАТИ ОБЫЧНЫХ ЭТАЖЕЙ) — Мудборд 6
 const bossGateSealGroup = new THREE.Group();
 scene.add(bossGateSealGroup);
 let bossGateVisualsByFloor = {};
@@ -405,28 +405,76 @@ const bossGateGlowMat = new THREE.SpriteMaterial({
   depthWrite: false
 });
 
-function createBossGateSealVisual(stairSteps, floorY) {
+// Материалы малых печатей для всех обычных этажей (открываются за 15–25 с командным мини-квестом)
+const minorGateBeamMat = new THREE.MeshBasicMaterial({
+  color: 0xffa828,
+  transparent: true,
+  opacity: 0.88,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const minorGateCoreMat = new THREE.MeshBasicMaterial({
+  color: 0x68fff2,
+  transparent: true,
+  opacity: 0.94,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const minorGateGlowMat = new THREE.SpriteMaterial({
+  map: TEXTURES.glowWhite,
+  color: 0xffb830,
+  transparent: true,
+  opacity: 0.86,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+function createBossGateSealVisual(stairSteps, floorY, isMinorSeal = false) {
   const sealGroup = new THREE.Group();
+  sealGroup.userData = { isMinorSeal: !!isMinorSeal, floorY };
   if (!stairSteps || !stairSteps.length) return sealGroup;
 
-  const anchorIndices = [0, 1, 2];
+  // На этажах с двумя ветвями лестниц (развилки и разделённые сектора) запечатываем обе лестницы
+  const anchorIndices =
+    stairSteps.length >= 12
+      ? isMinorSeal
+        ? [0, 1, 6, 7]
+        : [0, 1, 2, 6, 7, 8]
+      : isMinorSeal
+        ? [0, 1]
+        : [0, 1, 2];
+
+  const beamMat = isMinorSeal ? minorGateBeamMat : bossGateBeamMat;
+  const coreMat = isMinorSeal ? minorGateCoreMat : bossGateCoreMat;
+  const glowMat = isMinorSeal ? minorGateGlowMat : bossGateGlowMat;
+
   for (const idx of anchorIndices) {
     if (idx >= stairSteps.length) continue;
     const [sx, sz, stepTopY] = stairSteps[idx];
     const gateFrame = new THREE.Group();
-    gateFrame.position.set(sx, stepTopY + 2.2, sz);
+    gateFrame.position.set(sx, stepTopY + (isMinorSeal ? 1.85 : 2.2), sz);
     gateFrame.rotation.y = Math.atan2(sx, sz) + Math.PI / 2;
 
-    const beamOffsets = [
-      [-1.8, -1.9, 1.8, 1.9],
-      [-1.8, 1.9, 1.8, -1.9],
-      [-1.9, -0.7, 1.9, 1.1],
-      [-1.9, 0.9, 1.9, -0.8],
-      [-0.9, -2.1, 1.1, 2.1],
-      [0.8, -2.1, -1.0, 2.1],
-      [-1.8, 0.1, 1.8, 0.2],
-      [-0.1, -2.0, 0.1, 2.0]
-    ];
+    const beamOffsets = isMinorSeal
+      ? [
+          [-1.65, -1.55, 1.65, 1.55],
+          [-1.65, 1.55, 1.65, -1.55],
+          [-1.7, 0.0, 1.7, 0.0],
+          [0.0, -1.65, 0.0, 1.65],
+          [-1.2, -1.65, 1.2, 1.65],
+          [1.2, -1.65, -1.2, 1.65]
+        ]
+      : [
+          [-1.8, -1.9, 1.8, 1.9],
+          [-1.8, 1.9, 1.8, -1.9],
+          [-1.9, -0.7, 1.9, 1.1],
+          [-1.9, 0.9, 1.9, -0.8],
+          [-0.9, -2.1, 1.1, 2.1],
+          [0.8, -2.1, -1.0, 2.1],
+          [-1.8, 0.1, 1.8, 0.2],
+          [-0.1, -2.0, 0.1, 2.0]
+        ];
+
     for (const [x0, y0, x1, y1] of beamOffsets) {
       const dx = x1 - x0;
       const dy = y1 - y0;
@@ -436,24 +484,32 @@ function createBossGateSealVisual(stairSteps, floorY) {
       const cy = (y0 + y1) * 0.5;
 
       const outerBeam = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.065, 0.065, len, 6),
-        bossGateBeamMat
+        new THREE.CylinderGeometry(isMinorSeal ? 0.055 : 0.065, isMinorSeal ? 0.055 : 0.065, len, 6),
+        beamMat
       );
       outerBeam.position.set(cx, cy, 0);
       outerBeam.rotation.z = ang;
       gateFrame.add(outerBeam);
 
       const innerCore = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, len, 5),
-        bossGateCoreMat
+        new THREE.CylinderGeometry(0.022, 0.022, len, 5),
+        coreMat
       );
       innerCore.position.set(cx, cy, 0);
       innerCore.rotation.z = ang;
       gateFrame.add(innerCore);
     }
 
-    const nexusGlow = new THREE.Sprite(bossGateGlowMat);
-    nexusGlow.scale.setScalar(3.4);
+    if (isMinorSeal) {
+      const runeRing = new THREE.Mesh(
+        new THREE.TorusGeometry(1.15, 0.04, 6, 24),
+        coreMat
+      );
+      gateFrame.add(runeRing);
+    }
+
+    const nexusGlow = new THREE.Sprite(glowMat);
+    nexusGlow.scale.setScalar(isMinorSeal ? 2.85 : 3.4);
     gateFrame.add(nexusGlow);
 
     sealGroup.add(gateFrame);
@@ -662,6 +718,9 @@ let balconiesByFloor = {};
 let balconyVantageZones = [];
 let forgeHallsByFloor = {};
 let bossGateBlockIndices = {};
+let stairPositionsByFloor = [];
+let floorEdgeCellsByFloor = [];
+let floorValidCellsByFloor = [];
 let towerInstancedMesh = null;
 let towerInstancedGroup = new THREE.Group();
 scene.add(towerInstancedGroup);
@@ -921,10 +980,16 @@ function getSectorRouteAtPosition(floorIndex, x, z) {
   return proj >= 0 ? cfg.positiveRoute : cfg.negativeRoute;
 }
 
+function isFloorGateSealed(floorIndex) {
+  const gateIndices = bossGateBlockIndices[floorIndex];
+  return !!(gateIndices && gateIndices.length > 0);
+}
+
 function openBossGate(floorIndex) {
   const gateIndices = bossGateBlockIndices[floorIndex] || [];
   for (const blockIdx of gateIndices) {
     const block = blocks[blockIdx];
+    if (!block) continue;
     block[4] = -999;
     block[5] = -998;
     const ref = blockInstanceRef[blockIdx];
@@ -943,12 +1008,47 @@ function openBossGate(floorIndex) {
       if (child.isSprite && typeof spawnSparkBurst === 'function') {
         const wp = new THREE.Vector3();
         child.getWorldPosition(wp);
-        spawnSparkBurst(wp.x, wp.y, wp.z, 24, 'fire');
+        spawnSparkBurst(wp.x, wp.y, wp.z, 24, sealVisual.userData && sealVisual.userData.isMinorSeal ? 'xp' : 'fire');
       }
     });
     sealVisual.visible = false;
   }
   bossGateBlockIndices[floorIndex] = [];
+}
+
+/**
+ * Находит ближайшую безопасную плиту выше текущего уровня лавы (для появления «Угасающего угля» павшего игрока).
+ */
+function findNearestSafeSlabAboveLava(x, y, z, minClearance = 0.8) {
+  const minSafeY = (typeof state !== 'undefined' && state ? state.lavaY : -10) + minClearance;
+  let bestSlab = null;
+  let bestScore = 1e12;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    // Пропускаем барьеры печатей (tag === 3) и удалённые блоки
+    if (!b || b[7] === 3 || b[5] < minSafeY) continue;
+    // Предпочитаем обычные плиты пола, балконов или Зала Кузницы (толщина <= 1.5 м)
+    const rawH = b[5] - b[4];
+    const isStair = rawH > 1.5 && b[7] !== 4 && b[7] !== 7;
+    const cx = (b[0] + b[1]) * 0.5;
+    const cz = (b[2] + b[3]) * 0.5;
+    const topY = b[5];
+    const dx = cx - x;
+    const dz = cz - z;
+    const dy = topY - y;
+    const score = dx * dx + dz * dz + Math.abs(dy) * 18 + (isStair ? 65 : 0);
+    if (score < bestScore) {
+      bestScore = score;
+      bestSlab = { x: cx, y: topY, z: cz, floor: b[6] };
+    }
+  }
+
+  if (!bestSlab) {
+    const fallbackFloor = Math.min(GRID_FLOORS - 1, Math.max(0, Math.ceil(minSafeY / 14)));
+    return { x: 0, y: fallbackFloor * 14, z: 0, floor: fallbackFloor };
+  }
+  return bestSlab;
 }
 
 /* ---------- 3. Генерация архитектурного окружения и деталей по темам башен ---------- */
@@ -2186,6 +2286,7 @@ function updateTowerDecorAnimations(time, dt, towerId) {
   }
 
   bossGateBeamMat.opacity = 0.78 + Math.sin(time * 6.5) * 0.18;
+  minorGateBeamMat.opacity = 0.74 + Math.sin(time * 7.5 + 1.2) * 0.2;
 
   // Анимация потоков и капель лавы (Пепельный акт)
   if (ashWallStreamGlobs.length || ashFallingDrops.length) {
@@ -2375,9 +2476,9 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
   let prevForkAngle = 0;
   let prevForkSwapRoutes = false;
 
-  const stairPositionsByFloor = [];
-  const floorEdgeCellsByFloor = [];
-  const floorValidCellsByFloor = [];
+  stairPositionsByFloor = [];
+  floorEdgeCellsByFloor = [];
+  floorValidCellsByFloor = [];
 
   const maxRadiusSq = GRID_OFFSET * GRID_OFFSET;
   // Радиус размещения маршей лестниц масштабируется под размер этажа (15×15 / 19×19 / 23×23),
@@ -2674,7 +2775,8 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
             voidDissolvedStairStepSet.add(stepBlockIndex);
           }
 
-          if (isBossFloor) {
+          // Блокируем лестницы как на этажах боссов (великая печать), так и на всех обычных этажах (малая печать на 15–25 с)
+          if (isBossFloor || stepIdx <= 3) {
             blocks.push([x - 2.05, x + 2.05, z - 2.05, z + 2.05, floorY, floorY + 16, floor, 3]);
             (bossGateBlockIndices[floor] = bossGateBlockIndices[floor] || []).push(blocks.length - 1);
           }
@@ -2798,8 +2900,8 @@ function buildTower(seed, customPlayerCount, customCampaignModeId) {
     }
 
     stairPositionsByFloor[floor] = floorStairs;
-    if (isBossFloor && floor < GRID_FLOORS - 1) {
-      bossGateVisualsByFloor[floor] = createBossGateSealVisual(floorStairs, floorY);
+    if (floor < GRID_FLOORS - 1 && floorStairs.length > 0) {
+      bossGateVisualsByFloor[floor] = createBossGateSealVisual(floorStairs, floorY, !isBossFloor);
     }
 
     prevFloorWasFork = isForkFloor;

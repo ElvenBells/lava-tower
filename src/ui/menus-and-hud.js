@@ -357,6 +357,59 @@ function debugTeleportToForgeHall() {
   }
 }
 
+let _debugQuestCycleIdx = 0;
+function debugCycleFloorMiniQuest() {
+  if (!state || state.isGameOver) return;
+  const f = state.maxFloorReached;
+  const types = ['rune_circles', 'seal_guardians', 'forge_core'];
+  const nextType = types[_debugQuestCycleIdx++ % types.length];
+  startFloorMiniQuest(f, nextType);
+  resumeGame();
+  showToast(
+    '🔒 ТЕСТ ПЕЧАТИ: ' +
+      ((FLOOR_MINI_QUESTS[nextType] && FLOOR_MINI_QUESTS[nextType].name) || nextType) +
+      ' — ' +
+      ((FLOOR_MINI_QUESTS[nextType] && FLOOR_MINI_QUESTS[nextType].description) || ''),
+    3.8
+  );
+}
+
+let _debugCoopEventToggle = 0;
+function debugCycleCoopFloorEvent() {
+  if (!state || state.isGameOver) return;
+  const keys = ['chain', 'polar', 'hunt', 'gold', 'storm', 'surge'];
+  const nextKey = keys[_debugCoopEventToggle++ % keys.length];
+  if (state.activeEvent) endFloorEvent(1);
+  startFloorEvent(nextKey);
+  resumeGame();
+  showToast(
+    '⚡ ТЕСТ СОБЫТИЯ: ' +
+      ((FLOOR_EVENTS[nextKey] && FLOOR_EVENTS[nextKey].name) || nextKey) +
+      ' — ' +
+      ((FLOOR_EVENTS[nextKey] && FLOOR_EVENTS[nextKey].description) || ''),
+    3.8
+  );
+}
+
+let _debugEmberTargetToggle = 0;
+function debugTriggerFadingEmberTest() {
+  if (!state || state.isGameOver) return;
+  resumeGame();
+  if (state.coopPeers && state.coopPeers.length > 0 && _debugEmberTargetToggle++ % 2 === 0) {
+    const peer = state.coopPeers[0];
+    peer.x = state.player.x + 2.2;
+    peer.y = state.player.lastGroundY;
+    peer.z = state.player.z;
+    triggerPeerFadingEmber(peer);
+  } else {
+    if ((state.playerCount || 1) < 2) {
+      showToast('🕯 Для теста «Угасающего угля» выберите 2–4 игроков (сейчас создаём уголь союзника)', 3.0);
+      return;
+    }
+    triggerPlayerFadingEmberOrGameOver();
+  }
+}
+
 function pauseGame() {
   if (!state || state.isGameOver) return;
   state.pauseState = 2;
@@ -364,9 +417,12 @@ function pauseGame() {
     <h2>ПАУЗА</h2>
     <p style="font-size:12px;opacity:.85">Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · Сетка ${GRID_DIM}×${GRID_DIM} (R=${TOWER_FLOOR_RADIUS} м) · Игроков: ${state.playerCount}</p>
     <button onclick="resumeGame()">▶ ПРОДОЛЖИТЬ</button>
-    <button onclick="debugTeleportToBalcony()">🎯 ТЕСТ: На балкон полуэтажа (floorY + 6)</button>
-    <button onclick="debugTeleportToSplitFloor()">🔀 ТЕСТ: На этаж-развилку (2 сектора)</button>
-    <button onclick="debugTeleportToForgeHall()">⚒ ТЕСТ: В безопасный «Зал Кузницы»</button>
+    <button onclick="debugCycleFloorMiniQuest()">🔒 ТЕСТ БЛОК 2: Сменить мини-квест печати (Круги / Хранители / Ядро)</button>
+    <button onclick="debugCycleCoopFloorEvent()">⛓ ТЕСТ БЛОК 2: Вызвать кооп-событие (Цепь / Полярный резонанс)</button>
+    <button onclick="debugTriggerFadingEmberTest()">🕯 ТЕСТ БЛОК 2: Возрождение «Угасающий уголь» (3 сек. в круге)</button>
+    <button onclick="debugTeleportToBalcony()">🎯 ТЕСТ БЛОК 1: На балкон полуэтажа (floorY + 6)</button>
+    <button onclick="debugTeleportToSplitFloor()">🔀 ТЕСТ БЛОК 1: На этаж-развилку (2 сектора)</button>
+    <button onclick="debugTeleportToForgeHall()">⚒ ТЕСТ БЛОК 1: В безопасный «Зал Кузницы»</button>
     <button onclick="triggerOrToggleStorm()">🌪 ВЫЗВАТЬ / ПЕРЕКЛЮЧИТЬ БУРЮ (B)</button>
     <button onclick="toggleGameAudioMute()">🔊 ПЕРЕКЛЮЧИТЬ ЗВУК БАШНИ</button>
     <button onclick="quitToMenu()">✕ ВЫЙТИ В ГЛАВНОЕ МЕНЮ</button>
@@ -389,6 +445,9 @@ function quitToMenu() {
   releaseAllEnemies();
   releaseAllGlobalBolts();
   if (typeof coopAlliesGroup !== 'undefined') coopAlliesGroup.clear();
+  if (typeof floorQuestGroup !== 'undefined') floorQuestGroup.clear();
+  if (typeof coopEventVisualGroup !== 'undefined') coopEventVisualGroup.clear();
+  if (typeof fadingEmberGroup !== 'undefined') fadingEmberGroup.clear();
   resetBossEffects();
   state.projectiles.length = 0;
   state.bladePositions.length = 0;
@@ -614,6 +673,9 @@ function finishRun(isVictory) {
   state.isGameOver = 1;
   releaseAllGlobalBolts();
   if (typeof coopAlliesGroup !== 'undefined') coopAlliesGroup.clear();
+  if (typeof floorQuestGroup !== 'undefined') floorQuestGroup.clear();
+  if (typeof coopEventVisualGroup !== 'undefined') coopEventVisualGroup.clear();
+  if (typeof fadingEmberGroup !== 'undefined') fadingEmberGroup.clear();
   resetBossEffects();
 
   const durationSec = state.elapsedTime | 0;
@@ -705,3 +767,7 @@ window.unlockAllTowersForPreview = unlockAllTowersForPreview;
 window.menu = showMainMenu;
 window.pick = pickUpgrade;
 window.pactPick = pickPact;
+
+window.debugCycleFloorMiniQuest = debugCycleFloorMiniQuest;
+window.debugCycleCoopFloorEvent = debugCycleCoopFloorEvent;
+window.debugTriggerFadingEmberTest = debugTriggerFadingEmberTest;

@@ -51,7 +51,15 @@ function renderGameFrame(dt) {
   playerMesh.position.set(player.x, player.y, player.z);
   playerMesh.rotation.y = state.facingAngle;
   playerMesh.scale.set(1, 1, 1);
-  playerMesh.visible = state.invulnerabilityTimer > 0 ? ((time * 24) | 0) % 2 === 0 : true;
+  const isPlayerInEmber = !!(
+    state.playerEmber &&
+    (state.playerEmber.active || state.playerEmber.lostInLava)
+  );
+  playerMesh.visible = isPlayerInEmber
+    ? false
+    : state.invulnerabilityTimer > 0
+      ? ((time * 24) | 0) % 2 === 0
+      : true;
   if (typeof updatePlayerAnimation === 'function') {
     updatePlayerAnimation(dt);
   }
@@ -894,15 +902,81 @@ function renderGameFrame(dt) {
     const actLabel = state.isThreeActRun && typeof getFloorActNumber === 'function'
       ? 'Акт ' + getFloorActNumber(state.maxFloorReached) + ' · '
       : '';
+
+    let questHtml = '';
+    if (state.floorQuest && state.floorQuest.floor === state.maxFloorReached) {
+      const fq = state.floorQuest;
+      if (fq.completed) {
+        questHtml = `<br><span style="color:#48ff98">🔓 Малая печать снята — лестница открыта</span>`;
+      } else {
+        const pct = Math.min(99, Math.round((fq.progress || 0) * 100));
+        if (fq.type === 'rune_circles') {
+          const capCnt = fq.circles.filter((c) => c.captured).length;
+          questHtml = `<br><b style="color:#ffd048">🔒 Печать · Рунные круги: ${capCnt}/${fq.circles.length} (${pct}%)</b>`;
+        } else if (fq.type === 'seal_guardians') {
+          questHtml = `<br><b style="color:#ffd048">🔒 Печать · Хранители: ${fq.guardiansKilled}/${fq.guardiansTotal} (${pct}%)</b>`;
+        } else if (fq.type === 'forge_core') {
+          const carrierLabel =
+            fq.core && fq.core.carrier === 'player'
+              ? 'Вы несёте [F — пас]'
+              : fq.core && fq.core.carrier
+                ? 'Несёт союзник'
+                : 'Подберите ядро';
+          questHtml = `<br><b style="color:#ffd048">🔒 Печать · Ядро горна: ${pct}% (${carrierLabel})</b>`;
+        }
+      }
+    }
+
+    let eventHtml = '';
+    if (state.activeEvent) {
+      const ev = state.activeEvent;
+      const evCfg = FLOOR_EVENTS[ev.key] || { name: ev.key };
+      const secs = Math.max(0, ev.timeLeft | 0);
+      if (ev.key === 'chain') {
+        eventHtml = state.isTetherChainActive
+          ? `<br><b style="color:#45fff0">⛓ Связующая цепь (${secs} с): АКТИВНА (+35% урона &lt;10 м)</b>`
+          : `<br><b style="color:#ff5868">⛓ Связующая цепь (${secs} с): РАЗРЫВ (&gt;10 м)</b>`;
+      } else if (ev.key === 'polar') {
+        eventHtml = state.isPolarResonanceActive
+          ? `<br><b style="color:#ff78f0">🧭 Полярный резонанс (${secs} с): АКТИВЕН (+40% урона)</b>`
+          : `<br><b style="color:#ffd878">🧭 Полярный резонанс (${secs} с): займите края арены</b>`;
+      } else if (ev.key === 'hunt') {
+        eventHtml = `<br><b style="color:#ffb848">🎯 Охота элит (${secs} с): ${ev.huntKilled || 0}/${ev.huntTotal || 2}</b>`;
+      } else {
+        eventHtml = `<br>Событие: ${evCfg.shortName || evCfg.name} · ${secs} с`;
+      }
+    }
+
+    let emberHtml = '';
+    if (state.playerEmber) {
+      if (state.playerEmber.active) {
+        emberHtml += `<br><b style="color:#ff6a18">🕯 УГАСАЮЩИЙ УГОЛЬ: раздувание ${state.playerEmber.progress.toFixed(1)}/3.0 с</b>`;
+      } else if (state.playerEmber.lostInLava) {
+        emberHtml += `<br><b style="color:#ff4040">🌋 УГОЛЬ ПОД ЛАВОЙ: возрождение после победы над боссом</b>`;
+      }
+    }
+    if (state.coopPeers && state.coopPeers.length) {
+      for (let pi = 0; pi < state.coopPeers.length; pi++) {
+        const peer = state.coopPeers[pi];
+        if (peer.ember && peer.ember.active) {
+          emberHtml += `<br><b style="color:#48ffe8">🕯 Уголь (${peer.name}): ${peer.ember.progress.toFixed(1)}/3.0 с (в круг!)</b>`;
+        } else if (peer.ember && peer.ember.lostInLava) {
+          emberHtml += `<br><span style="color:#ff8868">🌋 ${peer.name}: ждёт победы над боссом</span>`;
+        }
+      }
+    }
+
     DOM_CACHE.statsText.innerHTML =
       `${HEROES[state.heroId].name} (${state.playerCount || 1} игр. · ${GRID_DIM}×${GRID_DIM})<br>` +
       `${actLabel}Этаж ${state.maxFloorReached + 1}/${GRID_FLOORS} · ур. ${state.level} · ${formatTime(state.elapsedTime | 0)}<br>` +
       `До ${state.towerConfig.hazardGenitive}: ${Math.max(0, player.y - state.lavaY).toFixed(1)} м${state.isLavaPausedByForgeHall ? ' <b style="color:#48ffe8">(ПАУЗА)</b>' : ''} · золото: ${state.gold | 0}<br>` +
       `Рывок (Shift): ${state.slideCooldown > 0 ? state.slideCooldown.toFixed(1) + ' с' : 'готов'}` +
+      `${questHtml}` +
       `${state.isOnBalcony ? '<br><b style="color:#ffd858">🎯 Балкон (+6 м): дальность +50%, урон +20%</b>' : ''}` +
       `${state.isLavaPausedByForgeHall ? '<br><b style="color:#48ffe8">⚒ Зал Кузницы · На плите: ' + (state.forgeHallReadyCount || 0) + '/' + (state.playerCount || 1) + '</b>' : ''}` +
       `${state.chosenRoute ? '<br>Сектор: ' + (state.chosenRoute === 1 ? '🌿 тихий (хил ×2.4)' : '🔥 опасный (золото ×2)') : ''}` +
-      `${state.activeEvent ? '<br>Событие: ' + FLOOR_EVENTS[state.activeEvent.key].name + ' · ' + (state.activeEvent.timeLeft | 0) + ' с' : ''}` +
+      `${eventHtml}` +
+      `${emberHtml}` +
       `${state.mutatorName ? '<br>' + state.mutatorName : ''}` +
       `<br>${inventorySummary}`;
   }

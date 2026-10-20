@@ -221,7 +221,7 @@ input {
   position: fixed;
   left: 16px;
   top: calc(env(safe-area-inset-top, 0px) + 16px);
-  width: 240px;
+  width: 300px;
   font-size: 13px;
   text-shadow: 0 1px 2px #000;
   pointer-events: none;
